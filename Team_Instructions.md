@@ -75,9 +75,20 @@ Khi review ý tưởng của agent khác, phải đánh giá tối thiểu:
 
 Không đánh giá chỉ bằng cảm giác. Mọi nhận xét quan trọng phải kèm lý do và bằng chứng.
 
-## 5. Quy trình duyệt lộ trình
+## 5. Quy trình xây dựng và duyệt lộ trình
 
-Lộ trình mục tiêu là hoàn thành bản demo ổn định **trước ngày 17/09/2026**. Lộ trình đề xuất được lưu tại `docs/lo-trinh-17-09.md`.
+Lộ trình mục tiêu là hoàn thành bản demo ổn định **trước ngày 17/09/2026**. Hermes không được tự soạn lộ trình thay cho đội. Lộ trình phải là kết quả thảo luận chung của Claude, Codex và Hermes trong Buzz.
+
+Quy trình bắt buộc:
+
+1. Claude, Codex và Hermes đọc các tài liệu nghiên cứu, tài liệu tham khảo và trạng thái code hiện tại.
+2. Mỗi agent tự lưu bản đề xuất tiến độ và các ưu tiên của mình trong thư mục cá nhân.
+3. Mỗi agent trình bày đề xuất cho hai agent còn lại trong Buzz.
+4. Ba agent phản biện chéo về giá trị, mức độ wow, tính khả thi, rủi ro và khả năng hoàn thành trước 17/09.
+5. Chủ dự án tham gia quyết định phạm vi và ưu tiên cuối cùng.
+6. Sau khi được duyệt, một bản lộ trình chung mới được ghi vào `docs/`.
+
+Không tạo hoặc cập nhật lộ trình chính thức trong `docs/` trước khi quy trình thảo luận và duyệt ở trên hoàn tất.
 
 Lộ trình phải có các trạng thái:
 
@@ -88,7 +99,7 @@ Lộ trình phải có các trạng thái:
 - `Đã kiểm chứng` — có kết quả chạy/test/log xác nhận.
 - `Bị cắt` hoặc `Hoãn` — không còn ưu tiên trước deadline.
 
-Mỗi thay đổi lớn về phạm vi, kiến trúc hoặc deadline phải được cập nhật trong `docs/` và review lại bởi cả ba agent. Nếu chưa đạt đồng thuận, ghi rõ các phương án và để chủ dự án quyết định.
+Mỗi thay đổi lớn về phạm vi, kiến trúc hoặc deadline phải được thảo luận lại bởi cả ba agent trước khi cập nhật vào `docs/`. Nếu chưa đạt đồng thuận, ghi rõ các phương án và để chủ dự án quyết định.
 
 ## 6. Quy tắc lưu tài liệu
 
@@ -97,7 +108,7 @@ Mỗi thay đổi lớn về phạm vi, kiến trúc hoặc deadline phải đư
 Các quyết định đã được duyệt, lộ trình chung, kết quả review và bằng chứng demo phải lưu trong `docs/`:
 
 - `docs/kien-truc.md` — kiến trúc được chấp nhận.
-- `docs/lo-trinh-17-09.md` — lộ trình và trạng thái task.
+- `docs/lo-trinh-17-09.md` — lộ trình chung sau khi Claude, Codex, Hermes và Chủ dự án duyệt.
 - `docs/decisions/` — quyết định kiến trúc/phạm vi đã chốt.
 - `docs/evaluations/` — bộ test, KPI và kết quả đánh giá.
 - `docs/demo/` — kịch bản demo và bằng chứng chạy thật.
@@ -148,7 +159,7 @@ Chỉ gọi là **đã kiểm chứng** khi có lệnh, log, response hoặc tes
 
 ## 9. Commit và lưu trữ lịch sử
 
-Commit là cách lưu trữ tiến độ chính thức của repository.
+Commit là cách lưu trữ tiến độ chính thức của repository, nhưng không thay thế quy trình thảo luận và duyệt.
 
 - Commit nhỏ, có mục đích rõ ràng và message mô tả đúng thay đổi.
 - Không commit secret hoặc tài liệu nội bộ đã được ignore.
