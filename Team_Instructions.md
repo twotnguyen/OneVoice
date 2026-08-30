@@ -23,10 +23,10 @@ Mỗi ý tưởng quan trọng phải đi qua chu trình:
 2. Mỗi agent trình bày ý tưởng, giả định, lợi ích và rủi ro của mình.
 3. Hai agent còn lại đọc, đánh giá và phản biện.
 4. Cả đội đánh giá mức độ **wow**, tính khác biệt, khả năng chứng minh và khả năng chạy thật.
-5. Chủ dự án quyết định có đưa ý tưởng vào phạm vi hay không.
-6. Ý tưởng được duyệt mới được chuyển thành task, code hoặc tài liệu chính thức.
+5. Ba agent tự chốt ý tưởng nếu nằm trong phạm vi đã được giao; Chủ dự án quyết định khi ý tưởng làm thay đổi mục tiêu hoặc phạm vi sản phẩm.
+6. Ý tưởng đã được ba agent chốt mới được chuyển thành task, code hoặc tài liệu chính thức.
 
-Đồng thuận giữa ba agent chỉ là đề xuất. Không agent nào được tự coi đề xuất của mình là quyết định cuối cùng.
+Đối với các quyết định thuộc phạm vi được ủy quyền ở mục 5, đồng thuận của Claude, Codex và Hermes là quyết định làm việc chính thức; không cần chờ Chủ dự án xác nhận từng chi tiết. Chủ dự án vẫn có quyền xem lại, yêu cầu giải trình hoặc đảo quyết định.
 
 ## 3. Nguồn nghiên cứu bắt buộc
 
@@ -75,9 +75,40 @@ Khi review ý tưởng của agent khác, phải đánh giá tối thiểu:
 
 Không đánh giá chỉ bằng cảm giác. Mọi nhận xét quan trọng phải kèm lý do và bằng chứng.
 
-## 5. Quy trình xây dựng và duyệt lộ trình
+## 5. Quyền tự chủ và quy trình chốt quyết định
 
-Lộ trình mục tiêu là hoàn thành bản demo ổn định **trước ngày 17/09/2026**. Hermes không được tự soạn lộ trình thay cho đội. Lộ trình phải là kết quả thảo luận chung của Claude, Codex và Hermes trong Buzz.
+Claude, Codex và Hermes được Chủ dự án ủy quyền tự bàn bạc, phản biện và chốt với nhau các nội dung sau:
+
+- Kiến trúc cho các chức năng.
+- Thiết kế workflow và luồng dữ liệu.
+- Nghiệp vụ, trạng thái, quy tắc chuyển trạng thái và edge case.
+- API contract, schema, module boundary và lựa chọn công nghệ trong stack đã có.
+- Cách kiểm thử, evaluation, observability và fallback.
+- Thứ tự triển khai và lộ trình kỹ thuật để đạt mục tiêu trước 17/09.
+- Cắt hoặc hoãn các chi tiết không ảnh hưởng mục tiêu sản phẩm và không vượt phạm vi đã thống nhất.
+
+Quy trình chốt:
+
+1. Một agent nêu vấn đề hoặc đề xuất, kèm bối cảnh và bằng chứng.
+2. Hai agent còn lại phải đọc, đánh giá và phản biện độc lập.
+3. Cả ba thống nhất một phương án, hoặc ghi rõ phương án đa số và ý kiến bảo lưu.
+4. Agent phụ trách cập nhật quyết định vào tài liệu cá nhân; quyết định đã chốt được ghi vào `docs/decisions/`.
+5. Agent được phân công triển khai có thể bắt đầu sau khi quyết định được ghi nhận; không cần chờ thêm một lượt duyệt thủ công của Chủ dự án.
+6. Nếu trong quá trình triển khai xuất hiện bằng chứng mới, bất kỳ agent nào cũng có thể mở lại quyết định và đưa ra phương án sửa đổi.
+
+Mỗi quyết định phải ghi rõ: vấn đề, các phương án đã xét, phương án được chọn, lý do, trade-off, người phụ trách và cách kiểm chứng.
+
+Chỉ đưa lên Chủ dự án để quyết định khi rơi vào một trong các trường hợp:
+
+- Thay đổi mục tiêu, phạm vi sản phẩm hoặc câu chuyện dự thi.
+- Thay đổi deadline hoặc cam kết với bên ngoài.
+- Chi phí, credential, dữ liệu khách hàng thật hoặc rủi ro pháp lý đáng kể.
+- Hành động không thể hoàn tác hoặc có thể gây mất dữ liệu.
+- Bất đồng không giải quyết được sau khi cả ba agent đã cung cấp bằng chứng và trade-off.
+
+## 6. Quy trình xây dựng và duyệt lộ trình
+
+Lộ trình mục tiêu là hoàn thành bản demo ổn định **trước ngày 17/09/2026**. Không agent nào tự soạn lộ trình thay cho đội. Lộ trình phải là kết quả thảo luận chung của Claude, Codex và Hermes trong Buzz.
 
 Quy trình bắt buộc:
 
@@ -85,8 +116,9 @@ Quy trình bắt buộc:
 2. Mỗi agent tự lưu bản đề xuất tiến độ và các ưu tiên của mình trong thư mục cá nhân.
 3. Mỗi agent trình bày đề xuất cho hai agent còn lại trong Buzz.
 4. Ba agent phản biện chéo về giá trị, mức độ wow, tính khả thi, rủi ro và khả năng hoàn thành trước 17/09.
-5. Chủ dự án tham gia quyết định phạm vi và ưu tiên cuối cùng.
-6. Sau khi được duyệt, một bản lộ trình chung mới được ghi vào `docs/`.
+5. Ba agent tự chốt lộ trình kỹ thuật, người phụ trách và thứ tự ưu tiên trong phạm vi đã được ủy quyền.
+6. Chủ dự án chỉ duyệt các điểm thay đổi mục tiêu/phạm vi hoặc các rủi ro cao theo mục trên.
+7. Sau khi ba agent chốt, bản lộ trình chung được ghi vào `docs/` và có thể triển khai.
 
 Không tạo hoặc cập nhật lộ trình chính thức trong `docs/` trước khi quy trình thảo luận và duyệt ở trên hoàn tất.
 
@@ -99,17 +131,17 @@ Lộ trình phải có các trạng thái:
 - `Đã kiểm chứng` — có kết quả chạy/test/log xác nhận.
 - `Bị cắt` hoặc `Hoãn` — không còn ưu tiên trước deadline.
 
-Mỗi thay đổi lớn về phạm vi, kiến trúc hoặc deadline phải được thảo luận lại bởi cả ba agent trước khi cập nhật vào `docs/`. Nếu chưa đạt đồng thuận, ghi rõ các phương án và để chủ dự án quyết định.
+Mỗi thay đổi lớn về kiến trúc, chức năng, luồng hoặc nghiệp vụ phải được cả ba agent thảo luận và chốt trước khi cập nhật vào `docs/`. Thay đổi phạm vi hoặc deadline phải **escalate** cho Chủ dự án. Nếu chưa đạt đồng thuận, ghi rõ các phương án và chỉ chuyển lên Chủ dự án sau khi đã phân tích đầy đủ.
 
-## 6. Quy tắc lưu tài liệu
+## 7. Quy tắc lưu tài liệu
 
 ### Tài liệu trung tâm
 
 Các quyết định đã được duyệt, lộ trình chung, kết quả review và bằng chứng demo phải lưu trong `docs/`:
 
 - `docs/kien-truc.md` — kiến trúc được chấp nhận.
-- `docs/lo-trinh-17-09.md` — lộ trình chung sau khi Claude, Codex, Hermes và Chủ dự án duyệt.
-- `docs/decisions/` — quyết định kiến trúc/phạm vi đã chốt.
+- `docs/lo-trinh-17-09.md` — lộ trình chung sau khi Claude, Codex và Hermes chốt; chỉ cần Chủ dự án duyệt nếu có điểm vượt quyền ủy quyền.
+- `docs/decisions/` — quyết định kiến trúc, chức năng, luồng và nghiệp vụ đã chốt.
 - `docs/evaluations/` — bộ test, KPI và kết quả đánh giá.
 - `docs/demo/` — kịch bản demo và bằng chứng chạy thật.
 
@@ -127,7 +159,7 @@ Tài liệu cá nhân chưa được xem là quyết định chính thức. Ch�
 
 Không lưu API key, password, token, dữ liệu khách hàng thật hoặc nội dung nhạy cảm vào bất kỳ thư mục tài liệu nào.
 
-## 7. Quy tắc làm code
+## 8. Quy tắc làm code
 
 1. Đọc code và truy vết symbol trước khi sửa.
 2. Kiểm tra agent khác có đang làm cùng file/module hay không.
@@ -138,9 +170,9 @@ Không lưu API key, password, token, dữ liệu khách hàng thật hoặc n�
 7. Không commit code khi chưa chạy test hoặc kiểm tra phù hợp.
 8. Repo phải build được từ source bằng `docker compose up`.
 9. Hành động có tác động bên ngoài như gửi khách hàng, xuất bản, thay đổi đơn hàng hoặc xử lý bảo hành phải có human approval.
-10. Không commit, push hoặc merge nếu chủ dự án chưa yêu cầu rõ ràng.
+10. Không commit, push hoặc merge nếu Chủ dự án chưa yêu cầu rõ ràng; việc tự chốt kiến trúc không đồng nghĩa với quyền tự ý đưa thay đổi lên remote.
 
-## 8. Kiểm chứng tối thiểu
+## 9. Kiểm chứng tối thiểu
 
 Mọi thay đổi liên quan implementation phải được kiểm tra phù hợp, ưu tiên:
 
@@ -157,7 +189,7 @@ Mọi thay đổi liên quan implementation phải được kiểm tra phù hợ
 
 Chỉ gọi là **đã kiểm chứng** khi có lệnh, log, response hoặc test result làm bằng chứng.
 
-## 9. Commit và lưu trữ lịch sử
+## 10. Commit và lưu trữ lịch sử
 
 Commit là cách lưu trữ tiến độ chính thức của repository, nhưng không thay thế quy trình thảo luận và duyệt.
 
@@ -168,7 +200,7 @@ Commit là cách lưu trữ tiến độ chính thức của repository, nhưng 
 - Mỗi commit nên để lại repository ở trạng thái build/test được, hoặc phải ghi rõ lý do nếu chưa đạt.
 - Các quyết định quan trọng phải được lưu trong `docs/` trước hoặc cùng commit với thay đổi liên quan.
 
-## 10. Phong cách phối hợp trong Buzz
+## 11. Phong cách phối hợp trong Buzz
 
 - Dùng tiếng Việt mặc định, ngắn gọn và có cấu trúc.
 - Trích dẫn đường dẫn và dòng cụ thể, ví dụ `services/orchestrator/app/main.py:40`.
@@ -176,4 +208,4 @@ Commit là cách lưu trữ tiến độ chính thức của repository, nhưng 
 - Không dùng ngôn ngữ khẳng định quá mức khi chưa kiểm chứng.
 - Báo ngay blocker có thể làm hỏng demo hoặc sai nghiệp vụ.
 - Không gửi secret hoặc dữ liệu nhạy cảm vào Buzz.
-- Khi có bất đồng, trình bày phương án và trade-off; chủ dự án quyết định cuối cùng.
+- Khi có bất đồng, trình bày phương án và trade-off; ba agent tự chốt trong phạm vi được ủy quyền, chỉ escalte cho Chủ dự án khi thuộc nhóm ngoại lệ ở mục 5.
