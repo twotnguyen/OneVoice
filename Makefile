@@ -11,7 +11,7 @@ down:          ## Tắt toàn bộ
 logs:          ## Xem log orchestrator
 	docker compose logs -f orchestrator
 
-pull-model:    ## Kéo model LLM local (lần đầu)
+pull-model:    ## (phao offline) Kéo model LLM local — cần: docker compose --profile local-llm up -d
 	docker compose exec ollama ollama pull $(OLLAMA_MODEL)
 
 demo-content:  ## Chạy demo vòng lặp Writer -> QC

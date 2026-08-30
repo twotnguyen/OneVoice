@@ -22,14 +22,28 @@ Chi tiết: [docs/kien-truc.md](docs/kien-truc.md)
 Yêu cầu: Docker + Docker Compose.
 
 ```bash
-cp .env.example .env        # sửa mật khẩu nếu cần
-docker compose up -d        # lõi: Postgres, Keycloak, Qdrant, Ollama, Orchestrator
-make pull-model             # kéo model LLM local (lần đầu, ~2GB)
+cp .env.example .env        # điền LLM_BASE_URL + LLM_API_KEY của nhà cung cấp bạn dùng
+docker compose up -d        # lõi: Postgres, Keycloak, Qdrant, Orchestrator
 ```
 
 - Mission Control: <http://localhost:8000>
 - Keycloak admin: <http://localhost:8080> (admin / xem `.env`)
 - Chạy demo vòng lặp Writer→QC: `make demo-content` rồi F5 Mission Control
+
+### Cấu hình LLM
+
+Orchestrator gọi LLM qua **API chuẩn OpenAI-compatible** (base URL + API key) —
+đổi nhà cung cấp chỉ cần sửa `.env`, không phải sửa code:
+
+```bash
+LLM_BASE_URL=https://api.openai.com/v1   # hoặc OpenRouter, Groq, DeepSeek...
+LLM_API_KEY=sk-...
+LLM_MODEL=gpt-4o-mini
+```
+
+Không đặt `LLM_API_KEY` → orchestrator tự rơi về **Ollama local** làm phao
+demo khi mất mạng (bật bằng `docker compose --profile local-llm up -d` rồi
+`make pull-model`).
 
 Bật trục CSKH (Chatwoot):
 
