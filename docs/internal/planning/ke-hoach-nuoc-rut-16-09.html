@@ -87,6 +87,7 @@ a{color:var(--accent)}
 <tr><td><b>Mốc hoàn thành</b></td><td>Nộp hồ sơ 14/09, diễn tập đến 16/09</td><td>Giữ nguyên khung, siết cam kết: <b>20:00 ngày 15/09 = hoàn thành kỹ thuật 100%</b>. Ngày 16/09 tuyệt đối không code.</td></tr>
 <tr><td><b>Trình tự ưu tiên</b></td><td>Danh sách P0 phẳng (~9 hạng mục song song)</td><td><b>Bậc thang wow-first</b> (mục 02): làm chắc tuyệt đối một wow lõi W1, rồi mới lên bậc kế. Demo kể theo <b>một hành trình khách hàng</b> thay vì diễu hành tính năng. Human approval nâng thành nguyên tắc kiến trúc (mục 3.6). <i>Quyết định chủ dự án 31/08 sau phản biện của Codex.</i></td></tr>
 <tr><td><b>Tính năng chữ ký</b></td><td>(chưa gọi tên)</td><td><b>"Đồng nghiệp AI trực 24/7 — làm nhiều hơn là nói": Nói – Làm – Nhớ – Bàn giao.</b> Nói: tư vấn kèm nguồn. Làm: đơn nháp/ticket/lịch chờ duyệt. Nhớ: hội thoại + hồ sơ khách vào CSDL theo ngày giờ. Bàn giao: thống kê theo ca cho nhân viên. <i>Quyết định chủ dự án 31/08.</i></td></tr>
+<tr><td><b>Bề mặt web</b></td><td>(chưa nêu rõ)</td><td><b>Không xây website thương mại điện tử cho cửa hàng</b> (trang sản phẩm động, giỏ hàng, thanh toán, quản trị đơn). Bề mặt web = <b>Mission Control</b> (dashboard nội bộ) + <b>Chatwoot</b> (đa kênh, gồm widget live-chat). "Khách nhắn trên web" = kênh Website của Chatwoot → webhook → Orchestrator. Tối đa: <b>một trang HTML tĩnh</b> làm điểm mở màn demo (logo + vài sản phẩm render từ file catalog + nhúng widget Chatwoot), không backend riêng — làm sau khi W1 chắc, cắt không tiếc. <i>Quyết định chủ dự án 01/09 — giữ kỷ luật "đặc thù ở dữ liệu, không ở code"; tránh thành "phần mềm quản lý cửa hàng có AI".</i></td></tr>
 </table></div>
 <p>Mọi phần còn lại — phạm vi P0/P1/P2, ba gate, đường cắt, kịch bản demo, phân vai A/B/C — giữ đúng bản gốc.</p>
 
@@ -270,6 +271,7 @@ a{color:var(--accent)}
 <div class="tbl-wrap"><table>
 <tr><th>Nếu đến ngày…</th><th>…mà điều này chưa xong</th><th>Thì cắt thế này</th></tr>
 <tr><td class="d">Bất kỳ ngày nào</td><td>W1 "Nhắn là thấy" mất ổn định (trả lời sai, đơn nháp không sinh, duyệt không chạy)</td><td>Dừng mọi bậc W2–W6, cả đội quay về sửa W1 tới khi chắc. Wow lõi không được phép lung lay.</td></tr>
+<tr><td class="d">Bất kỳ ngày nào</td><td>Có đề xuất "xây trang web cho cửa hàng máy tính"</td><td>Không làm — đã chốt ở mục 00. Khách nhắn web = widget Chatwoot. Nhu cầu điểm mở màn demo → tối đa một trang HTML tĩnh render từ catalog, chỉ khi W1–W4 đã chắc.</td></tr>
 <tr><td class="d">04/09</td><td>Luồng Chatwoot → AI → Mission Control chưa sống</td><td>Dừng toàn bộ việc khác, 3 người dồn vào luồng này. Đây là xương sống, không có gì thay được.</td></tr>
 <tr><td class="d">07/09</td><td>Clip MC ảo chưa đạt (môi lệch, giọng tệ)</td><td>Đổi sang avatar nhân vật ảo đơn giản hơn (ảnh tĩnh + miệng động) hoặc chỉ demo phân loại bình luận — không đốt thêm quá 1 ngày cho avatar.</td></tr>
 <tr><td class="d">10/09</td><td>Avatar realtime trễ &gt;15 giây hoặc crash</td><td>Chốt kịch bản lai: clip thu sẵn + phân loại bình luận live. Không bàn lại.</td></tr>
