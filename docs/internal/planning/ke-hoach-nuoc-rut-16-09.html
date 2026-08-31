@@ -1,0 +1,290 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kế hoạch nước rút 16/09</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#F6F7F9; --surface:#FFFFFF; --ink:#1B2430; --ink-2:#4A5568; --ink-3:#7B8794;
+  --line:#DFE3E9; --accent:#C8102E; --accent-soft:#FBEBEE; --gold:#B07E10; --gold-soft:#FBF3E0;
+  --ok:#1F7A4D; --ok-soft:#E4F3EB; --warn:#A05A00; --warn-soft:#FBF0DF;
+  --p1:#2456A6; --p1-soft:#E8EFFA; --code-bg:#EFF1F5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#12161C; --surface:#1A2029; --ink:#EDF0F4; --ink-2:#B4BDC9; --ink-3:#828D9B;
+    --line:#2C3542; --accent:#FF5C6E; --accent-soft:#3A1A21; --gold:#E3B44E; --gold-soft:#33280F;
+    --ok:#5BC48C; --ok-soft:#15301F; --warn:#E5A64F; --warn-soft:#332612;
+    --p1:#7FA8E8; --p1-soft:#1C2A40; --code-bg:#232B36;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12161C; --surface:#1A2029; --ink:#EDF0F4; --ink-2:#B4BDC9; --ink-3:#828D9B;
+  --line:#2C3542; --accent:#FF5C6E; --accent-soft:#3A1A21; --gold:#E3B44E; --gold-soft:#33280F;
+  --ok:#5BC48C; --ok-soft:#15301F; --warn:#E5A64F; --warn-soft:#332612;
+  --p1:#7FA8E8; --p1-soft:#1C2A40; --code-bg:#232B36;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:'Be Vietnam Pro',system-ui,sans-serif;line-height:1.6;margin:0;font-size:15.5px}
+.wrap{max-width:980px;margin:0 auto;padding:48px 24px 96px}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
+h1{font-size:clamp(30px,5vw,42px);font-weight:800;line-height:1.15;margin:10px 0 14px;text-wrap:balance}
+.lede{font-size:17.5px;color:var(--ink-2);max-width:66ch;margin:0 0 8px}
+h2{font-size:23px;font-weight:800;margin:54px 0 6px;text-wrap:balance}
+h2 .no{font-family:'IBM Plex Mono',monospace;font-size:15px;color:var(--accent);margin-right:10px;font-weight:600}
+h3{font-size:17.5px;font-weight:700;margin:24px 0 8px}
+p{margin:10px 0;max-width:74ch}
+.sub{color:var(--ink-2);margin-top:0}
+table{border-collapse:collapse;width:100%;font-size:14px}
+.tbl-wrap{overflow-x:auto;margin:16px 0}
+th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:8px 12px;border-bottom:2px solid var(--line)}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+td.d{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:var(--accent);white-space:nowrap;font-variant-numeric:tabular-nums}
+tr.gate td{background:var(--accent-soft)}
+tr.done td{background:var(--ok-soft)}
+code{font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--code-bg);padding:2px 6px;border-radius:5px}
+pre.tree{font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.55;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 22px;overflow-x:auto;margin:16px 0}
+pre.tree .c{color:var(--ink-3)}
+pre.tree .new{color:var(--accent);font-weight:600}
+ul,ol{padding-left:22px;margin:8px 0}
+li{margin:5px 0;max-width:74ch}
+.tag{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.06em;padding:2px 9px;border-radius:99px;white-space:nowrap}
+.tag.p0{background:var(--accent-soft);color:var(--accent)}
+.tag.p1{background:var(--p1-soft);color:var(--p1)}
+.tag.p2{background:var(--code-bg);color:var(--ink-3)}
+.tag.okk{background:var(--ok-soft);color:var(--ok)}
+.wow{background:var(--accent-soft);border-left:3px solid var(--accent);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+.wow .lbl{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:4px}
+.note{background:var(--warn-soft);border-left:3px solid var(--warn);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+.note .lbl{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--warn);display:block;margin-bottom:4px}
+.okbox{background:var(--ok-soft);border-left:3px solid var(--ok);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+.okbox .lbl{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ok);display:block;margin-bottom:4px}
+.check{list-style:none;padding:0}
+.check li{padding-left:28px;position:relative;max-width:78ch}
+.check li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin:16px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:680px){.grid2{grid-template-columns:1fr}}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px}
+.chip{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:var(--surface)}
+a{color:var(--accent)}
+.foot{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:var(--ink-3);font-size:13px}
+</style>
+
+<div class="wrap">
+<p class="eyebrow">OpenCorp · Nước rút bán kết HUTECH</p>
+<h1>Kế hoạch nước rút 16/09</h1>
+<p class="lede">16 ngày (31/08 → 15/09), đội 3 người, một cam kết: <b>toàn bộ dự án hoàn thành trước ngày 16/09</b> — 20:00 ngày 15/09 là mốc khóa kỹ thuật, ngày 16/09 chỉ diễn tập và kiểm tra thiết bị, ngày 17/09 thi bán kết với hệ thống đã chạy ổn từ hai hôm trước.</p>
+
+<h2><span class="no">00</span>Quyết định đã chốt &amp; điều chỉnh so với bản gốc</h2>
+<p class="sub">Chủ dự án phê duyệt ngày 31/08/2026 — Gate I0–I4 của quy trình ideation coi như đã qua, mở khóa implementation.</p>
+<div class="okbox"><span class="lbl">Quyết định của chủ dự án — 31/08</span>
+Ý tưởng sản phẩm chốt theo <b>Hồ sơ đề tài DX-OS 2026</b> (OpenCorp — đồng nghiệp AI trong từng phòng ban) và lộ trình thi công theo bản <b>Lộ trình nước rút 17/09</b>, với đúng một điều chỉnh về hạ tầng AI ghi ở bảng dưới. Kế hoạch này là <b>nguồn sự thật thi công duy nhất</b>; các bản kế hoạch trước chuyển vào <code>archive/previous-plans/</code>.</div>
+<div class="tbl-wrap"><table>
+<tr><th>Hạng mục</th><th>Bản gốc (Lộ trình 17/09)</th><th>Bản này</th></tr>
+<tr><td><b>Model AI</b></td><td>Ollama chạy local trong Docker Compose; đồng thời là phao offline</td><td><b>Chỉ dùng model cloud qua API OpenAI-compatible</b> (base URL + API key + model, đổi provider bằng <code>.env</code>). Có provider dự phòng cấu hình sẵn. Không tải hoặc chạy model local.</td></tr>
+<tr><td><b>Phao khi mất mạng / provider lỗi</b></td><td>Ollama local gánh phần RAG + phân loại</td><td>Ba lớp: (1) provider cloud dự phòng — đổi bằng biến môi trường trong 30 giây; (2) <code>DEMO_MODE</code> — phân đoạn AI chạy bằng kịch bản cache sẵn trong repo, không cần mạng; (3) video phao từng phân đoạn + 4G dự phòng.</td></tr>
+<tr><td><b>Khung orchestrator</b></td><td>LangGraph</td><td><b>Giữ FastAPI thuần hiện có</b> — vòng lặp Writer→QC đã chạy trên nền này; 16 ngày không nên đổi khung giữa chừng. LangGraph ghi vào lộ trình sau bán kết (P2) nếu cần graph phức tạp hơn.</td></tr>
+<tr><td><b>Mốc hoàn thành</b></td><td>Nộp hồ sơ 14/09, diễn tập đến 16/09</td><td>Giữ nguyên khung, siết cam kết: <b>20:00 ngày 15/09 = hoàn thành kỹ thuật 100%</b>. Ngày 16/09 tuyệt đối không code.</td></tr>
+</table></div>
+<p>Mọi phần còn lại — phạm vi P0/P1/P2, ba gate, đường cắt, kịch bản demo, phân vai A/B/C — giữ đúng bản gốc.</p>
+
+<h2><span class="no">01</span>Nguyên tắc chỉ huy của 16 ngày</h2>
+<ul>
+<li><b>Demo là vua.</b> Mọi quyết định trả lời một câu: "thứ này có xuất hiện trong 10 phút demo ngày 17/09 không?" Không xuất hiện → không làm trước 17/09.</li>
+<li><b>Luồng dọc trước, chiều rộng sau.</b> Mỗi tính năng phải chạy xuyên suốt từ tin nhắn của khách đến màn hình Mission Control rồi mới sang tính năng kế — 5 luồng chạy trọn vẹn ăn đứt 10 luồng dở dang.</li>
+<li><b>Ba cổng kiểm soát (Gate), lỡ cổng là cắt.</b> Mỗi gate có "đường cắt" định sẵn ở mục 08 — không tranh luận lại khi đến hạn, cứ theo bảng mà cắt.</li>
+<li><b>Feature freeze 20:00 ngày 12/09.</b> Ba ngày sau đó chỉ dành cho: sửa lỗi, dữ liệu demo, video, hồ sơ, diễn tập. Đội thua thường thua ở những ngày này, không phải ở phần code.</li>
+<li><b>Mỗi ngày 15 phút stand-up tối</b> (online): hôm nay xong gì — vướng gì — mai làm gì. Ghi vào Issues của repo (tiện thể ăn điểm PoF cho OLP).</li>
+<li><b>Mọi thứ liên quan bên ngoài xin sớm nhất có thể:</b> Meta app + quyền đăng Page (03/09), giấy đồng ý của cửa hàng (01/09), API key hai provider cloud (hôm nay).</li>
+</ul>
+
+<h2><span class="no">02</span>Phạm vi P0 / P1 / P2</h2>
+<p class="sub">P0 = bắt buộc có trong demo 17/09. P1 = làm nếu kịp, có đường cắt định sẵn. P2 = sau bán kết (chung kết 02/10 và OLP 10/12).</p>
+<div class="tbl-wrap"><table>
+<tr><th>Hạng mục</th><th>Ưu tiên</th><th>Chuẩn "xong" (definition of done)</th></tr>
+<tr><td>Nền: Docker Compose (Postgres, Keycloak, Qdrant, Chatwoot) + adapter LLM cloud chính/dự phòng + repo chuẩn</td><td><span class="tag p0">P0</span></td><td><code>docker compose up</code> một lệnh trên máy sạch, seed dữ liệu mẫu tự động; đổi provider chỉ bằng <code>.env</code>.</td></tr>
+<tr><td>Mission Control (sơ đồ người + AI, việc đang chạy, nhật ký agent)</td><td><span class="tag p0">P0</span></td><td>Giám khảo nhìn vào hiểu ngay ai/AI nào đang làm gì; cập nhật realtime khi demo.</td></tr>
+<tr><td>Xưởng nội dung: Writer → QC → duyệt → đăng Facebook thật</td><td><span class="tag p0">P0</span></td><td>Một lệnh chạy ra ≥3 bài; thấy được vòng QC trả về kèm nhận xét; bấm duyệt là bài lên Page thật.</td></tr>
+<tr><td>CSKH đa kênh: AI tư vấn kèm nguồn + ticket bảo hành + chuyển người thật kèm tóm tắt</td><td><span class="tag p0">P0</span></td><td>Nhắn từ điện thoại lạ: câu tư vấn được trả lời đúng catalog trong &lt;10 giây; serial → ticket + lịch hẹn; tin khiếu nại → nhân viên nhận kèm bản tóm tắt.</td></tr>
+<tr><td>Trợ lý tri thức nội bộ: onboarding + tra cứu phân quyền theo phòng ban</td><td><span class="tag p0">P0</span></td><td>Trả lời đúng kèm trích dẫn tài liệu; hỏi ngoài quyền hạn là từ chối lịch sự.</td></tr>
+<tr><td>Phân loại bình luận 4 nhãn (hỏi mua / chào / troll / nhạy cảm)</td><td><span class="tag p0">P0</span></td><td>Độ đúng ≥90% trên bộ test 200 câu tự soạn; màn hình phân loại chạy live.</td></tr>
+<tr><td>Đơn nháp từ hội thoại + dashboard bán hàng cơ bản</td><td><span class="tag p0">P0</span></td><td>"Chốt con RAM này" → đơn nháp chờ duyệt; dashboard nhích số khi duyệt.</td></tr>
+<tr><td>MC ảo: video avatar thu sẵn (MuseTalk render offline + TTS Việt)</td><td><span class="tag p0">P0</span></td><td>Clip 60–90 giây MC giới thiệu 2 sản phẩm, khớp môi, giọng Việt nghe ổn.</td></tr>
+<tr><td><code>DEMO_MODE</code>: kịch bản cache cho mọi phân đoạn AI</td><td><span class="tag p0">P0</span></td><td>Rút mạng vẫn chạy trọn kịch bản demo; bật/tắt bằng một biến môi trường.</td></tr>
+<tr><td>MC ảo realtime: bình luận thật → LLM → TTS → avatar nói ngay (OBS → YouTube/local)</td><td><span class="tag p1">P1</span></td><td>Trễ ≤15 giây/lượt, chạy ổn 10 phút liên tục. <b>Đường cắt tại Gate 3.</b></td></tr>
+<tr><td>Genesis: "tuyển" agent mới từ mô tả công việc</td><td><span class="tag p1">P1</span></td><td>Chạy đúng 100% với 2 kịch bản chuẩn bị sẵn — không ổn định thì chỉ để slide.</td></tr>
+<tr><td>Giao ban sáng tự động + text-to-SQL hỏi đáp số liệu</td><td><span class="tag p1">P1</span></td><td>Có thì demo 30 giây; không kịp thì dashboard tĩnh + cắt không tiếc.</td></tr>
+<tr><td>TikTok Live thật, Superset sâu, đa ngành, LangGraph, hồ sơ PoF hoàn chỉnh cho OLP</td><td><span class="tag p2">P2</span></td><td>Sau 17/09.</td></tr>
+</table></div>
+
+<h2><span class="no">03</span>Tài liệu cấu trúc hệ thống</h2>
+<p class="sub">Trạng thái đích của kiến trúc, repo, CSDL và API khi khóa kỹ thuật 15/09 — mọi task trong lịch mục 05 đều trỏ về đây.</p>
+
+<h3>3.1 · Kiến trúc H-P-D-I</h3>
+<div class="chips">
+<span class="chip"><b>H</b> — Keycloak SSO (3 vai mẫu) · hồ sơ nhân sự người+AI · tài liệu P.A.R.A · Brand DNA</span>
+<span class="chip"><b>P</b> — Orchestrator FastAPI · vòng lặp QC · phê duyệt · webhook Chatwoot · lịch đăng</span>
+<span class="chip"><b>D</b> — PostgreSQL một nguồn sự thật · agent_log · dashboard</span>
+<span class="chip"><b>I</b> — Model cloud qua API · RAG Qdrant · 7 agent phòng ban · avatar + TTS</span>
+</div>
+<pre class="tree">Khách nhắn (fanpage/Zalo/web) ──▶ Chatwoot ──webhook──▶ Orchestrator
+                                                            │
+              ┌──────────────┬──────────────┬───────────────┤
+              ▼              ▼              ▼               ▼
+        agent CSKH     agent Bảo hành   agent Sales    agent Phân loại
+        (RAG tư vấn)   (serial→ticket)  (đơn nháp)     (4 nhãn bình luận)
+              │              │              │               │
+              └──────────────┴──────┬───────┴───────────────┘
+                                    ▼
+                    PostgreSQL (một nguồn sự thật) + agent_log
+                                    │
+        Mission Control ◀───────────┤────────────▶ Dashboard bán hàng
+        (người + AI + nhật ký)      │
+                                    ▼
+              Xưởng nội dung: Writer ⇄ QC (≤3 vòng) ─▶ người duyệt ─▶ Meta API
+              Trợ lý nội bộ: câu hỏi + vai SSO ─▶ RAG có nhãn phòng ban</pre>
+
+<h3>3.2 · Cấu trúc repo đích</h3>
+<pre class="tree">opencorp/
+├── docker-compose.yml            <span class="c"># Postgres · Keycloak · Qdrant · Chatwoot(profile cskh) — không Ollama</span>
+├── .env.example                  <span class="c"># LLM chính + dự phòng + DEMO_MODE (bảng 3.5)</span>
+├── Makefile                      <span class="c"># up · down · logs · demo-content · seed · reset-demo (&lt;30s)</span>
+├── infra/db/init/
+│   ├── 01-init.sql               <span class="c"># schema lõi hiện có</span>
+│   └── <span class="new">02-sprint.sql</span>             <span class="c"># conversations, comments, cột nối spine — 01/09</span>
+├── services/orchestrator/app/
+│   ├── main.py                   <span class="c"># FastAPI: webhook + API cho UI (3.4) — vá XSS ngay 31/08</span>
+│   ├── llm.py                    <span class="c"># adapter cloud: chính → dự phòng → DEMO_MODE (3.5)</span>
+│   ├── db.py
+│   ├── <span class="new">rag.py</span>                    <span class="c"># Qdrant: catalog + tài liệu nội bộ, nhãn phòng ban — 01→06/09</span>
+│   ├── <span class="new">auth.py</span>                   <span class="c"># verify token Keycloak, map vai → quyền RAG — 06/09</span>
+│   └── agents/
+│       ├── content.py            <span class="c"># Writer→QC (đã chạy) + rubric từ file Brand DNA — 03/09</span>
+│       ├── <span class="new">cskh.py</span>               <span class="c"># intent → tư vấn RAG / bảo hành / handoff tóm tắt — 02→05/09</span>
+│       ├── <span class="new">warranty.py</span>           <span class="c"># bắt serial → tra hạn → ticket → tin cập nhật — 05/09</span>
+│       ├── <span class="new">sales.py</span>              <span class="c"># trích đơn nháp từ hội thoại — 09/09</span>
+│       ├── <span class="new">classify.py</span>           <span class="c"># 4 nhãn bình luận + bộ test 200 câu — 07/09</span>
+│       ├── <span class="new">knowledge.py</span>          <span class="c"># trợ lý nội bộ phân quyền + onboarding — 06/09</span>
+│       └── <span class="new">genesis.py</span>            <span class="c"># P1 — tuyển agent từ mô tả công việc — 10/09</span>
+├── services/orchestrator/<span class="new">tests/</span>  <span class="c"># test agent chạy bằng lệnh, kết quả ổn định giữa các lần</span>
+├── <span class="new">fixtures/demo/</span>                <span class="c"># kịch bản cache cho DEMO_MODE + dữ liệu demo "đẹp"</span>
+├── <span class="new">media/</span>                        <span class="c"># pipeline avatar: TTS Việt + MuseTalk (máy C, ngoài compose lõi)</span>
+└── docs/                         <span class="c"># kiến trúc public + biên bản gate + docs/internal (ignore)</span></pre>
+<p><b>Mission Control UI:</b> mở rộng từ trang FastAPI hiện có thành 4 màn hình lên hình: sơ đồ tổ chức người+AI, hộp thư CSKH (người + AI trực chung), duyệt bài so sánh phiên bản, dashboard bán hàng. C được chọn giữ server-rendered (nhanh, ít rủi ro) hay tách SPA — quyết trước 02/09, không đổi sau đó.</p>
+
+<h3>3.3 · CSDL — giữ nguyên lõi, bổ sung nối "customer spine"</h3>
+<div class="tbl-wrap"><table>
+<tr><th>Bảng</th><th>Trạng thái</th><th>Ghi chú</th></tr>
+<tr><td><code>employees</code> · <code>products</code> · <code>orders</code> · <code>order_items</code> · <code>tickets</code> · <code>posts</code> · <code>documents</code> · <code>agent_log</code></td><td><span class="tag okk">Đã có</span></td><td>Schema <code>01-init.sql</code> giữ nguyên; seed thay bằng catalog thật sau phỏng vấn 01/09.</td></tr>
+<tr><td><code>conversations</code></td><td><span class="tag p0">Thêm 01/09</span></td><td><code>id, chatwoot_id, customer, channel, status, assignee_id, summary, created_at</code> — neo mọi tương tác về một khách.</td></tr>
+<tr><td><code>comments</code></td><td><span class="tag p0">Thêm 01/09</span></td><td><code>id, source, author, content, label(hoi_mua|chao|troll|nhay_cam), handled, created_at</code> — nguồn của màn hình phân loại live.</td></tr>
+<tr><td>Cột nối spine</td><td><span class="tag p0">Thêm 01/09</span></td><td><code>orders.conversation_id</code>, <code>tickets.conversation_id</code> — một khách đi từ tin nhắn → đơn → bảo hành không mất ngữ cảnh. <code>posts</code> thêm <code>scheduled_at, published_at, meta_post_id</code>.</td></tr>
+</table></div>
+
+<h3>3.4 · API orchestrator đích</h3>
+<div class="tbl-wrap"><table>
+<tr><th>Endpoint</th><th>Luồng</th><th>Hạn</th></tr>
+<tr><td><code>GET /</code> · <code>GET /health</code></td><td>Mission Control + kiểm tra sống (đã có — vá escape HTML ngay 31/08)</td><td class="d">31/08</td></tr>
+<tr><td><code>POST /webhook/chatwoot</code></td><td>Sự kiện tin nhắn → phân loại intent → gọi agent CSKH/bảo hành/sales</td><td class="d">02→05/09</td></tr>
+<tr><td><code>POST /demo/content-run</code> · <code>GET /api/posts</code> · <code>POST /api/posts/{id}/approve</code></td><td>Xưởng nội dung: sinh bài → duyệt → đăng Meta API</td><td class="d">03→05/09</td></tr>
+<tr><td><code>POST /api/kb/ask</code> (kèm token Keycloak)</td><td>Trợ lý nội bộ — lọc RAG theo vai</td><td class="d">06/09</td></tr>
+<tr><td><code>POST /api/comments/ingest</code> · <code>GET /api/comments/feed</code></td><td>Phân loại bình luận 4 nhãn, feed cho màn hình live</td><td class="d">07/09</td></tr>
+<tr><td><code>POST /api/orders/{id}/approve</code> · <code>GET /api/dashboard</code></td><td>Duyệt đơn nháp + số liệu nhích realtime</td><td class="d">09/09</td></tr>
+<tr><td><code>POST /api/genesis</code></td><td>P1 — tuyển agent từ mô tả</td><td class="d">10/09</td></tr>
+</table></div>
+
+<h3>3.5 · Adapter LLM cloud — thiết kế chịu lỗi</h3>
+<ul>
+<li><b>Biến môi trường:</b> <code>LLM_BASE_URL / LLM_API_KEY / LLM_MODEL</code> (provider chính) · <code>LLM_FALLBACK_BASE_URL / LLM_FALLBACK_API_KEY / LLM_FALLBACK_MODEL</code> (dự phòng) · <code>DEMO_MODE=0|1</code>.</li>
+<li><b>Chuỗi gọi:</b> provider chính (timeout 30 giây, retry 1 lần) → lỗi/timeout thì tự chuyển provider dự phòng → cả hai lỗi và <code>DEMO_MODE=1</code> thì trả từ kịch bản cache trong <code>fixtures/demo/</code>. Mọi lượt gọi (provider nào, bao lâu, thành/bại) ghi vào <code>agent_log</code> — chính là dữ liệu "AI có trách nhiệm" cho Mission Control.</li>
+<li><b>Pin cấu hình trước freeze:</b> chốt model + prompt từ 12/09, không đổi trong 5 ngày cuối để output ổn định giữa các lần diễn tập.</li>
+<li><b>Chi phí:</b> model nhỏ cho Writer/phân loại, model lớn hơn cho QC/tư vấn; ước lượng và theo dõi bằng <code>agent_log</code> — có số trả lời câu phản biện "chi phí vận hành bao nhiêu?".</li>
+</ul>
+
+<h2><span class="no">04</span>Phân vai 3 người</h2>
+<div class="tbl-wrap"><table>
+<tr><th>Vai</th><th>Sở hữu (owner)</th><th>Sản phẩm phải giao</th></tr>
+<tr><td><b>A — Hạ tầng &amp; Backend</b></td><td>Repo, Docker Compose, schema + seed, Keycloak SSO, Chatwoot, Meta API, API cho Mission Control, DEMO_MODE</td><td>Hệ thống dựng lại từ số 0 bằng một lệnh; mọi luồng có API sạch cho frontend và agent gọi.</td></tr>
+<tr><td><b>B — AI &amp; Agent</b></td><td>Adapter LLM cloud chính/dự phòng, Writer/QC, RAG catalog + RAG nội bộ phân quyền, phân loại bình luận, trích đơn, (P1) Genesis, text-to-SQL</td><td>Từng agent có bộ test riêng chạy bằng lệnh; kết quả ổn định giữa các lần chạy.</td></tr>
+<tr><td><b>C — Frontend, Media &amp; Hồ sơ</b></td><td>Mission Control UI, giao diện duyệt bài + hộp thư CSKH, avatar (MuseTalk + TTS + OBS), dữ liệu demo "đẹp", video, slide, tài liệu nộp, kịch bản demo</td><td>Mọi màn hình trình chiếu được; bộ hồ sơ bán kết nộp đúng mẫu, đúng hạn.</td></tr>
+</table></div>
+<p><b>Luật phối hợp:</b> A xong API nào là viết 3 dòng ví dụ gọi vào README ngay; B không chờ UI — test agent bằng CLI; C dùng dữ liệu giả cho UI trước, cắm API thật sau. Ba người không chặn nhau. <b>Ngân sách avatar tối đa 20% thời gian của C</b>, tuyệt đối không lan sang A và B.</p>
+
+<h2><span class="no">05</span>Lịch chi tiết từng ngày — 31/08 → 17/09</h2>
+<p class="sub">Cột "Kiểm chứng" là điều kiện chốt ngày — chưa đạt thì stand-up tối phải quyết cắt gì. Hàng đỏ là gate/mốc cứng.</p>
+<div class="tbl-wrap"><table>
+<tr><th>Ngày</th><th>Việc chính (A · B · C)</th><th>Kiểm chứng cuối ngày</th></tr>
+<tr><td class="d">CN 31/08</td><td><b>Kick-off (cả đội, 3 giờ):</b> chốt phạm vi P0 theo mục 02, phân vai A/B/C theo đúng người, khóa kịch bản demo v1. A: khôi phục nhánh cloud-only (gỡ Ollama khỏi compose/<code>llm.py</code>/Makefile — đã làm một lần, redo trong 1 giờ) + <b>vá lỗi XSS Mission Control</b> (escape HTML — đã phát hiện sáng nay) + commit kế hoạch này vào repo. B: đăng ký API key <b>2 provider cloud</b>, điền <code>.env</code>, chạy <code>make demo-content</code> bằng API thật; đo độ trễ/chi phí một vòng Writer→QC. C: nhắn cửa hàng máy tính hẹn phỏng vấn ngày mai + xin catalog + giấy đồng ý; phác wireframe 4 màn hình.</td><td><code>demo-content</code> chạy trọn bằng cloud API; lịch phỏng vấn đã chốt; kế hoạch + biên bản kick-off nằm trong repo.</td></tr>
+<tr><td class="d">T2 01/09</td><td>A: <code>02-sprint.sql</code> (conversations, comments, cột spine) + dựng Keycloak realm với 3 tài khoản mẫu (kỹ thuật / bán hàng / quản lý). B: nạp catalog thử vào Qdrant, RAG trả lời có trích dẫn qua CLI. C: <b>phỏng vấn cửa hàng</b> — catalog thật, quy trình bảo hành, số liệu "trước" (mất bao phút/đơn, bao câu inbox/ngày), ký giấy đồng ý; chiều: <b>tập huấn buổi 5 (13h30)</b>.</td><td>Hỏi 10 câu về catalog thật — RAG trả lời đúng ≥8, có trích nguồn.</td></tr>
+<tr><td class="d">T3 02/09 (lễ)</td><td>Ngày code sâu. A: Chatwoot dựng + nối kênh test + webhook ra orchestrator. B: <code>cskh.py</code> khung: sự kiện → phân loại intent → gọi agent → ghi <code>agent_log</code>. C: UI Mission Control khung (sơ đồ tổ chức, feed nhật ký) chạy dữ liệu giả; chốt server-rendered hay SPA.</td><td>Nhắn vào Chatwoot → sự kiện chạy qua orchestrator → nhật ký hiện trong DB.</td></tr>
+<tr><td class="d">T4 03/09</td><td>B: Writer 3 trụ nội dung + QC chấm theo rubric đọc từ <b>file Brand DNA</b> + vòng lặp sửa–chấm (≤3 vòng). A: trạng thái duyệt bài + <b>xin Meta app + Page test</b> (làm sớm, đừng để sát ngày). C: viết Brand DNA cùng chủ cửa hàng; UI danh sách bài + so sánh phiên bản.</td><td>Một lệnh sinh 3 bài; ≥1 bài bị QC trả về rồi đạt ở vòng 2 — toàn bộ hiện trong UI.</td></tr>
+<tr class="gate"><td class="d">T5 04/09</td><td><b>🚩 GATE 1 — luồng dọc #1 phải sống:</b> khách nhắn Chatwoot → AI tư vấn kèm nguồn → nhật ký lên Mission Control. Cả đội dồn sức đóng luồng này trước khi làm gì khác.</td><td>Quay clip 30 giây luồng chạy thật. <b>Nếu trượt:</b> dừng mọi việc P1, cả đội chỉ làm luồng này tới khi xong.</td></tr>
+<tr><td class="d">T6 05/09</td><td>A: đăng bài lên Page thật qua Meta API + lịch đăng. B: <code>warranty.py</code> — bắt serial từ tin nhắn, tra hạn trong DB, tạo ticket, sinh tin cập nhật trạng thái. C: UI hộp thư CSKH (người + AI trực chung), UI ticket.</td><td>Bấm duyệt → bài lên fanpage thật. Nhắn "lỗi màn hình, serial X" → ticket + lịch hẹn tự tạo.</td></tr>
+<tr><td class="d">T7 06/09</td><td>B: RAG nội bộ — index tài liệu theo P.A.R.A, gắn nhãn phòng ban, lọc theo quyền từ SSO (<code>auth.py</code>); kịch bản onboarding. A: hoàn thiện 3 tài khoản mẫu + luồng đăng nhập. C: UI chat trợ lý nội bộ; bắt đầu pipeline avatar: TTS Việt + MuseTalk render offline clip đầu.</td><td>Tài khoản kỹ thuật hỏi tài liệu phòng mình → trả lời kèm trích dẫn; hỏi lương thưởng phòng nhân sự → từ chối đúng.</td></tr>
+<tr><td class="d">CN 07/09</td><td>B: <code>classify.py</code> 4 nhãn + bộ test 200 câu (cả đội góp câu troll cho "thật"); handoff khiếu nại kèm tóm tắt hội thoại + gợi ý phương án. C: render clip MC ảo 60–90 giây giới thiệu 2 sản phẩm — <b>chốt P0 avatar tại đây</b>.</td><td>Phân loại đạt ≥90% trên bộ test; clip MC xem không "rợn", môi khớp, giọng nghe rõ.</td></tr>
+<tr class="gate"><td class="d">T2 08/09</td><td><b>🚩 GATE 2 — demo dọc #2 (nội bộ, chạy như thi):</b> xưởng nội dung end-to-end + toàn trục CSKH + trợ lý nội bộ, một người ngoài đóng vai khách. Tối <b>20h: tập huấn online buổi 6</b> — mang bản demo hỏi ý kiến giảng viên, ghi lại mọi góp ý.</td><td>Chạy trọn không cần dàn xếp; danh sách lỗi được ghi thành issue, gắn hạn sửa.</td></tr>
+<tr><td class="d">T3 09/09</td><td>B: <code>sales.py</code> trích đơn nháp từ hội thoại ("chốt con RAM này") → pipeline: đơn chờ duyệt → duyệt → ghi doanh thu. A: dashboard bán hàng + CSKH (đơn giản, số nhích realtime). C: thử MuseTalk <b>realtime</b> + TTS streaming trên máy demo, đo độ trễ.</td><td>Đơn nháp sinh đúng từ 5 mẫu câu khác nhau; dashboard nhích số khi duyệt đơn.</td></tr>
+<tr class="gate"><td class="d">T4 10/09</td><td><b>🚩 GATE 3 — quyết định avatar realtime (không dời):</b> trễ ≤15 giây và ổn 10 phút → demo live thật (OBS → YouTube Live); không đạt → <b>cắt ngay</b>, kịch bản lai: clip MC thu sẵn + màn hình phân loại bình luận chạy live thật (vẫn rất wow ở bán kết). B: (P1) Genesis bản tối giản với 2 kịch bản đóng đinh.</td><td>Biên bản quyết định ghi vào repo (<code>docs/decisions/</code>); kịch bản demo v2 cập nhật theo kết quả gate.</td></tr>
+<tr><td class="d">T5 11/09</td><td><b>Ngày tích hợp:</b> cả đội chạy toàn hệ thống trên máy sạch từ <code>compose up</code>. A: script seed một lệnh + reset demo 30 giây + hoàn thiện <code>DEMO_MODE</code> (soạn kịch bản cache cho từng phân đoạn demo, thử bằng cách rút mạng). C: bộ dữ liệu demo "đẹp" (catalog đủ ảnh, 6 tháng đơn hàng có mùa vụ, hội thoại mẫu).</td><td>Máy sạch dựng toàn hệ thống &lt;15 phút; reset demo 30 giây; <b>rút mạng — kịch bản demo vẫn chạy trọn bằng DEMO_MODE</b>.</td></tr>
+<tr class="gate"><td class="d">T6 12/09</td><td><b>🔒 FEATURE FREEZE 20:00.</b> Cả ngày: sửa lỗi từ Gate 2, đánh bóng UX các màn hình lên hình; pin model + prompt (3.5). C: tài liệu mô tả theo khung 4 lớp + sơ đồ quy trình tự động hóa + sơ đồ kiến trúc.</td><td>Sau 20h không thêm tính năng nào — chỉ fix bug. Tài liệu mô tả bản nháp xong.</td></tr>
+<tr><td class="d">T7 13/09</td><td>C: <b>quay video demo ≤5 phút</b> (nhiều take, phụ đề số liệu "trước–sau"); slide theo mẫu BTC. A: tài khoản thử nghiệm cho BGK + hướng dẫn dùng 1 trang. B: chạy lại toàn bộ test agent, đóng các lỗi còn lại.</td><td>Video bản final được 1 người ngoài đội xem thử — hiểu sản phẩm mà không cần giải thích thêm.</td></tr>
+<tr class="gate"><td class="d">CN 14/09</td><td><b>📦 NỘP HỒ SƠ BÁN KẾT</b> (sớm 3 ngày — không chờ hạn chót): mô tả giải pháp + link bản chạy thử &amp; video + sơ đồ quy trình + slide + tài khoản thử. Chiều: <b>tổng diễn tập lần 1</b> đúng 10 phút + 5 phút phản biện giả định, bấm giờ, quay lại xem.</td><td>Email/biểu mẫu nộp có xác nhận; bản ghi diễn tập được cả đội mổ xẻ, chốt danh sách chỉnh.</td></tr>
+<tr class="done"><td class="d">T2 15/09</td><td>Diễn tập lần 2–3 với 2 người ngoài đóng vai giám khảo khó tính + khách nhắn phá. Soạn <b>ngân hàng 20 câu phản biện</b> (giấy phép nguồn mở? chi phí API? AI sai thì sao? mất mạng thì sao? khác gì chatbot?) + câu trả lời 30 giây mỗi câu. Tối <b>20h: tập huấn online buổi 7</b>. <b>20:00 — ✅ HOÀN THÀNH KỸ THUẬT TOÀN DỰ ÁN.</b></td><td>Demo 2 lần liên tiếp không vấp; mỗi thành viên trả lời trơn tru phần phản biện của mình.</td></tr>
+<tr><td class="d">T3 16/09</td><td><b>Không code — chỉ diễn tập.</b> Chạy thử đúng giờ G (19h, online, đúng thiết bị sẽ dùng). Chuẩn bị phương án B: video phao từng phân đoạn, mạng 4G dự phòng, máy dự phòng cài sẵn, checklist thiết bị. Nghỉ sớm.</td><td>Share màn hình + mic + demo chạy trên đúng nền tảng BTC dùng; phao video mở được trong 5 giây.</td></tr>
+<tr class="gate"><td class="d">T4 17/09</td><td><b>🏁 BÁN KẾT — 19h00, trực tuyến.</b> Chiều: reset demo, checklist thiết bị, seed lại dữ liệu, đăng nhập sẵn mọi tài khoản. Vào phòng sớm 15 phút. Một người demo, một người thuyết trình, một người trực "hậu trường" (mạng, phao, nhắn tin đóng vai khách).</td><td>Suất chung kết 02/10.</td></tr>
+</table></div>
+
+<h2><span class="no">06</span>Kịch bản demo bán kết (bản online, ~10 phút)</h2>
+<ol>
+<li><b>0:00–1:00</b> — "Đây là một cửa hàng máy tính bình thường — chỉ khác là mỗi phòng ban có thêm đồng nghiệp AI." Mission Control: sơ đồ người + AI đang làm việc.</li>
+<li><b>1:00–3:00</b> — Xưởng nội dung: 3 bài sáng nay, 1 bài bị QC trả về kèm nhận xét, bản sửa đạt → bấm duyệt → bài lên fanpage thật (mở tab cho BGK thấy).</li>
+<li><b>3:00–5:30</b> — CSKH: nhờ BGK (hoặc người trực hậu trường) nhắn "build PC 20 triệu chơi game" → AI tư vấn kèm nguồn trong vài giây; nhắn "máy lỗi màn hình, serial ABC123" → ticket + lịch hẹn; nhắn khiếu nại gay gắt → chuyển nhân viên thật kèm bản tóm tắt + gợi ý phương án.</li>
+<li><b>5:30–7:00</b> — MC ảo: clip live giới thiệu sản phẩm (hoặc realtime nếu qua Gate 3) + màn hình phân loại bình luận chạy thật: câu hỏi mua được trả lời, câu troll bị lờ, "chốt đơn" → đơn nháp xuất hiện → duyệt → dashboard nhích số.</li>
+<li><b>7:00–8:00</b> — Trợ lý nội bộ: "nhân viên mới" hỏi quy trình bảo hành → trả lời kèm trích dẫn; hỏi bảng lương phòng khác → AI từ chối vì không có quyền.</li>
+<li><b>8:00–9:00</b> — (Nếu Genesis ổn) tuyển một đồng nghiệp AI mới trong 60 giây; nếu không: slide kiến trúc H-P-D-I + lộ trình mở rộng.</li>
+<li><b>9:00–10:00</b> — Số liệu trước–sau từ cửa hàng thật + câu chốt: "Nền tảng tổng quát — cửa hàng này chỉ là công ty đầu tiên chạy trên nó."</li>
+</ol>
+
+<h2><span class="no">07</span>Hồ sơ phải nộp trước bán kết (hạn tự đặt: 14/09)</h2>
+<ul class="check">
+<li>Bản mô tả giải pháp theo khung 4 lớp: bài toán — luồng tự động — AI làm gì — demo (kèm sơ đồ kiến trúc và sơ đồ quy trình tự động hóa)</li>
+<li>Đường dẫn bản chạy thử + tài khoản thử nghiệm cho BGK (3 vai: quản lý / nhân viên / khách) + hướng dẫn dùng 1 trang</li>
+<li>Video demo ≤5 phút có phụ đề số liệu "trước–sau"</li>
+<li>Slide thuyết trình theo mẫu Ban Tổ chức</li>
+<li>Công bố rõ thành phần mã nguồn mở <b>và dịch vụ AI cloud bên thứ ba</b> đã dùng (kèm giấy phép từng thành phần — model cloud khai báo là external service, không phải thành phần nguồn mở)</li>
+<li>Cam kết dữ liệu: giấy đồng ý của cửa hàng + xác nhận dữ liệu khách đã ẩn danh</li>
+</ul>
+
+<h2><span class="no">08</span>Đường cắt — quyết sẵn để khỏi tranh luận lúc mệt</h2>
+<div class="tbl-wrap"><table>
+<tr><th>Nếu đến ngày…</th><th>…mà điều này chưa xong</th><th>Thì cắt thế này</th></tr>
+<tr><td class="d">04/09</td><td>Luồng Chatwoot → AI → Mission Control chưa sống</td><td>Dừng toàn bộ việc khác, 3 người dồn vào luồng này. Đây là xương sống, không có gì thay được.</td></tr>
+<tr><td class="d">07/09</td><td>Clip MC ảo chưa đạt (môi lệch, giọng tệ)</td><td>Đổi sang avatar nhân vật ảo đơn giản hơn (ảnh tĩnh + miệng động) hoặc chỉ demo phân loại bình luận — không đốt thêm quá 1 ngày cho avatar.</td></tr>
+<tr><td class="d">10/09</td><td>Avatar realtime trễ &gt;15 giây hoặc crash</td><td>Chốt kịch bản lai: clip thu sẵn + phân loại bình luận live. Không bàn lại.</td></tr>
+<tr><td class="d">11/09</td><td>Genesis / text-to-SQL / giao ban sáng chưa ổn định</td><td>Cắt khỏi demo, chuyển thành 1 slide "lộ trình". Demo thứ chạy 100%, không demo thứ chạy 80%.</td></tr>
+<tr><td class="d">11/09</td><td>DEMO_MODE chưa phủ đủ các phân đoạn AI</td><td>Ưu tiên phủ 3 phân đoạn: tư vấn CSKH, QC nội dung, phân loại bình luận. Phân đoạn còn thiếu dùng video phao.</td></tr>
+<tr><td class="d">13/09</td><td>Video demo chưa đạt</td><td>Ưu tiên video hơn sửa lỗi nhỏ — BGK bán kết xem video và hồ sơ trước khi xem live.</td></tr>
+</table></div>
+
+<h2><span class="no">09</span>Rủi ro lớn nhất &amp; phao — bản cloud API</h2>
+<div class="tbl-wrap"><table>
+<tr><th>Rủi ro</th><th>Dấu hiệu</th><th>Phòng ngừa</th><th>Phao khi xảy ra</th></tr>
+<tr><td>Provider cloud lỗi / chậm giữa demo</td><td>p95 cao, timeout, output drift</td><td>Pin model + prompt từ 12/09; timeout 30s + retry; đo độ trễ mỗi ngày trong <code>agent_log</code></td><td>Adapter tự chuyển provider dự phòng (&lt;30 giây); tệ hơn nữa → <code>DEMO_MODE=1</code></td></tr>
+<tr><td>Mất Internet tại điểm demo</td><td>—</td><td>4G dự phòng riêng cho máy demo; diễn tập 16/09 có kịch bản rút mạng</td><td><code>DEMO_MODE</code> chạy toàn kịch bản không cần mạng; video phao từng phân đoạn mở trong 5 giây</td></tr>
+<tr><td>Đốt thời gian vào avatar</td><td>C quá 20% quỹ giờ cho avatar; A/B bị kéo vào</td><td>Ngân sách cứng 20% của C; hai gate 07/09 và 10/09</td><td>Cắt theo bảng 08 — clip thu sẵn + phân loại live vẫn đủ wow</td></tr>
+<tr><td>Meta API không kịp quyền</td><td>App chưa duyệt sau 05/09</td><td>Xin app + Page test ngay 03/09; app dev mode đăng được Page do đội quản trị — đủ cho demo</td><td>Demo đăng lên Page test; chụp bài đã đăng thật từ hôm trước làm bằng chứng</td></tr>
+<tr><td>Chi phí API vượt dự kiến</td><td>Hóa đơn tăng nhanh khi test vòng lặp QC</td><td>Model nhỏ cho writer/phân loại; cache Brand DNA; giới hạn ≤3 vòng QC</td><td>Hạ model; dồn test vào bộ fixture thay vì gọi thật</td></tr>
+<tr><td>Demo phụ thuộc dịch vụ ngoài (Chatwoot cloud, YouTube)</td><td>—</td><td>Chatwoot self-host trong compose; live phát local/YouTube tùy Gate 3</td><td>Mỗi phân đoạn có bản chạy offline hoặc video phao</td></tr>
+</table></div>
+<div class="note"><span class="lbl">Nhắc lại hai cái bẫy của bản gốc — vẫn đúng nguyên</span><b>Bẫy 1 — đốt thời gian vào avatar:</b> avatar là gia vị wow, nhưng 45đ nằm ở nghiệp vụ (thực tiễn 25đ + quy trình 20đ). <b>Bẫy 2 — demo phụ thuộc mạng và dịch vụ ngoài:</b> bản này không còn LLM local, nên <code>DEMO_MODE</code> + provider dự phòng + video phao là bắt buộc P0, không phải "làm nếu kịp".</div>
+
+<h2><span class="no">10</span>Việc phải làm ngay hôm nay — 31/08</h2>
+<ol>
+<li><b>Họp kick-off 3 giờ:</b> chốt bảng P0 mục 02, phân vai A/B/C theo đúng người, khóa kịch bản demo v1.</li>
+<li><b>Nhắn ngay cho cửa hàng máy tính</b> hẹn phỏng vấn ngày mai (01/09 chiều đã có tập huấn — chỉ còn buổi sáng).</li>
+<li><b>Đăng ký API key 2 provider cloud</b> (chính + dự phòng), điền <code>.env</code>, chạy <code>make demo-content</code> bằng API thật.</li>
+<li><b>Khôi phục nhánh cloud-only + vá XSS Mission Control</b>, commit kèm kế hoạch này — repo phải phản ánh quyết định trước khi đi ngủ.</li>
+</ol>
+
+<p class="foot">Tài liệu con của <b>Hồ sơ đề tài DX-OS 2026</b> (OpenCorp — đồng nghiệp AI trong từng phòng ban), thay thế bản "Lộ trình nước rút 17/09" sau quyết định cloud-API của chủ dự án. Lịch bám mốc chính thức: tập huấn 01/09 · 08/09 · 15/09, bán kết 19h00 ngày 17/09, chung kết 02/10, OLP 10/12. Soạn 31/08/2026.</p>
+</div>
