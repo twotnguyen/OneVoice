@@ -55,12 +55,21 @@ services:
       LLM_FALLBACK_BASE_URL: ${LLM_FALLBACK_BASE_URL:-}
       LLM_FALLBACK_API_KEY: ${LLM_FALLBACK_API_KEY:-}
       LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-}
+      DEMO_MODE: ${DEMO_MODE:-0}
       QDRANT_URL: http://qdrant:6333
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
     depends_on:
       postgres:
         condition: service_healthy
+      qdrant:
+        condition: service_started
 
   # ---- Trục CSKH (Chatwoot) — bật bằng: --profile cskh ----
   redis:

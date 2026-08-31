@@ -15,7 +15,9 @@ và **OLP Phần mềm nguồn mở 2026** (chủ đề DX-OS, kiến trúc H-P-
 | **[D] Data** | PostgreSQL (một nguồn sự thật), nhật ký agent, dashboard |
 | **[I] Intelligence** | Model cloud qua API, Qdrant (RAG), các agent phòng ban |
 
-Chi tiết: [docs/kien-truc.md](docs/kien-truc.md)
+Chúng tôi thực sự xây gì để thành một hệ điều hành AI:
+[docs/ban-thiet-ke-os.html](docs/ban-thiet-ke-os.html) — kiến trúc kỹ thuật:
+[docs/kien-truc.md](docs/kien-truc.md)
 
 ## Chạy nhanh
 
@@ -75,9 +77,14 @@ và hồ sơ thi phải khai báo rõ dependency dịch vụ này.
 
 ```
 docker-compose.yml          # toàn bộ hạ tầng, một lệnh
+.env.example                # cấu hình: LLM cloud chính + dự phòng, DEMO_MODE
 infra/db/init/              # schema + seed dữ liệu demo
-services/orchestrator/      # trục điều phối AI + Mission Control
-docs/                       # tài liệu kiến trúc
+services/orchestrator/
+  app/main.py               # API + Mission Control
+  app/llm.py                # adapter LLM cloud (chính -> dự phòng)
+  app/db.py                 # kết nối Postgres + nhật ký agent
+  app/agents/               # các đồng nghiệp AI theo phòng ban
+docs/                       # bản thiết kế + kiến trúc (docs/internal/ là nội bộ đội thi)
 ```
 
 ## Đóng góp & giấy phép
