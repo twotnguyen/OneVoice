@@ -1,6 +1,6 @@
 """Xưởng nội dung: vòng lặp Writer -> QC (tối đa MAX_QC_ROUNDS vòng).
 
-Đây là bản khung ngày 31/08 — đủ để demo luồng chạy thật với model local.
+Đây là bản khung ngày 31/08 — gọi model cloud qua API cấu hình bằng biến môi trường.
 Việc tiếp theo (03/09): rubric QC đọc từ file Brand DNA, nhiều writer theo trụ nội dung.
 """
 

@@ -1,10 +1,8 @@
-"""Gọi LLM qua API chuẩn OpenAI-compatible (base URL + API key).
+"""Gọi model do nhà cung cấp cloud vận hành qua API OpenAI-compatible.
 
-Đa số nhà cung cấp expose endpoint /chat/completions theo chuẩn này
-(OpenAI, OpenRouter, Groq, DeepSeek, Together, v.v.) — chỉ cần đổi
-biến môi trường, không phải sửa code khi đổi nhà cung cấp.
-
-Nếu không đặt LLM_API_KEY, tự rơi về Ollama local (offline, dùng làm phao demo).
+OpenCorp không tải hoặc chạy model AI local. Đổi nhà cung cấp bằng base URL,
+API key và model trong biến môi trường, không phải sửa code nghiệp vụ.
+Chuỗi chịu lỗi (kế hoạch §3.5): provider chính (retry 1 lần) → provider dự phòng.
 """
 
 import os
@@ -15,23 +13,37 @@ LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")  # vd: https://api.openai.com/
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
+# Provider dự phòng — tự chuyển sang khi provider chính lỗi/timeout.
+LLM_FALLBACK_BASE_URL = os.environ.get("LLM_FALLBACK_BASE_URL", "")
+LLM_FALLBACK_API_KEY = os.environ.get("LLM_FALLBACK_API_KEY", "")
+LLM_FALLBACK_MODEL = os.environ.get("LLM_FALLBACK_MODEL", "")
 
 
-async def chat(system: str, user: str, timeout: float = 120.0) -> str:
-    if LLM_API_KEY:
-        return await _chat_openai_compatible(system, user, timeout)
-    return await _chat_ollama(system, user, timeout)
+async def chat(system: str, user: str, timeout: float = 30.0) -> str:
+    if not LLM_BASE_URL or not LLM_API_KEY:
+        raise RuntimeError("Thiếu LLM_BASE_URL hoặc LLM_API_KEY của nhà cung cấp cloud")
+    try:
+        return await _chat(LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, system, user, timeout)
+    except (httpx.HTTPError, KeyError):
+        pass  # retry 1 lần trên provider chính
+    try:
+        return await _chat(LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, system, user, timeout)
+    except (httpx.HTTPError, KeyError):
+        if not (LLM_FALLBACK_BASE_URL and LLM_FALLBACK_API_KEY):
+            raise
+    return await _chat(
+        LLM_FALLBACK_BASE_URL, LLM_FALLBACK_API_KEY,
+        LLM_FALLBACK_MODEL or LLM_MODEL, system, user, timeout,
+    )
 
 
-async def _chat_openai_compatible(system: str, user: str, timeout: float) -> str:
+async def _chat(base_url: str, api_key: str, model: str, system: str, user: str, timeout: float) -> str:
     async with httpx.AsyncClient(timeout=timeout) as client:
         r = await client.post(
-            f"{LLM_BASE_URL.rstrip('/')}/chat/completions",
-            headers={"Authorization": f"Bearer {LLM_API_KEY}"},
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
             json={
-                "model": LLM_MODEL,
+                "model": model,
                 "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
@@ -40,21 +52,3 @@ async def _chat_openai_compatible(system: str, user: str, timeout: float) -> str
         )
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]
-
-
-async def _chat_ollama(system: str, user: str, timeout: float) -> str:
-    """Phương án dự phòng offline — dùng khi demo mất mạng hoặc chưa có API key."""
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        r = await client.post(
-            f"{OLLAMA_URL}/api/chat",
-            json={
-                "model": OLLAMA_MODEL,
-                "stream": False,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-            },
-        )
-        r.raise_for_status()
-        return r.json()["message"]["content"]

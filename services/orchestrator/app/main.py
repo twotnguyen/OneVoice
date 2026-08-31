@@ -7,6 +7,7 @@ Endpoint chính:
   POST /webhook/chatwoot     Nhận sự kiện từ Chatwoot (khung — nối tiếp ngày 02/09)
 """
 
+import html
 import json
 
 from fastapi import FastAPI, Request
@@ -54,13 +55,14 @@ def mission_control():
         logs = conn.execute(
             "SELECT created_at, agent, department, event, detail FROM agent_log ORDER BY id DESC LIMIT 30"
         ).fetchall()
+    esc = html.escape
     staff_rows = "".join(
-        f"<tr><td>{'🤖' if k == 'ai' else '👤'} {n}</td><td>{d}</td><td>{r}</td></tr>"
+        f"<tr><td>{'🤖' if k == 'ai' else '👤'} {esc(n)}</td><td>{esc(d)}</td><td>{esc(r)}</td></tr>"
         for n, k, d, r in staff
     )
     log_rows = "".join(
-        f"<tr><td>{t:%H:%M:%S}</td><td>{a}</td><td>{d}</td><td>{e}</td>"
-        f"<td><code>{json.dumps(det, ensure_ascii=False)[:120]}</code></td></tr>"
+        f"<tr><td>{t:%H:%M:%S}</td><td>{esc(a)}</td><td>{esc(d)}</td><td>{esc(e)}</td>"
+        f"<td><code>{esc(json.dumps(det, ensure_ascii=False)[:120])}</code></td></tr>"
         for t, a, d, e, det in logs
     )
     return f"""<!doctype html><html lang="vi"><head><meta charset="utf-8">

@@ -8,6 +8,9 @@
    skill là dữ liệu nạp vào — code lõi không biết "cửa hàng máy tính" là gì.
 3. **Một nguồn sự thật**: mọi phòng ban đọc/ghi PostgreSQL; Mission Control chỉ là
    một cách nhìn vào `agent_log`.
+4. **Model nằm trên cloud**: Orchestrator gọi nhà cung cấp AI qua base URL, API key
+   và model cấu hình bằng biến môi trường; provider chính lỗi thì tự chuyển provider
+   dự phòng (`LLM_FALLBACK_*`). OpenCorp không tải hoặc chạy model AI local.
 
 ## Luồng chính (bản khung 31/08)
 

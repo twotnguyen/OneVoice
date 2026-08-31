@@ -13,7 +13,7 @@ và **OLP Phần mềm nguồn mở 2026** (chủ đề DX-OS, kiến trúc H-P-
 | **[H] Human** | Keycloak (SSO), tài liệu chuẩn P.A.R.A, Mission Control |
 | **[P] Process** | Orchestrator (FastAPI), vòng lặp Writer→QC, webhook Chatwoot, phê duyệt human-in-the-loop |
 | **[D] Data** | PostgreSQL (một nguồn sự thật), nhật ký agent, dashboard |
-| **[I] Intelligence** | Ollama (LLM local), Qdrant (RAG), các agent phòng ban |
+| **[I] Intelligence** | Model cloud qua API, Qdrant (RAG), các agent phòng ban |
 
 Chi tiết: [docs/kien-truc.md](docs/kien-truc.md)
 
@@ -32,8 +32,9 @@ docker compose up -d        # lõi: Postgres, Keycloak, Qdrant, Orchestrator
 
 ### Cấu hình LLM
 
-Orchestrator gọi LLM qua **API chuẩn OpenAI-compatible** (base URL + API key) —
-đổi nhà cung cấp chỉ cần sửa `.env`, không phải sửa code:
+Orchestrator chỉ gọi model do nhà cung cấp cloud vận hành qua **API chuẩn
+OpenAI-compatible**. OpenCorp không tải hoặc chạy model AI local. Đổi nhà cung cấp
+chỉ cần sửa base URL, API key và model trong `.env`, không phải sửa code:
 
 ```bash
 LLM_BASE_URL=https://api.openai.com/v1   # hoặc OpenRouter, Groq, DeepSeek...
@@ -41,9 +42,9 @@ LLM_API_KEY=sk-...
 LLM_MODEL=gpt-4o-mini
 ```
 
-Không đặt `LLM_API_KEY` → orchestrator tự rơi về **Ollama local** làm phao
-demo khi mất mạng (bật bằng `docker compose --profile local-llm up -d` rồi
-`make pull-model`).
+`LLM_BASE_URL` và `LLM_API_KEY` là bắt buộc. Khi provider chính lỗi/timeout,
+orchestrator tự chuyển sang provider dự phòng cấu hình qua `LLM_FALLBACK_*`;
+nếu mất Internet, dùng simulator/video phao — không khởi chạy model local.
 
 Bật trục CSKH (Chatwoot):
 
@@ -60,9 +61,15 @@ docker compose --profile cskh up -d
 | PostgreSQL | PostgreSQL License | CSDL — một nguồn sự thật |
 | Keycloak | Apache-2.0 | SSO / định danh tập trung |
 | Qdrant | Apache-2.0 | Vector DB cho RAG |
-| Ollama | MIT | Chạy LLM local |
 | Chatwoot | MIT | Hộp thư CSKH đa kênh |
 | FastAPI, httpx, psycopg | MIT / BSD / LGPL | Orchestrator |
+
+### Dịch vụ AI bên ngoài
+
+Model cloud là dịch vụ inference bên ngoài, được cấu hình qua API và không được
+đóng gói như một thành phần nguồn mở của repository. Source code của OpenCorp,
+workflow và provider adapter vẫn được phát hành theo giấy phép của dự án; README
+và hồ sơ thi phải khai báo rõ dependency dịch vụ này.
 
 ## Cấu trúc repo
 

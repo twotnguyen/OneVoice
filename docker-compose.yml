@@ -2,7 +2,6 @@ name: opencorp
 
 # Lõi hạ tầng OpenCorp — chạy: docker compose up -d
 # Kèm Chatwoot (trục CSKH):    docker compose --profile cskh up -d
-# LLM local dự phòng offline: docker compose --profile local-llm up -d
 # Xem README.md để biết bước khởi tạo lần đầu.
 
 services:
@@ -30,16 +29,6 @@ services:
     ports:
       - "6333:6333"
 
-  # Phương án dự phòng offline (khi mất mạng hoặc chưa có API key nhà cung cấp).
-  # Bật bằng: docker compose --profile local-llm up -d
-  ollama:
-    image: ollama/ollama:latest
-    profiles: [local-llm]
-    volumes:
-      - ollamadata:/root/.ollama
-    ports:
-      - "11434:11434"
-
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     command: start-dev
@@ -63,8 +52,9 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
-      OLLAMA_URL: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      LLM_FALLBACK_BASE_URL: ${LLM_FALLBACK_BASE_URL:-}
+      LLM_FALLBACK_API_KEY: ${LLM_FALLBACK_API_KEY:-}
+      LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-}
       QDRANT_URL: http://qdrant:6333
     ports:
       - "8000:8000"
@@ -117,5 +107,4 @@ services:
 volumes:
   pgdata:
   qdrantdata:
-  ollamadata:
   redisdata:
