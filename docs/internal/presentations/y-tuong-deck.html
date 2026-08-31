@@ -1,0 +1,340 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenCorp — Đồng nghiệp AI</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#0B0F17; --surface:#121927; --raise:#182236; --ink:#EEF2F8; --muted:#8A95A9;
+  --line:#223049; --human:#F3B94C; --human-dim:#3A2E14; --ai:#3ED6C4; --ai-dim:#0F2E2B;
+  --danger:#E5697A; --danger-dim:#3A1A22;
+}
+*{box-sizing:border-box}
+html{scroll-snap-type:y mandatory;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Archivo',system-ui,sans-serif;font-size:16.5px;line-height:1.6}
+::selection{background:var(--ai);color:#04211D}
+.slide{min-height:100svh;scroll-snap-align:start;display:flex;align-items:center;padding:64px 24px;position:relative}
+.frame{max-width:1080px;margin:0 auto;width:100%}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:500;display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.eyebrow .no{color:var(--ai);font-weight:600}
+.eyebrow::after{content:"";flex:0 0 72px;height:2px;background:linear-gradient(90deg,var(--human) 50%,var(--ai) 50%)}
+h1{font-family:'Bricolage Grotesque',Archivo,system-ui,sans-serif;font-weight:800;font-size:clamp(48px,8vw,96px);line-height:1.02;margin:0 0 18px;letter-spacing:-.02em;text-wrap:balance}
+h2{font-family:'Bricolage Grotesque',Archivo,system-ui,sans-serif;font-weight:800;font-size:clamp(30px,4.6vw,54px);line-height:1.08;margin:0 0 14px;letter-spacing:-.015em;text-wrap:balance;max-width:20ch}
+h3{font-family:'Bricolage Grotesque',Archivo,system-ui,sans-serif;font-weight:700;font-size:19px;margin:0 0 8px}
+p{margin:8px 0;max-width:66ch;color:var(--ink)}
+.dim{color:var(--muted)}
+.hu{color:var(--human)} .aiC{color:var(--ai)}
+.lede{font-size:clamp(17px,2vw,21px);color:var(--muted);max-width:56ch}
+.quote{font-family:'Bricolage Grotesque',Archivo,sans-serif;font-weight:700;font-size:clamp(19px,2.4vw,26px);line-height:1.35;border-left:3px solid;border-image:linear-gradient(var(--human),var(--ai)) 1;padding-left:20px;margin:26px 0;max-width:34ch}
+.grid{display:grid;gap:16px;margin-top:26px}
+.g2{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:860px){.g3,.g4{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.g2,.g3,.g4{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 22px}
+.card p{font-size:15px;color:var(--muted);margin:6px 0 0}
+.card.pain{border-top:3px solid var(--danger)}
+.card.hcard{border-top:3px solid var(--human)}
+.card.acard{border-top:3px solid var(--ai)}
+.klabel{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);display:block;margin-bottom:8px}
+.klabel.h{color:var(--human)} .klabel.a{color:var(--ai)} .klabel.d{color:var(--danger)}
+.legend{display:inline-flex;gap:18px;margin:20px 0 4px;font-family:'IBM Plex Mono',monospace;font-size:12.5px}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;display:inline-block}
+.dot.h{background:var(--human)} .dot.a{background:var(--ai)}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+.tblwrap{overflow-x:auto;margin-top:22px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:12px 16px;border-bottom:1px solid var(--line)}
+td{padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.flow{list-style:none;counter-reset:s;padding:0;margin:24px 0 0;display:grid;gap:0}
+.flow li{counter-increment:s;position:relative;padding:13px 0 13px 56px;border-bottom:1px dashed var(--line);max-width:74ch}
+.flow li:last-child{border-bottom:0}
+.flow li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:14px;font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--muted)}
+.flow li.byH::before{color:var(--human)} .flow li.byA::before{color:var(--ai)}
+.flow b.who{font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;margin-right:8px}
+.flow .byH b.who{color:var(--human)} .flow .byA b.who{color:var(--ai)}
+.org{display:grid;gap:12px;margin-top:26px}
+.org .row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.node{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-size:14px;font-weight:600;text-align:center}
+.node small{display:block;font-weight:400;color:var(--muted);font-size:12px;margin-top:2px}
+.node.root{border-color:var(--human);box-shadow:0 0 0 1px var(--human)}
+.node.proc{border-color:var(--ai)}
+.node.dept{border-top:3px solid;border-image:linear-gradient(90deg,var(--human) 50%,var(--ai) 50%) 1 0 0 0}
+.vline{width:2px;height:18px;background:var(--line);margin:0 auto}
+.pillrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.pill{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:500;padding:6px 13px;border-radius:99px;border:1px solid var(--line);background:var(--surface);color:var(--muted)}
+.pill b{color:var(--ink);font-weight:600}
+.check{list-style:none;padding:0;margin:18px 0 0}
+.check li{padding-left:26px;position:relative;margin:7px 0;max-width:64ch;color:var(--muted);font-size:15.5px}
+.check li b{color:var(--ink)}
+.check li::before{content:"▸";position:absolute;left:2px;color:var(--ai)}
+.duotitle .a{color:var(--human)} .duotitle .b{color:var(--ai)}
+.meta{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--muted);margin-top:34px;display:flex;gap:22px;flex-wrap:wrap}
+.pageno{position:absolute;bottom:22px;right:28px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.hint{position:fixed;bottom:18px;left:24px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);opacity:.75;z-index:5}
+nav.dots{position:fixed;right:14px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:9px;z-index:5}
+nav.dots a{width:8px;height:8px;border-radius:50%;background:var(--line);display:block;transition:background .2s,transform .2s}
+nav.dots a.on{background:var(--ai);transform:scale(1.35)}
+nav.dots a:focus-visible{outline:2px solid var(--ai);outline-offset:2px}
+@media(max-width:700px){nav.dots,.hint{display:none}}
+.js .reveal{opacity:0;transform:translateY(14px);transition:opacity .55s ease,transform .55s ease}
+.js .reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  .reveal{opacity:1;transform:none;transition:none}
+  nav.dots a{transition:none}
+}
+a{color:var(--ai)}
+</style>
+
+<!-- 01 · MỞ ĐẦU -->
+<section class="slide" id="s1"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">01</span>Cuộc thi HĐH Doanh nghiệp số AI · Khoa CNTT HUTECH · OLP PMNM 2026</p>
+  <h1 class="duotitle">Open<span class="b">Corp</span></h1>
+  <p class="lede">Hệ điều hành doanh nghiệp số — nơi mỗi phòng ban được "tuyển" thêm những <b class="aiC">đồng nghiệp AI</b>, còn <b class="hu">con người</b> giữ quyền quyết định.</p>
+  <p class="quote">"Chúng tôi không thay con người bằng AI — chúng tôi tuyển cho mỗi phòng ban những đồng nghiệp AI."</p>
+  <div class="legend"><span><i class="dot h"></i>Con người — quyết định, phê duyệt</span><span><i class="dot a"></i>AI — việc lặp lại, chạy đêm, khối lượng lớn</span></div>
+  <div class="meta"><span>Đội 3 thành viên</span><span>Bán kết 17/09 · Chung kết 02/10 · OLP 10/12</span><span>Nguồn mở · MIT</span></div>
+</div><span class="pageno">01 / 14</span></section>
+
+<!-- 02 · VẤN ĐỀ -->
+<section class="slide" id="s2"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">02</span>Vấn đề</p>
+  <h2>Một doanh nghiệp nhỏ đang mất thời gian ở những chỗ rất giống nhau</h2>
+  <p class="lede">Khảo sát trên khách hàng thí điểm — một cửa hàng bán lẻ máy tính:</p>
+  <div class="grid g2">
+    <div class="card pain"><span class="klabel d">Chăm sóc khách hàng</span><h3>Inbox 3 ngày không ai trả lời</h3><p>Câu hỏi tư vấn lặp đi lặp lại đổ về fanpage, Zalo, tại quầy — ngoài giờ thì không ai trực.</p></div>
+    <div class="card pain"><span class="klabel d">Dữ liệu</span><h3>Khách phải kể lại vấn đề mỗi lần chuyển phòng</h3><p>Marketing, bán hàng, bảo hành mỗi nơi một mẩu thông tin — không ai thấy toàn cảnh.</p></div>
+    <div class="card pain"><span class="klabel d">Nhân sự</span><h3>Nhân viên mới phụ thuộc người cũ</h3><p>SOP nằm rải rác; hỏi gì cũng phải chờ người có kinh nghiệm rảnh mới được chỉ.</p></div>
+    <div class="card pain"><span class="klabel d">AI hiện tại</span><h3>AI dùng rời rạc, không ai kiểm soát</h3><p>Mỗi người một chatbot, trả lời sai giá, sai chính sách — không quyền hạn, không audit.</p></div>
+  </div>
+</div><span class="pageno">02 / 14</span></section>
+
+<!-- 03 · Ý TƯỞNG -->
+<section class="slide" id="s3"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">03</span>Ý tưởng</p>
+  <h2>Giữ nguyên bộ máy con người. "Tuyển" thêm đồng nghiệp AI.</h2>
+  <div class="grid g3">
+    <div class="card acard"><span class="klabel a">AI làm</span><h3>Phần việc lặp lại</h3><p>Viết nội dung, trả lời tư vấn, tra bảo hành, phân loại bình luận — chạy đêm, chạy khối lượng lớn.</p></div>
+    <div class="card acard"><span class="klabel a">AI kiểm AI</span><h3>QC trước khi trình người</h3><p>Mỗi phòng có agent QC chấm đầu ra của AI khác theo tiêu chuẩn — bài chưa đạt bị trả về kèm nhận xét.</p></div>
+    <div class="card hcard"><span class="klabel h">Con người giữ</span><h3>Quyền quyết định — "root"</h3><p>Mọi hành động ra bên ngoài (đăng bài, gửi khách, duyệt đơn) dừng chờ con người phê duyệt.</p></div>
+  </div>
+  <p style="margin-top:22px" class="dim">Toàn bộ hoạt động hiện trên một màn hình <b style="color:var(--ink)">Mission Control</b> — quản lý xem AI nào đang làm gì, dùng nguồn nào, ai đã duyệt. Doanh nghiệp áp dụng dần <b style="color:var(--ink)">từng phòng ban một</b>, không đập bỏ hệ thống đang có.</p>
+</div><span class="pageno">03 / 14</span></section>
+
+<!-- 04 · SƠ ĐỒ TỔ CHỨC -->
+<section class="slide" id="s4"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">04</span>Sơ đồ tổ chức Người + AI</p>
+  <h2>Một công ty — hai loại đồng nghiệp</h2>
+  <div class="org">
+    <div class="row"><span class="node root">👥 Ban lãnh đạo &amp; nhân viên<small>quyết định · phê duyệt · ngoại lệ</small></span></div>
+    <div class="vline"></div>
+    <div class="row"><span class="node proc">🤖 Trục điều phối AI — Orchestrator<small>phân việc · bàn giao · Mission Control</small></span></div>
+    <div class="vline"></div>
+    <div class="row">
+      <span class="node dept">📣 Marketing<small>người + AI: nội dung · QC · MC ảo</small></span>
+      <span class="node dept">🎧 Chăm sóc KH<small>người + AI: tư vấn · bảo hành</small></span>
+      <span class="node dept">💰 Kinh doanh<small>người + AI: hội thoại → đơn hàng</small></span>
+      <span class="node dept">📊 Điều hành<small>người + AI: dữ liệu · cảnh báo</small></span>
+    </div>
+    <div class="vline"></div>
+    <div class="row">
+      <span class="node">📚 Trợ lý tri thức nội bộ<small>onboarding · tra cứu đúng quyền — phục vụ mọi nhân viên</small></span>
+      <span class="node">🧬 Nhân sự số<small>"tuyển" agent mới từ mô tả công việc</small></span>
+    </div>
+  </div>
+</div><span class="pageno">04 / 14</span></section>
+
+<!-- 05 · H-P-D-I -->
+<section class="slide" id="s5"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">05</span>Trả lời đề bài DX-OS</p>
+  <h2>Ánh xạ 1:1 vào bốn không gian H-P-D-I</h2>
+  <div class="grid g2">
+    <div class="card"><span class="klabel h">[H] Human</span><h3>Không gian con người</h3><p>Keycloak SSO định danh tập trung · hồ sơ nhân sự người + AI chung một bảng · tài liệu chuẩn P.A.R.A · Brand DNA.</p></div>
+    <div class="card"><span class="klabel a">[P] Process</span><h3>Không gian quy trình</h3><p>Orchestrator điều phối · vòng lặp Writer→QC · cổng phê duyệt human-in-the-loop · webhook Chatwoot · lịch đăng bài.</p></div>
+    <div class="card"><span class="klabel a">[D] Data</span><h3>Không gian dữ liệu</h3><p>PostgreSQL — một nguồn sự thật duy nhất mọi phòng ban đọc/ghi · nhật ký agent · dashboard điều hành.</p></div>
+    <div class="card"><span class="klabel h">[I] Intelligence</span><h3>Không gian trí tuệ</h3><p>Model cloud qua API chuẩn OpenAI-compatible · RAG trên Qdrant · các agent phòng ban · avatar + TTS tiếng Việt.</p></div>
+  </div>
+  <p class="quote" style="margin-top:26px">Đúng nghĩa đen một hệ điều hành: agent là tiến trình, skill là chương trình, phòng ban là namespace, Mission Control là task manager — và <span class="hu">con người là root</span>.</p>
+</div><span class="pageno">05 / 14</span></section>
+
+<!-- 06 · NỀN TẢNG + PILOT -->
+<section class="slide" id="s6"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">06</span>Chiến lược sản phẩm</p>
+  <h2>Một nền tảng tổng quát — một khách hàng đầu tiên có thật</h2>
+  <p class="lede">"OpenCorp là hệ điều hành cho mọi doanh nghiệp — và đây là công ty đầu tiên chạy trên nó: một cửa hàng máy tính." Giống hệ điều hành thật: Windows tổng quát, máy của bạn là một bản cài.</p>
+  <div class="grid g2">
+    <div class="card"><span class="klabel">Kỷ luật kiến trúc</span><h3>Đặc thù nằm ở dữ liệu, không nằm trong code</h3><p>Catalog, Brand DNA, bảng giá, skill từng agent đều là dữ liệu nạp vào — code lõi không biết "cửa hàng máy tính" là gì. Đổi ngành = đổi bộ cấu hình, không đổi nền tảng.</p></div>
+    <div class="card"><span class="klabel">Vì sao chọn cửa hàng máy tính</span><h3>Bài toán "đắt" để chứng minh</h3><p>Catalog thông số rõ ràng → RAG trả lời chuẩn, khó bịa. "Build PC 20 triệu chơi game" là câu tư vấn AI tỏa sáng. Đơn về đa kênh, giá biến động — đủ đất cho mọi phòng ban.</p></div>
+  </div>
+  <p class="dim" style="margin-top:18px">Chứng minh tính tổng quát ngay trên sân khấu: sau demo cửa hàng máy tính, "tuyển" trong 60 giây một agent tư vấn cho quán cà phê — cùng nền tảng, khác cấu hình.</p>
+</div><span class="pageno">06 / 14</span></section>
+
+<!-- 07 · LUỒNG 1 -->
+<section class="slide" id="s7"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">07</span>Luồng nghiệp vụ 1 · Marketing</p>
+  <h2>Xưởng nội dung: Sáng tác → QC → Duyệt → Xuất bản</h2>
+  <ol class="flow">
+    <li class="byA"><b class="who">AI</b>Sáng 6h, các Writer Agent nộp bài theo trụ nội dung — caption, hashtag, khung giờ đề xuất, dựa trên dữ liệu bán hàng thật.</li>
+    <li class="byA"><b class="who">AI</b>Trưởng phòng QC Agent chấm từng bài theo rubric Brand DNA: đúng giá, đúng thông số (đối chiếu catalog — chống bịa), đúng giọng thương hiệu.</li>
+    <li class="byA"><b class="who">AI ⇄ AI</b>Vòng lặp sửa–chấm chạy tối đa 3 vòng — nhìn thấy từng vòng trên Mission Control. Quá 3 vòng → leo thang lên người thật.</li>
+    <li class="byH"><b class="who">Người</b>Nhân viên duyệt lần cuối trên giao diện so sánh phiên bản — bấm duyệt từng bài hoặc cả lô.</li>
+    <li class="byA"><b class="who">AI</b>Đăng tự động lên fanpage qua Meta API đúng khung giờ; số liệu tương tác đổ ngược về dữ liệu — vòng sau viết tốt hơn.</li>
+  </ol>
+</div><span class="pageno">07 / 14</span></section>
+
+<!-- 08 · LUỒNG 2 -->
+<section class="slide" id="s8"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">08</span>Luồng nghiệp vụ 2 · Chăm sóc khách hàng</p>
+  <h2>Một hộp thư hợp nhất — người và AI trực chung</h2>
+  <p class="lede">Fanpage, Zalo, web chat, email đổ về Chatwoot (nguồn mở). AI trực tuyến đầu, con người xử lý việc cần con người:</p>
+  <ol class="flow">
+    <li class="byA"><b class="who">AI</b>Tư vấn ngay bằng RAG trên catalog + chính sách thật — trả lời kèm nguồn, 11h đêm vẫn có người trực.</li>
+    <li class="byA"><b class="who">AI</b>Bảo hành khép kín: khách nhắn "máy lỗi màn hình" kèm serial → tra hạn trong CSDL → tạo ticket → tự nhắn cập nhật từng bước.</li>
+    <li class="byH"><b class="who">Người</b>Ca khó, khách giận, khiếu nại → AI không đôi co mà chuyển nhân viên thật <b>kèm bản tóm tắt hội thoại + gợi ý phương án</b> — tiếp nhận trong 10 giây thay vì đọc lại 50 tin nhắn.</li>
+    <li class="byA"><b class="who">AI</b>QC Agent rà mọi câu trả lời theo Brand DNA; phản hồi của khách đổ về dữ liệu — đo chất lượng từng agent như KPI một nhân viên thật.</li>
+  </ol>
+</div><span class="pageno">08 / 14</span></section>
+
+<!-- 09 · LUỒNG 3 -->
+<section class="slide" id="s9"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">09</span>Luồng nghiệp vụ 3 · Tri thức nội bộ</p>
+  <h2>Đồng nghiệp AI của chính nhân viên — và AI biết từ chối</h2>
+  <div class="grid g3">
+    <div class="card acard"><span class="klabel a">Onboarding</span><h3>Nhân viên mới có người kèm 24/7</h3><p>Lộ trình tuần đầu, quy trình phòng mình, hỏi gì cũng được trả lời từ tài liệu thật của công ty.</p></div>
+    <div class="card acard"><span class="klabel a">Tra cứu có phân quyền</span><h3>Đúng vai, đúng tài liệu</h3><p>Kho P.A.R.A đánh chỉ mục kèm nhãn phòng ban + quyền từ SSO. Mọi câu trả lời kèm trích dẫn tên tài liệu, phiên bản.</p></div>
+    <div class="card hcard"><span class="klabel h">Điểm ăn tiêu chí an toàn</span><h3>Hỏi ngoài quyền → từ chối lịch sự</h3><p>Nhân viên kỹ thuật hỏi sang quy chế lương phòng nhân sự — AI từ chối vì không có quyền. Demo cảnh AI <b>từ chối</b> thuyết phục hơn mọi lời hứa bảo mật.</p></div>
+  </div>
+  <p class="dim" style="margin-top:18px">Tri thức sống: quy trình đổi → chỉ cập nhật tài liệu gốc, AI trả lời theo bản mới ngay và tự báo đến đúng phòng ban bị ảnh hưởng.</p>
+</div><span class="pageno">09 / 14</span></section>
+
+<!-- 10 · WOW -->
+<section class="slide" id="s10"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">10</span>Điểm nhấn trình diễn</p>
+  <h2>MC ảo lên sóng — và bộ não đọc bình luận có trách nhiệm</h2>
+  <p class="lede">Một nhân viên AI hình người dẫn live giới thiệu sản phẩm (avatar + TTS tiếng Việt). Phần ăn điểm không phải hình ảnh — mà là cách AI xử lý luồng bình luận:</p>
+  <div class="grid g4">
+    <div class="card"><span class="klabel a">Hỏi mua</span><p style="color:var(--ink)">Trả lời ngay — tra RAG để nói đúng giá, đúng chính sách.</p></div>
+    <div class="card"><span class="klabel a">Chào / cổ vũ</span><p style="color:var(--ink)">Cảm ơn ngắn gọn theo lượt.</p></div>
+    <div class="card"><span class="klabel d">Trêu chọc / spam</span><p style="color:var(--ink)">Bỏ qua tuyệt đối — không đọc lên sóng.</p></div>
+    <div class="card"><span class="klabel h">Nhạy cảm / khiếu nại</span><p style="color:var(--ink)">Không trả lời trên live — tạo ticket chuyển người thật.</p></div>
+  </div>
+  <p class="dim" style="margin-top:18px">Khách bình luận "chốt con RAM này" → agent bắt tín hiệu → <b style="color:var(--ink)">đơn nháp xuất hiện bên phòng Kinh doanh</b> → người duyệt → dashboard doanh thu nhích lên trực tiếp. Livestream nối thẳng vào phễu doanh thu — một công ty liền mạch, không phải tính năng rời.</p>
+</div><span class="pageno">10 / 14</span></section>
+
+<!-- 11 · AI CÓ TRÁCH NHIỆM -->
+<section class="slide" id="s11"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">11</span>AI an toàn &amp; có trách nhiệm</p>
+  <h2>Rào chắn được thiết kế từ đầu, không gắn thêm sau</h2>
+  <ul class="check">
+    <li><b>Human approval:</b> mọi hành động ra bên ngoài (đăng bài, gửi khách, duyệt đơn, xử lý bảo hành) dừng chờ con người.</li>
+    <li><b>Audit trail:</b> mọi hành động agent ghi vào nhật ký — dùng model nào, nguồn nào, ai duyệt, hết bao nhiêu — xem lại được toàn bộ.</li>
+    <li><b>Trả lời có nguồn:</b> RAG bắt buộc trích dẫn tài liệu/catalog; kiểm tra deterministic cho giá, tồn kho, hạn bảo hành — không để model "bịa" số.</li>
+    <li><b>Biết từ chối:</b> truy vấn ngoài quyền hạn phòng ban bị từ chối lịch sự; bình luận độc hại không được đọc lên sóng.</li>
+    <li><b>Minh bạch:</b> MC ảo tự giới thiệu là AI ngay đầu live; nội dung đăng gắn nhãn AI hỗ trợ; dữ liệu khách thí điểm được ẩn danh, có văn bản đồng ý.</li>
+    <li><b>Chịu lỗi:</b> model cloud qua API — provider chính lỗi tự chuyển provider dự phòng; mất mạng có chế độ demo offline + video phao.</li>
+  </ul>
+</div><span class="pageno">11 / 14</span></section>
+
+<!-- 12 · TIÊU CHÍ CUỘC THI -->
+<section class="slide" id="s12"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">12</span>Vì sao hợp thang điểm</p>
+  <h2>Thiết kế bám thẳng vào hai bảng chấm</h2>
+  <div class="tblwrap"><table>
+    <tr><th style="width:34%">Tiêu chí</th><th>OpenCorp trả lời bằng</th></tr>
+    <tr><td><b>HUTECH · Nghiệp vụ thực tiễn</b> <span class="num dim">25đ</span></td><td>Quy trình thật của một cửa hàng thật, số liệu "trước–sau" đo được (phút/đơn, câu inbox/ngày).</td></tr>
+    <tr><td><b>HUTECH · Quy trình</b> <span class="num dim">20đ</span></td><td>Workflow xuyên phòng ban: một khách đi từ Marketing → Bán hàng → Bảo hành không mất ngữ cảnh.</td></tr>
+    <tr><td><b>HUTECH · AI phù hợp, an toàn</b> <span class="num dim">15đ</span></td><td>RAG có trích dẫn + AI biết từ chối + human approval + audit log (slide 11).</td></tr>
+    <tr><td><b>HUTECH · Sáng tạo, mở rộng</b> <span class="num dim">10đ</span></td><td>Câu chuyện "hệ điều hành" + tuyển agent mới trong 60 giây cho ngành khác.</td></tr>
+    <tr><td><b>OLP · Kho mã nguồn mở (PoF)</b> <span class="num dim">50đ</span></td><td>Giấy phép MIT, <code style="font-family:'IBM Plex Mono',monospace">docker compose up</code> một lệnh, README/CHANGELOG/Issues, release có tag — chuẩn bị từ commit đầu.</td></tr>
+    <tr><td><b>OLP · Trình diễn DX-Lab</b> <span class="num dim">50đ</span></td><td>Đủ bốn không gian H-P-D-I trên một hệ thống chạy thật (slide 5).</td></tr>
+  </table></div>
+</div><span class="pageno">12 / 14</span></section>
+
+<!-- 13 · STACK -->
+<section class="slide" id="s13"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">13</span>Công nghệ</p>
+  <h2>Nguồn mở ở lõi — AI cloud khai báo minh bạch</h2>
+  <div class="pillrow">
+    <span class="pill"><b>PostgreSQL</b> · một nguồn sự thật</span>
+    <span class="pill"><b>Keycloak</b> · SSO — Apache-2.0</span>
+    <span class="pill"><b>Qdrant</b> · vector DB cho RAG — Apache-2.0</span>
+    <span class="pill"><b>Chatwoot</b> · hộp thư CSKH — MIT</span>
+    <span class="pill"><b>FastAPI</b> · orchestrator — MIT</span>
+    <span class="pill"><b>MuseTalk + TTS Việt</b> · avatar — MIT</span>
+    <span class="pill"><b>Docker Compose</b> · dựng một lệnh</span>
+  </div>
+  <div class="grid g2" style="margin-top:22px">
+    <div class="card acard"><span class="klabel a">Model AI</span><h3>Dịch vụ cloud qua API chuẩn</h3><p>Gọi qua API OpenAI-compatible — đổi nhà cung cấp chỉ bằng base URL + API key trong <code style="font-family:'IBM Plex Mono',monospace">.env</code>, không sửa code. Khai báo rõ trong hồ sơ là dịch vụ bên ngoài, không đóng gói model.</p></div>
+    <div class="card hcard"><span class="klabel h">Phương án dự phòng</span><h3>Demo không chết vì mạng</h3><p>Provider dự phòng chuyển tự động → chế độ demo chạy offline bằng kịch bản cache → video phao từng phân đoạn. Ba lớp, diễn tập trước.</p></div>
+  </div>
+</div><span class="pageno">13 / 14</span></section>
+
+<!-- 14 · LỘ TRÌNH + KẾT -->
+<section class="slide" id="s14"><div class="frame reveal">
+  <p class="eyebrow"><span class="no">14</span>Lộ trình &amp; demo</p>
+  <h2>Hoàn thành trước 16/09 — demo 10 phút có 5 khoảnh khắc</h2>
+  <div class="grid g2">
+    <div class="card"><span class="klabel">Các mốc</span>
+      <ul class="check">
+        <li><b>15/09 · 20:00</b> — khóa kỹ thuật toàn dự án; 16/09 chỉ diễn tập</li>
+        <li><b>17/09</b> — bán kết HUTECH (trực tuyến)</li>
+        <li><b>02/10</b> — chung kết · <b>10/12</b> — OLP toàn quốc</li>
+      </ul>
+    </div>
+    <div class="card"><span class="klabel">5 khoảnh khắc demo</span>
+      <ul class="check">
+        <li>Bài bị QC trả về → sửa đạt → <b>lên fanpage thật</b></li>
+        <li>Giám khảo nhắn tin → <b>AI tư vấn kèm nguồn trong vài giây</b></li>
+        <li>Serial máy lỗi → <b>ticket + lịch hẹn tự tạo</b></li>
+        <li>Bình luận troll bị lờ, <b>"chốt đơn" thành đơn nháp</b> → dashboard nhích</li>
+        <li>Hỏi ngoài quyền → <b>AI từ chối</b> — khoảnh khắc ăn trọn tiêu chí an toàn</li>
+      </ul>
+    </div>
+  </div>
+  <p class="quote" style="margin-top:30px">"Nền tảng tổng quát cho mọi doanh nghiệp — cửa hàng này chỉ là công ty <span class="hu">đầu tiên</span> chạy trên nó."</p>
+  <p class="dim" style="font-family:'IBM Plex Mono',monospace;font-size:13px;margin-top:26px">OpenCorp · Hồ sơ đề tài DX-OS 2026 · 31/08/2026</p>
+</div><span class="pageno">14 / 14</span></section>
+
+<p class="hint">← → hoặc Space để chuyển slide</p>
+<nav class="dots" aria-label="Chuyển slide"></nav>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var dotsNav = document.querySelector('nav.dots');
+  var dots = slides.map(function(s, i){
+    var a = document.createElement('a');
+    a.href = '#' + s.id; a.setAttribute('aria-label', 'Slide ' + (i + 1));
+    dotsNav.appendChild(a); return a;
+  });
+  var current = 0;
+  function go(i){
+    i = Math.max(0, Math.min(slides.length - 1, i));
+    slides[i].scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+  }
+  addEventListener('keydown', function(e){
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(current + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); go(current - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); go(0); }
+    else if (e.key === 'End') { e.preventDefault(); go(slides.length - 1); }
+  });
+  document.documentElement.classList.add('js');
+  // Tất định, không phụ thuộc IntersectionObserver: kiểm tra vị trí slide mỗi lần scroll.
+  function tick(){
+    var mid = innerHeight / 2;
+    slides.forEach(function(s, i){
+      var r = s.getBoundingClientRect();
+      if (r.top < innerHeight * 0.85 && r.bottom > 0) s.querySelector('.reveal').classList.add('in');
+      if (r.top <= mid && r.bottom > mid) {
+        current = i;
+        dots.forEach(function(d, j){ d.classList.toggle('on', j === i); });
+      }
+    });
+  }
+  addEventListener('scroll', tick, {passive: true});
+  addEventListener('resize', tick);
+  addEventListener('load', tick);
+  tick();
+})();
+</script>
