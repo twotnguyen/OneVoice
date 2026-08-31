@@ -91,7 +91,7 @@ a{color:var(--ai)}
 <section class="slide" id="s1"><div class="frame reveal">
   <p class="eyebrow"><span class="no">01</span>Cuộc thi HĐH Doanh nghiệp số AI · Khoa CNTT HUTECH · OLP PMNM 2026</p>
   <h1 class="duotitle">Open<span class="b">Corp</span></h1>
-  <p class="lede">Hệ điều hành doanh nghiệp số — nơi mỗi phòng ban được "tuyển" thêm những <b class="aiC">đồng nghiệp AI</b>, còn <b class="hu">con người</b> giữ quyền quyết định.</p>
+  <p class="lede">Hệ điều hành doanh nghiệp số — nơi mỗi phòng ban được "tuyển" thêm những <b class="aiC">đồng nghiệp AI trực 24/7</b>: nói được, làm được, nhớ được, bàn giao được — còn <b class="hu">con người</b> giữ quyền quyết định.</p>
   <p class="quote">"Chúng tôi không thay con người bằng AI — chúng tôi tuyển cho mỗi phòng ban những đồng nghiệp AI."</p>
   <div class="legend"><span><i class="dot h"></i>Con người — quyết định, phê duyệt</span><span><i class="dot a"></i>AI — việc lặp lại, chạy đêm, khối lượng lớn</span></div>
   <div class="meta"><span>Đội 3 thành viên</span><span>Bán kết 17/09 · Chung kết 02/10 · OLP 10/12</span><span>Nguồn mở · MIT</span></div>
@@ -100,26 +100,36 @@ a{color:var(--ai)}
 <!-- 02 · VẤN ĐỀ -->
 <section class="slide" id="s2"><div class="frame reveal">
   <p class="eyebrow"><span class="no">02</span>Vấn đề</p>
-  <h2>Một doanh nghiệp nhỏ đang mất thời gian ở những chỗ rất giống nhau</h2>
-  <p class="lede">Khảo sát trên khách hàng thí điểm — một cửa hàng bán lẻ máy tính:</p>
-  <div class="grid g2">
-    <div class="card pain"><span class="klabel d">Chăm sóc khách hàng</span><h3>Inbox 3 ngày không ai trả lời</h3><p>Câu hỏi tư vấn lặp đi lặp lại đổ về fanpage, Zalo, tại quầy — ngoài giờ thì không ai trực.</p></div>
-    <div class="card pain"><span class="klabel d">Dữ liệu</span><h3>Khách phải kể lại vấn đề mỗi lần chuyển phòng</h3><p>Marketing, bán hàng, bảo hành mỗi nơi một mẩu thông tin — không ai thấy toàn cảnh.</p></div>
-    <div class="card pain"><span class="klabel d">Nhân sự</span><h3>Nhân viên mới phụ thuộc người cũ</h3><p>SOP nằm rải rác; hỏi gì cũng phải chờ người có kinh nghiệm rảnh mới được chỉ.</p></div>
-    <div class="card pain"><span class="klabel d">AI hiện tại</span><h3>AI dùng rời rạc, không ai kiểm soát</h3><p>Mỗi người một chatbot, trả lời sai giá, sai chính sách — không quyền hạn, không audit.</p></div>
+  <h2>Chatbot biết nói. Việc thì vẫn người làm.</h2>
+  <p class="lede">Doanh nghiệp nhỏ 2026 đã có chatbot, đã thử ChatGPT. Nhưng một việc thật không kết thúc ở câu trả lời — nó là cả một chuỗi:</p>
+  <div class="pillrow" style="align-items:center;margin-top:24px">
+    <span class="pill" style="border-color:var(--ai);color:var(--ink)"><b>Nghe khách</b></span><span class="dim">→</span>
+    <span class="pill"><b>Tra dữ liệu thật</b></span><span class="dim">→</span>
+    <span class="pill"><b>Làm bản nháp</b></span><span class="dim">→</span>
+    <span class="pill" style="border-color:var(--human)"><b style="color:var(--human)">Người duyệt</b></span><span class="dim">→</span>
+    <span class="pill"><b>Thực thi</b></span><span class="dim">→</span>
+    <span class="pill"><b>Ghi lại</b></span>
   </div>
+  <p class="dim" style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;margin-top:8px"><span class="aiC">▲</span> AI phổ biến hôm nay dừng ngay ở bước đầu — trả lời xong là hết.</p>
+  <div class="grid g3" style="margin-top:24px">
+    <div class="card pain"><span class="klabel d">Bán hàng — chốt đơn</span><h3>"Chốt con RAM này" — rồi sao?</h3><p>Bot đọc được tin nhắn, nhưng đơn vẫn do nhân viên gõ tay vào chỗ khác. Tối đông tin là sót đơn.</p></div>
+    <div class="card pain"><span class="klabel d">CSKH — bảo hành</span><h3>"Máy tôi sửa tới đâu rồi?"</h3><p>Bot không tra được ticket, không biết khách là ai. Nhân viên lục sổ, khách chờ — dù câu hỏi lặp lại mỗi ngày.</p></div>
+    <div class="card pain"><span class="klabel d">Marketing — bài đăng fanpage</span><h3>ChatGPT viết bài trong 5 giây — sai giá thì sao?</h3><p>Tool viết theo văn mẫu, không biết giá và tồn kho thật của cửa hàng — và không ai kiểm trước khi bài lên fanpage.</p></div>
+  </div>
+  <p class="quote" style="margin-top:24px">Khoảng cách giữa <span class="aiC">trả lời</span> và <b>làm xong việc</b> — có dữ liệu thật, có bản nháp, có <span class="hu">người duyệt</span>, có ghi lại — cần một hệ điều hành, không phải thêm một chatbot.</p>
 </div><span class="pageno">02 / 14</span></section>
 
 <!-- 03 · Ý TƯỞNG -->
 <section class="slide" id="s3"><div class="frame reveal">
-  <p class="eyebrow"><span class="no">03</span>Ý tưởng</p>
-  <h2>Giữ nguyên bộ máy con người. "Tuyển" thêm đồng nghiệp AI.</h2>
-  <div class="grid g3">
-    <div class="card acard"><span class="klabel a">AI làm</span><h3>Phần việc lặp lại</h3><p>Viết nội dung, trả lời tư vấn, tra bảo hành, phân loại bình luận — chạy đêm, chạy khối lượng lớn.</p></div>
-    <div class="card acard"><span class="klabel a">AI kiểm AI</span><h3>QC trước khi trình người</h3><p>Mỗi phòng có agent QC chấm đầu ra của AI khác theo tiêu chuẩn — bài chưa đạt bị trả về kèm nhận xét.</p></div>
-    <div class="card hcard"><span class="klabel h">Con người giữ</span><h3>Quyền quyết định — "root"</h3><p>Mọi hành động ra bên ngoài (đăng bài, gửi khách, duyệt đơn) dừng chờ con người phê duyệt.</p></div>
+  <p class="eyebrow"><span class="no">03</span>Ý tưởng — tính năng chữ ký</p>
+  <h2>Tuyển một đồng nghiệp AI trực 24/7 — làm nhiều hơn là nói</h2>
+  <div class="grid g4">
+    <div class="card acard"><span class="klabel a">Nói</span><h3>Tư vấn kèm nguồn</h3><p>Trả lời từ catalog + chính sách thật, có trích dẫn. 2h sáng vẫn trực — không bịa giá, không hứa liều.</p></div>
+    <div class="card acard"><span class="klabel a">Làm</span><h3>Ra việc thật, chờ duyệt</h3><p>Tạo đơn nháp, mở ticket bảo hành, xếp lịch hẹn — tất cả dừng ở hàng đợi để con người quyết.</p></div>
+    <div class="card acard"><span class="klabel a">Nhớ</span><h3>Mọi hội thoại vào CSDL</h3><p>Lưu theo ngày giờ kèm hồ sơ khách. Khách quay lại hỏi bảo hành — AI nắm ngay lịch sử, không phải kể lại.</p></div>
+    <div class="card hcard"><span class="klabel h">Bàn giao</span><h3>Thống kê theo ca</h3><p>Đầu ca, nhân viên nhận bản giao: đêm qua khách hỏi gì, sản phẩm nào nóng, việc nào đang chờ duyệt.</p></div>
   </div>
-  <p style="margin-top:22px" class="dim">Toàn bộ hoạt động hiện trên một màn hình <b style="color:var(--ink)">Mission Control</b> — quản lý xem AI nào đang làm gì, dùng nguồn nào, ai đã duyệt. Doanh nghiệp áp dụng dần <b style="color:var(--ink)">từng phòng ban một</b>, không đập bỏ hệ thống đang có.</p>
+  <p style="margin-top:22px" class="dim">Mỗi phòng có agent QC chấm đầu ra trước khi trình người; <b style="color:var(--ink)">con người giữ quyền quyết định — "root"</b>. Toàn bộ hiện trên một màn hình <b style="color:var(--ink)">Mission Control</b>. Doanh nghiệp áp dụng dần từng phòng ban, không đập bỏ hệ thống đang có.</p>
 </div><span class="pageno">03 / 14</span></section>
 
 <!-- 04 · SƠ ĐỒ TỔ CHỨC -->
@@ -185,14 +195,15 @@ a{color:var(--ai)}
 
 <!-- 08 · LUỒNG 2 -->
 <section class="slide" id="s8"><div class="frame reveal">
-  <p class="eyebrow"><span class="no">08</span>Luồng nghiệp vụ 2 · Chăm sóc khách hàng</p>
-  <h2>Một hộp thư hợp nhất — người và AI trực chung</h2>
+  <p class="eyebrow"><span class="no">08</span>Luồng nghiệp vụ 2 · Chăm sóc khách hàng — trái tim sản phẩm</p>
+  <h2>CSKH 24/7: nói — làm — nhớ — bàn giao</h2>
   <p class="lede">Fanpage, Zalo, web chat, email đổ về Chatwoot (nguồn mở). AI trực tuyến đầu, con người xử lý việc cần con người:</p>
   <ol class="flow">
-    <li class="byA"><b class="who">AI</b>Tư vấn ngay bằng RAG trên catalog + chính sách thật — trả lời kèm nguồn, 11h đêm vẫn có người trực.</li>
-    <li class="byA"><b class="who">AI</b>Bảo hành khép kín: khách nhắn "máy lỗi màn hình" kèm serial → tra hạn trong CSDL → tạo ticket → tự nhắn cập nhật từng bước.</li>
-    <li class="byH"><b class="who">Người</b>Ca khó, khách giận, khiếu nại → AI không đôi co mà chuyển nhân viên thật <b>kèm bản tóm tắt hội thoại + gợi ý phương án</b> — tiếp nhận trong 10 giây thay vì đọc lại 50 tin nhắn.</li>
-    <li class="byA"><b class="who">AI</b>QC Agent rà mọi câu trả lời theo Brand DNA; phản hồi của khách đổ về dữ liệu — đo chất lượng từng agent như KPI một nhân viên thật.</li>
+    <li class="byA"><b class="who">Nói</b>Tư vấn ngay bằng RAG trên catalog + chính sách thật — trả lời kèm nguồn, 2h sáng vẫn có người trực.</li>
+    <li class="byA"><b class="who">Làm</b>Khách "chốt" → đơn nháp chờ duyệt. Khách nhắn "máy lỗi" kèm serial → tra hạn trong CSDL → tạo ticket + lịch hẹn → tự nhắn cập nhật từng bước.</li>
+    <li class="byA"><b class="who">Nhớ</b>Mọi hội thoại lưu theo ngày giờ, gắn hồ sơ khách. Tuần sau khách quay lại — AI đọc đúng máy đã mua, đơn đã chốt, ticket đang mở. <b>Không phải kể lại gì.</b></li>
+    <li class="byH"><b class="who">Người</b>Ca khó, khách giận, khiếu nại → AI không đôi co mà chuyển nhân viên thật <b>kèm bản tóm tắt + gợi ý phương án</b> — tiếp nhận trong 10 giây thay vì đọc lại 50 tin nhắn.</li>
+    <li class="byH"><b class="who">Bàn giao</b>Đầu mỗi ca, nhân viên nhận <b>bản giao ca tự động</b>: đêm qua bao nhiêu khách, hỏi về sản phẩm/dịch vụ gì nhiều nhất, việc nào đang chờ duyệt — vào ca là nắm việc ngay.</li>
   </ol>
 </div><span class="pageno">08 / 14</span></section>
 
@@ -284,6 +295,7 @@ a{color:var(--ai)}
     </div>
     <div class="card"><span class="klabel">Demo = hành trình một khách hàng</span>
       <ul class="check">
+        <li>Mở màn: nhân viên vào ca, mở <b>bản giao ca</b> — đêm qua AI trả lời 14 tin, 3 việc chờ duyệt</li>
         <li>Chị Lan <b>thấy bài đăng</b> — bài đã qua vòng QC, người duyệt, lên fanpage thật</li>
         <li>Nhắn hỏi "build PC 20 triệu" → <b>AI tư vấn kèm nguồn trong vài giây</b> (giám khảo tự nhắn được)</li>
         <li>"Chốt con này" → <b>đơn nháp chờ duyệt</b> → người duyệt → dashboard nhích</li>
