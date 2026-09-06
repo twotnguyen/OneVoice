@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cuộc thi Xây dựng Hệ điều hành Doanh nghiệp số AI - Phổ biến thể lệ và đề tài</title>
+<style>
+  :root{
+    --paper:#ECEAE0; --panel:#F5F3EA; --panel-2:#E4E1D3;
+    --ink:#1B231F; --ink-soft:#4B5650; --ink-mute:#7C847E;
+    --copper:#A9552A; --copper-soft:rgba(169,85,42,.14);
+    --teal:#2B6357; --teal-soft:rgba(43,99,87,.14);
+    --bad:#B23B3B; --bad-soft:rgba(178,59,59,.12);
+    --line:#D6D2C2;
+    --font-display:Cambria,"Times New Roman","Noto Serif",serif;
+    --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#121613; --panel:#181D19; --panel-2:#1E2420;
+      --ink:#E7E4D6; --ink-soft:#A7ADA3; --ink-mute:#767E77;
+      --copper:#E2924F; --copper-soft:rgba(226,146,79,.17);
+      --teal:#5FAE95; --teal-soft:rgba(95,174,149,.17);
+      --bad:#E06A6A; --bad-soft:rgba(224,106,106,.16);
+      --line:#2B322C;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#121613; --panel:#181D19; --panel-2:#1E2420; --ink:#E7E4D6; --ink-soft:#A7ADA3; --ink-mute:#767E77;
+    --copper:#E2924F; --copper-soft:rgba(226,146,79,.17); --teal:#5FAE95; --teal-soft:rgba(95,174,149,.17);
+    --bad:#E06A6A; --bad-soft:rgba(224,106,106,.16); --line:#2B322C;
+  }
+  :root[data-theme="light"]{
+    --paper:#ECEAE0; --panel:#F5F3EA; --panel-2:#E4E1D3; --ink:#1B231F; --ink-soft:#4B5650; --ink-mute:#7C847E;
+    --copper:#A9552A; --copper-soft:rgba(169,85,42,.14); --teal:#2B6357; --teal-soft:rgba(43,99,87,.14);
+    --bad:#B23B3B; --bad-soft:rgba(178,59,59,.12); --line:#D6D2C2;
+  }
+
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--ink); }
+  ::selection{ background:var(--copper); color:var(--paper); }
+
+  .deck{ position:relative; width:100%; height:100vh; min-height:600px; overflow:hidden; font-family:var(--font-body); color:var(--ink); }
+
+  /* ===== SLIDE FRAME: head anchored top, body fills the rest ===== */
+  .slide{ position:absolute; inset:0; display:none; flex-direction:column; background:var(--paper); padding:6.5vh 5.5vw 7.5vh; }
+  .slide.is-active{ display:flex; }
+  .slide-head{ flex-shrink:0; margin-bottom:clamp(14px,2.4vh,26px); }
+  .slide-body{ flex:1; display:flex; flex-direction:column; justify-content:center; min-height:0; gap:clamp(12px,1.8vh,20px); }
+
+  .kicker{ font-family:var(--font-mono); font-size:clamp(11px,1vw,13.5px); letter-spacing:.15em; text-transform:uppercase; color:var(--copper);
+    display:flex; align-items:center; gap:11px; margin-bottom:clamp(9px,1.5vh,15px); }
+  .kicker::before{ content:""; width:26px; height:2px; background:var(--copper); display:inline-block; }
+
+  h1.headline{ font-family:var(--font-display); font-weight:700; font-size:clamp(27px,3.5vw,44px); line-height:1.16; margin:0; text-wrap:balance; max-width:30ch; }
+  .lede{ font-size:clamp(15px,1.45vw,20px); color:var(--ink-soft); max-width:74ch; margin:clamp(8px,1.4vh,14px) 0 0; line-height:1.5; }
+
+  .slide-foot{ position:absolute; left:5.5vw; right:5.5vw; bottom:2.6vh; display:flex; justify-content:space-between; align-items:center;
+    font-family:var(--font-mono); font-size:11px; color:var(--ink-mute); }
+
+  /* ===== COVER ===== */
+  .slide--cover{ background:radial-gradient(125% 145% at 12% 18%, #24332C 0%, #14181A 55%, #0D100F 100%); color:#ECEAE0; justify-content:center; }
+  .slide--cover .kicker{ color:#E2924F; }
+  .slide--cover h1.headline{ color:#F5F3E9; font-size:clamp(34px,5.4vw,66px); max-width:15ch; line-height:1.1; }
+  .slide--cover .cover-sub{ font-family:var(--font-mono); color:#9BA39C; font-size:clamp(12px,1.15vw,15px); letter-spacing:.09em; text-transform:uppercase; margin-top:clamp(14px,2.4vh,26px); }
+  .slide--cover .cover-mark{ position:absolute; right:5vw; top:50%; transform:translateY(-50%); opacity:.55; width:clamp(220px,26vw,380px); height:auto; }
+
+  /* ===== GRID + CARDS (stretch to fill) ===== */
+  .grid{ display:grid; gap:clamp(11px,1.1vw,18px); align-items:stretch; }
+  .grid.fill{ flex:1; min-height:0; }
+  .grid-2{ grid-template-columns:1fr 1fr; }
+  .grid-3{ grid-template-columns:repeat(3,1fr); }
+  .grid-4{ grid-template-columns:repeat(4,1fr); }
+  @media (max-width:900px){ .grid-2,.grid-3,.grid-4{ grid-template-columns:1fr 1fr; } }
+
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:5px; padding:clamp(16px,1.5vw,26px);
+    display:flex; flex-direction:column; justify-content:center; gap:8px; }
+  .card .cnum{ font-family:var(--font-mono); font-size:clamp(12px,1.1vw,14px); font-weight:700; color:var(--copper); }
+  .card h3{ font-family:var(--font-display); font-size:clamp(16px,1.5vw,22px); margin:0; line-height:1.25; }
+  .card p{ margin:0; font-size:clamp(13px,1.15vw,16px); color:var(--ink-soft); line-height:1.45; }
+  .card.accent{ border-left:4px solid var(--copper); }
+  .card.accent-t{ border-left:4px solid var(--teal); }
+
+  /* ===== SVG FIGURE WRAP ===== */
+  .fig{ flex:1; min-height:0; display:flex; align-items:center; justify-content:center; }
+  .fig svg{ width:100%; height:100%; max-height:100%; overflow:visible; }
+  .fig-note{ font-size:clamp(12.5px,1.1vw,15px); color:var(--ink-soft); text-align:center; margin:0; }
+
+  /* ===== CHEVRON STRIP (master pattern for de tai) =====
+     Notch depth scales with block height so the arrow still reads as an arrow:
+     shallow strips use 22px, the tall master strip on slide 13 uses 46px. */
+  .chev-strip{ display:flex; gap:5px; --notch:22px; }
+  .chev-strip.fill{ flex:1; min-height:0; --notch:46px; }
+  .chev{ flex:1; background:var(--panel); border:1px solid var(--line);
+    padding:clamp(14px,1.4vw,22px) calc(var(--notch) + 10px) clamp(14px,1.4vw,22px) calc(var(--notch) + 14px);
+    display:flex; flex-direction:column; justify-content:center; gap:7px;
+    clip-path:polygon(0 0, calc(100% - var(--notch)) 0, 100% 50%, calc(100% - var(--notch)) 100%, 0 100%, var(--notch) 50%); }
+  .chev:first-child{ clip-path:polygon(0 0, calc(100% - var(--notch)) 0, 100% 50%, calc(100% - var(--notch)) 100%, 0 100%); padding-left:clamp(16px,1.5vw,24px); border-radius:5px 0 0 5px; }
+  .chev:last-child{ clip-path:polygon(0 0, 100% 0, 100% 100%, 0 100%, var(--notch) 50%); border-radius:0 5px 5px 0; }
+  .chev .ctag{ font-family:var(--font-mono); font-size:clamp(10px,.92vw,12px); letter-spacing:.09em; text-transform:uppercase; color:var(--copper); }
+  .chev .ctxt{ font-size:clamp(12.5px,1.12vw,15.5px); color:var(--ink); line-height:1.42; }
+  .chev.big .ctag{ font-size:clamp(11px,1vw,13.5px); }
+  .chev.big .ctxt{ font-size:clamp(14px,1.3vw,18px); color:var(--ink-soft); }
+  .chev.t .ctag{ color:var(--teal); }
+
+  /* topic block: title + chevron strip.
+     Strip is capped so text blocks stay snug instead of ballooning into empty boxes;
+     leftover space becomes breathing room between the two topics. */
+  .topicblk{ flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; gap:10px; }
+  .topicblk .chev-strip{ max-height:clamp(150px,24vh,225px); --notch:34px; }
+  .topicblk > h3{ font-family:var(--font-display); font-size:clamp(17px,1.6vw,23px); margin:0; color:var(--ink);
+    display:flex; align-items:center; gap:11px; }
+  .topicblk > h3::before{ content:""; width:5px; height:1.05em; background:var(--copper); border-radius:2px; flex-shrink:0; }
+  .topicblk.t > h3::before{ background:var(--teal); }
+
+  /* ===== TABLE ===== */
+  .table-wrap{ overflow-x:auto; overflow-y:hidden; flex:1; min-height:0; display:flex; flex-direction:column; }
+  table{ border-collapse:collapse; width:100%; font-size:clamp(13px,1.2vw,16.5px); flex:1; }
+  th,td{ text-align:left; padding:clamp(9px,1.3vh,17px) 14px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  th{ font-family:var(--font-mono); font-size:clamp(10px,.92vw,12px); letter-spacing:.07em; text-transform:uppercase; color:var(--ink-mute); border-bottom:2px solid var(--ink); }
+  td b{ color:var(--ink); }
+  td.num{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; text-align:right; color:var(--copper); font-weight:700; white-space:nowrap; }
+  tr.hi td{ background:var(--copper-soft); }
+
+  /* ===== CALLOUT / QUOTE ===== */
+  .callout{ background:var(--copper-soft); border-left:4px solid var(--copper); padding:clamp(13px,1.5vh,19px) clamp(16px,1.5vw,22px);
+    font-size:clamp(13.5px,1.2vw,17px); line-height:1.5; flex-shrink:0; }
+  .callout b{ color:var(--copper); }
+  .quote{ background:var(--panel); border-left:4px solid var(--ink-soft); padding:clamp(18px,2.2vh,30px) clamp(20px,2vw,30px); font-style:italic;
+    font-family:var(--font-display); font-size:clamp(18px,1.85vw,27px); color:var(--ink); line-height:1.45; }
+
+  /* ===== CHECKLIST ===== */
+  .checklist{ list-style:none; margin:0; padding:0; counter-reset:step; flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .checklist li{ counter-increment:step; display:flex; gap:clamp(13px,1.3vw,20px); padding:clamp(10px,1.5vh,18px) 0; border-top:1px solid var(--line); align-items:center; }
+  .checklist li:first-child{ border-top:none; }
+  .checklist li::before{ content:counter(step); font-family:var(--font-mono); font-weight:700; color:var(--paper); background:var(--copper);
+    width:clamp(26px,2.2vw,34px); height:clamp(26px,2.2vw,34px); border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    font-size:clamp(12px,1.05vw,15px); }
+  .checklist span{ font-size:clamp(13.5px,1.25vw,17.5px); line-height:1.45; }
+  .checklist span b{ color:var(--ink); }
+  .checklist.plain li::before{ background:var(--bad); }
+
+  /* ===== BIG LIST (typography-led, no fake chart) ===== */
+  .biglist{ list-style:none; margin:0; padding:0; flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .biglist li{ padding:clamp(11px,1.7vh,21px) 0 clamp(11px,1.7vh,21px) clamp(24px,2vw,34px); border-top:1px solid var(--line); position:relative;
+    font-size:clamp(14px,1.3vw,18.5px); line-height:1.45; color:var(--ink-soft); }
+  .biglist li:first-child{ border-top:none; }
+  .biglist li::before{ content:""; position:absolute; left:0; top:calc(50% - 4px); width:9px; height:9px; background:var(--bad); border-radius:2px; }
+  .biglist b{ color:var(--ink); }
+
+  /* ===== STATS ===== */
+  .stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:clamp(11px,1.1vw,18px); }
+  .stats.fill{ flex:1; min-height:0; }
+  @media (max-width:900px){ .stats{ grid-template-columns:repeat(2,1fr); } }
+  .stat{ background:var(--panel); border:1px solid var(--line); border-radius:5px; padding:clamp(14px,1.4vw,22px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; text-align:center; }
+  .stat .num{ font-family:var(--font-mono); font-weight:700; font-size:clamp(26px,3.3vw,48px); color:var(--copper); font-variant-numeric:tabular-nums; line-height:1; }
+  .stat .lbl{ font-size:clamp(12px,1.08vw,15px); color:var(--ink-soft); line-height:1.35; }
+
+  .sector-tag{ font-family:var(--font-mono); font-size:clamp(10.5px,.95vw,12.5px); letter-spacing:.09em; text-transform:uppercase;
+    color:var(--paper); background:var(--ink); padding:4px 11px; border-radius:3px; display:inline-block; }
+
+  /* ===== NAV CHROME ===== */
+  .progress{ position:fixed; top:0; left:0; height:3px; background:var(--copper); z-index:20; transition:width .25s ease; }
+  .navbtn{ position:fixed; top:50%; transform:translateY(-50%); z-index:20; width:40px; height:40px; border-radius:50%; border:1px solid var(--line);
+    background:var(--panel); color:var(--ink); font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .navbtn:focus-visible{ outline:2px solid var(--copper); outline-offset:2px; }
+  #prevBtn{ left:14px; } #nextBtn{ right:14px; }
+  .navbtn:hover{ background:var(--copper-soft); }
+  .topbar{ position:fixed; top:12px; right:14px; z-index:20; display:flex; gap:8px; }
+  .iconbtn{ width:31px; height:31px; border-radius:4px; border:1px solid var(--line); background:var(--panel); color:var(--ink-soft);
+    cursor:pointer; font-family:var(--font-mono); font-size:12px; display:flex; align-items:center; justify-content:center; }
+  .iconbtn:focus-visible{ outline:2px solid var(--copper); outline-offset:2px; }
+
+  /* ===== MOTION ===== */
+  @keyframes revealUp{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:translateY(0); } }
+  @keyframes growW{ from{ transform:scaleX(0); } to{ transform:scaleX(1); } }
+  @keyframes nodeIn{ from{ opacity:0; transform:scale(0); } to{ opacity:1; transform:scale(1); } }
+  @keyframes ringDraw{ from{ stroke-dashoffset:565; } to{ stroke-dashoffset:0; } }
+  @keyframes dashIn{ from{ stroke-dashoffset:var(--len,80); } to{ stroke-dashoffset:0; } }
+  @keyframes fadeIn{ from{ opacity:0; } to{ opacity:1; } }
+
+  .reveal{ opacity:0; animation:revealUp .5s cubic-bezier(.22,.7,.2,1) forwards; }
+  .reveal.r1{ animation-delay:.04s; } .reveal.r2{ animation-delay:.12s; } .reveal.r3{ animation-delay:.20s; }
+  .stagger > *{ opacity:0; animation:revealUp .5s cubic-bezier(.22,.7,.2,1) forwards; }
+  .stagger > *:nth-child(1){ animation-delay:.26s; } .stagger > *:nth-child(2){ animation-delay:.33s; }
+  .stagger > *:nth-child(3){ animation-delay:.40s; } .stagger > *:nth-child(4){ animation-delay:.47s; }
+  .stagger > *:nth-child(5){ animation-delay:.54s; } .stagger > *:nth-child(6){ animation-delay:.61s; }
+  .stagger > *:nth-child(7){ animation-delay:.68s; }
+
+  /* chart bar grow */
+  .bargrow{ transform-origin:left center; animation:growW .65s cubic-bezier(.22,.7,.2,1) forwards; }
+  .segrow{ transform-origin:left center; animation:growW .6s cubic-bezier(.22,.7,.2,1) forwards; }
+  .lblfade{ opacity:0; animation:fadeIn .4s ease forwards; }
+
+  .cover-mark .cline{ animation:dashIn .35s ease forwards; }
+  .cover-mark .cnode{ opacity:0; transform-box:fill-box; transform-origin:center; animation:nodeIn .3s ease forwards; }
+  .cover-mark .couter{ stroke-dasharray:565; stroke-dashoffset:565; animation:ringDraw 2s ease forwards; }
+  .slide--cover .kicker{ opacity:0; animation:revealUp .5s ease 1.9s forwards; }
+  .slide--cover h1.headline{ opacity:0; animation:revealUp .6s ease 2.05s forwards; }
+  .slide--cover .cover-sub{ opacity:0; animation:revealUp .5s ease 2.25s forwards; }
+
+  @media (prefers-reduced-motion: reduce){
+    .reveal, .stagger > *, .bargrow, .segrow, .lblfade, .cover-mark .cline, .cover-mark .cnode, .cover-mark .couter,
+    .slide--cover .kicker, .slide--cover h1.headline, .slide--cover .cover-sub{
+      animation:none !important; opacity:1 !important; transform:none !important; stroke-dashoffset:0 !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+<!-- ============ 1: COVER ============ -->
+<section class="slide slide--cover is-active">
+  <svg class="cover-mark" viewBox="0 0 200 200" aria-hidden="true">
+    <circle class="couter" cx="100" cy="100" r="90" fill="none" stroke="#E2924F" stroke-width="1"/>
+    <circle class="cnode" style="animation-delay:0s" cx="100" cy="30" r="5.5" fill="#E2924F"/>
+    <line class="cline" style="--len:76.3;stroke-dasharray:76.3;stroke-dashoffset:76.3;animation-delay:.05s" x1="100" y1="30" x2="165" y2="70" stroke="#E2924F" stroke-width="1.2"/>
+    <circle class="cnode" style="animation-delay:.35s" cx="165" cy="70" r="5.5" fill="#5FAE95"/>
+    <line class="cline" style="--len:60;stroke-dasharray:60;stroke-dashoffset:60;animation-delay:.40s" x1="165" y1="70" x2="165" y2="130" stroke="#5FAE95" stroke-width="1.2"/>
+    <circle class="cnode" style="animation-delay:.65s" cx="165" cy="130" r="5.5" fill="#5FAE95"/>
+    <line class="cline" style="--len:76.3;stroke-dasharray:76.3;stroke-dashoffset:76.3;animation-delay:.70s" x1="165" y1="130" x2="100" y2="170" stroke="#E2924F" stroke-width="1.2"/>
+    <circle class="cnode" style="animation-delay:1.0s" cx="100" cy="170" r="5.5" fill="#E2924F"/>
+    <line class="cline" style="--len:76.3;stroke-dasharray:76.3;stroke-dashoffset:76.3;animation-delay:1.05s" x1="100" y1="170" x2="35" y2="130" stroke="#E2924F" stroke-width="1.2"/>
+    <circle class="cnode" style="animation-delay:1.35s" cx="35" cy="130" r="5.5" fill="#5FAE95"/>
+    <line class="cline" style="--len:60;stroke-dasharray:60;stroke-dashoffset:60;animation-delay:1.40s" x1="35" y1="130" x2="35" y2="70" stroke="#5FAE95" stroke-width="1.2"/>
+    <circle class="cnode" style="animation-delay:1.65s" cx="35" cy="70" r="5.5" fill="#E2924F"/>
+    <line class="cline" style="--len:76.3;stroke-dasharray:76.3;stroke-dashoffset:76.3;animation-delay:1.70s" x1="35" y1="70" x2="100" y2="30" stroke="#5FAE95" stroke-width="1.2"/>
+  </svg>
+  <div class="kicker">Khoa Công nghệ Thông tin · HUTECH</div>
+  <h1 class="headline">Cuộc thi Xây dựng<br>Hệ điều hành<br>Doanh nghiệp số AI</h1>
+  <div class="cover-sub">Thể lệ, cách dự thi và đề tài mẫu · 2026</div>
+</section>
+
+<!-- ============ 2: 4 CAU HOI ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Nội dung</div>
+    <h1 class="headline reveal r2">Buổi này giải đáp 4 câu hỏi</h1>
+  </div>
+  <div class="slide-body">
+    <div class="grid grid-4 fill stagger">
+      <div class="card accent"><div class="cnum">01</div><h3>Thi cái gì</h3><p>Chủ đề, định hướng sản phẩm, ai được dự thi, đăng ký ra sao</p></div>
+      <div class="card accent-t"><div class="cnum" style="color:var(--teal)">02</div><h3>Thi thế nào</h3><p>7 buổi tập huấn, vòng bán kết, vòng chung kết, hồ sơ cần nộp</p></div>
+      <div class="card accent"><div class="cnum">03</div><h3>Chấm ra sao</h3><p>6 tiêu chí, 100 điểm, và cách ăn điểm ở từng mục</p></div>
+      <div class="card accent-t"><div class="cnum" style="color:var(--teal)">04</div><h3>Làm đề tài gì</h3><p>8 đề tài mẫu cụ thể theo từng loại doanh nghiệp</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3: CHU DE ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Chủ đề</div>
+    <h1 class="headline reveal r2">Đề bài của cuộc thi</h1>
+  </div>
+  <div class="slide-body">
+    <div class="quote reveal r3">"Xây dựng hệ điều hành doanh nghiệp số AI - phát triển một nền tảng hoặc bộ ứng dụng tích hợp nhằm hỗ trợ doanh nghiệp quản lý, phối hợp và tự động hoá một hay nhiều quy trình nghiệp vụ."</div>
+    <div class="callout reveal" style="animation-delay:.4s;"><b>Nói ngắn gọn:</b> chọn một doanh nghiệp có thật, tìm một quy trình họ đang làm tay, rồi xây hệ thống làm thay họ. Không cần làm cả doanh nghiệp, chỉ cần một quy trình chạy trọn vẹn và chạy được thật.</div>
+  </div>
+</section>
+
+<!-- ============ 4: 4 YEU TO - SO DO LUONG ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Định hướng sản phẩm</div>
+    <h1 class="headline reveal r2">Sản phẩm phải có đủ 4 yếu tố</h1>
+  </div>
+  <div class="slide-body">
+    <div class="fig reveal r3">
+      <svg viewBox="0 0 1000 420" role="img" aria-label="Sơ đồ luồng: dữ liệu vào qua kết nối mở, chạy qua quy trình tự động, AI xử lý, ra giao diện người dùng">
+        <defs>
+          <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 z" fill="var(--ink-mute)"/>
+          </marker>
+        </defs>
+        <!-- flow arrows -->
+        <line x1="214" y1="165" x2="256" y2="165" stroke="var(--ink-mute)" stroke-width="3" marker-end="url(#ah)"/>
+        <line x1="452" y1="165" x2="494" y2="165" stroke="var(--ink-mute)" stroke-width="3" marker-end="url(#ah)"/>
+        <line x1="690" y1="165" x2="732" y2="165" stroke="var(--ink-mute)" stroke-width="3" marker-end="url(#ah)"/>
+
+        <!-- box 1: ket noi mo -->
+        <g class="lblfade" style="animation-delay:.30s">
+          <rect x="10" y="50" width="204" height="230" rx="7" fill="var(--panel)" stroke="var(--teal)" stroke-width="3"/>
+          <text x="112" y="96" text-anchor="middle" font-family="ui-monospace,monospace" font-size="16" fill="var(--teal)" letter-spacing="1.6">KẾT NỐI MỞ</text>
+          <text x="112" y="150" text-anchor="middle" font-family="Cambria,serif" font-size="28" font-weight="700" fill="var(--ink)">Dữ liệu vào</text>
+          <text x="112" y="200" text-anchor="middle" font-size="18" fill="var(--ink-soft)">API, webhook,</text>
+          <text x="112" y="228" text-anchor="middle" font-size="18" fill="var(--ink-soft)">biểu mẫu, tệp tin</text>
+        </g>
+
+        <!-- box 2: quy trinh -->
+        <g class="lblfade" style="animation-delay:.42s">
+          <rect x="256" y="50" width="196" height="230" rx="7" fill="var(--panel)" stroke="var(--copper)" stroke-width="3"/>
+          <text x="354" y="96" text-anchor="middle" font-family="ui-monospace,monospace" font-size="16" fill="var(--copper)" letter-spacing="1.6">TỰ ĐỘNG HOÁ</text>
+          <text x="354" y="150" text-anchor="middle" font-family="Cambria,serif" font-size="28" font-weight="700" fill="var(--ink)">Quy trình</text>
+          <text x="354" y="200" text-anchor="middle" font-size="18" fill="var(--ink-soft)">Tiếp nhận, duyệt,</text>
+          <text x="354" y="228" text-anchor="middle" font-size="18" fill="var(--ink-soft)">phân công, nhắc việc</text>
+        </g>
+
+        <!-- box 3: AI -->
+        <g class="lblfade" style="animation-delay:.54s">
+          <rect x="494" y="50" width="196" height="230" rx="7" fill="var(--copper-soft)" stroke="var(--copper)" stroke-width="3"/>
+          <text x="592" y="96" text-anchor="middle" font-family="ui-monospace,monospace" font-size="16" fill="var(--copper)" letter-spacing="1.6">TÍCH HỢP AI</text>
+          <text x="592" y="150" text-anchor="middle" font-family="Cambria,serif" font-size="28" font-weight="700" fill="var(--ink)">AI xử lý</text>
+          <text x="592" y="200" text-anchor="middle" font-size="18" fill="var(--ink-soft)">Tóm tắt, phân loại,</text>
+          <text x="592" y="228" text-anchor="middle" font-size="18" fill="var(--ink-soft)">trích xuất, gợi ý</text>
+        </g>
+
+        <!-- box 4: nguoi dung -->
+        <g class="lblfade" style="animation-delay:.66s">
+          <rect x="732" y="50" width="204" height="230" rx="7" fill="var(--panel)" stroke="var(--teal)" stroke-width="3"/>
+          <text x="834" y="96" text-anchor="middle" font-family="ui-monospace,monospace" font-size="16" fill="var(--teal)" letter-spacing="1.6">CHẠY ĐƯỢC THẬT</text>
+          <text x="834" y="150" text-anchor="middle" font-family="Cambria,serif" font-size="28" font-weight="700" fill="var(--ink)">Người dùng</text>
+          <text x="834" y="200" text-anchor="middle" font-size="18" fill="var(--ink-soft)">Giao diện, dữ liệu mẫu,</text>
+          <text x="834" y="228" text-anchor="middle" font-size="18" fill="var(--ink-soft)">triển khai thử nghiệm</text>
+        </g>
+
+        <!-- feedback loop -->
+        <path class="lblfade" style="animation-delay:.78s" d="M834 288 L834 350 L112 350 L112 288" fill="none" stroke="var(--ink-mute)" stroke-width="2.5" stroke-dasharray="7 6" marker-end="url(#ah)"/>
+        <text class="lblfade" style="animation-delay:.82s" x="473" y="382" text-anchor="middle" font-size="19" fill="var(--ink-mute)">Kết quả quay lại làm dữ liệu cho vòng sau</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5: DOI TUONG ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Đối tượng</div>
+    <h1 class="headline reveal r2">Ai được dự thi</h1>
+  </div>
+  <div class="slide-body">
+    <div class="stats fill stagger">
+      <div class="stat"><div class="num">1-4</div><div class="lbl">Sinh viên năm nào cũng dự thi được</div></div>
+      <div class="stat"><div class="num">2-4</div><div class="lbl">Thành viên mỗi đội</div></div>
+      <div class="stat"><div class="num">1</div><div class="lbl">Mỗi sinh viên chỉ ở đúng một đội</div></div>
+      <div class="stat"><div class="num">0-1</div><div class="lbl">Giảng viên hoặc chuyên gia hướng dẫn</div></div>
+    </div>
+    <div class="callout reveal" style="animation-delay:.7s;"><b>Khuyến khích đội liên ngành:</b> có thành viên thuộc nhiều khoá hoặc nhiều chuyên môn. Một đội toàn người code thường yếu ở phần hiểu nghiệp vụ doanh nghiệp, mà đây lại là tiêu chí chiếm điểm cao nhất.</div>
+  </div>
+</section>
+
+<!-- ============ 6: DANG KY ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Đăng ký</div>
+    <h1 class="headline reveal r2">Đăng ký trước 02/08/2026</h1>
+    <p class="lede reveal r3">Đăng ký trực tuyến theo biểu mẫu do Ban Tổ chức công bố. Hồ sơ gồm 5 mục:</p>
+  </div>
+  <div class="slide-body">
+    <ul class="checklist stagger">
+      <li><span><b>Tên đội</b></span></li>
+      <li><span><b>Thông tin thành viên</b> - họ tên, MSSV, email, số điện thoại của từng người</span></li>
+      <li><span><b>Tên ý tưởng</b></span></li>
+      <li><span><b>Bài toán doanh nghiệp dự kiến giải quyết</b> - phần quan trọng nhất, nêu rõ doanh nghiệp nào đang gặp khó khăn gì</span></li>
+      <li><span><b>Mô tả ngắn giải pháp</b> - dự định làm gì để giải quyết bài toán đó</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 7: TIMELINE ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Lịch trình</div>
+    <h1 class="headline reveal r2">Toàn bộ chặng đường</h1>
+  </div>
+  <div class="slide-body">
+    <div class="fig reveal r3">
+      <svg viewBox="0 0 1000 330" role="img" aria-label="Trục thời gian cuộc thi từ 24/07 tới 02/10/2026">
+        <!-- phase bands -->
+        <rect class="segrow" style="animation-delay:.28s" x="30" y="118" width="118" height="40" rx="4" fill="var(--teal-soft)" stroke="var(--teal)" stroke-width="1.5"/>
+        <rect class="segrow" style="animation-delay:.38s" x="152" y="118" width="330" height="40" rx="4" fill="var(--copper-soft)" stroke="var(--copper)" stroke-width="1.5"/>
+        <rect class="segrow" style="animation-delay:.48s" x="486" y="118" width="176" height="40" rx="4" fill="var(--copper-soft)" stroke="var(--copper)" stroke-width="1.5" stroke-dasharray="5 4"/>
+
+        <text class="lblfade" style="animation-delay:.42s" x="89" y="144" text-anchor="middle" font-size="16" fill="var(--teal)" font-weight="700">Đăng ký</text>
+        <text class="lblfade" style="animation-delay:.52s" x="317" y="144" text-anchor="middle" font-size="16" fill="var(--copper)" font-weight="700">5 buổi tập huấn trực tiếp</text>
+        <text class="lblfade" style="animation-delay:.62s" x="574" y="144" text-anchor="middle" font-size="16" fill="var(--copper)" font-weight="700">2 buổi online</text>
+
+        <!-- main axis -->
+        <line x1="30" y1="196" x2="970" y2="196" stroke="var(--line)" stroke-width="3.5"/>
+
+        <!-- milestone: start -->
+        <g class="lblfade" style="animation-delay:.30s">
+          <circle cx="30" cy="196" r="9" fill="var(--teal)"/>
+          <text x="22" y="230" text-anchor="start" font-family="ui-monospace,monospace" font-size="16" font-weight="700" fill="var(--ink)">24/07</text>
+          <text x="22" y="256" text-anchor="start" font-size="14.5" fill="var(--ink-soft)">Phát động</text>
+        </g>
+        <!-- 02/08 -->
+        <g class="lblfade" style="animation-delay:.44s">
+          <circle cx="148" cy="196" r="9" fill="var(--teal)"/>
+          <text x="130" y="230" text-anchor="start" font-family="ui-monospace,monospace" font-size="16" font-weight="700" fill="var(--ink)">02/08</text>
+          <text x="130" y="256" text-anchor="start" font-size="14.5" fill="var(--ink-soft)">Hạn đăng ký</text>
+        </g>
+        <!-- 04/08 -->
+        <g class="lblfade" style="animation-delay:.54s">
+          <circle cx="190" cy="196" r="7" fill="var(--copper)"/>
+          <text x="190" y="290" text-anchor="middle" font-family="ui-monospace,monospace" font-size="15" fill="var(--ink-soft)">04/08</text>
+          <line x1="190" y1="205" x2="190" y2="274" stroke="var(--line)" stroke-width="1.5"/>
+        </g>
+        <!-- 01/09 -->
+        <g class="lblfade" style="animation-delay:.60s">
+          <circle cx="470" cy="196" r="7" fill="var(--copper)"/>
+          <text x="470" y="290" text-anchor="middle" font-family="ui-monospace,monospace" font-size="15" fill="var(--ink-soft)">01/09</text>
+          <line x1="470" y1="205" x2="470" y2="274" stroke="var(--line)" stroke-width="1.5"/>
+        </g>
+        <!-- ban ket -->
+        <g class="lblfade" style="animation-delay:.72s">
+          <circle cx="700" cy="196" r="13" fill="var(--copper)"/>
+          <line x1="700" y1="183" x2="700" y2="78" stroke="var(--copper)" stroke-width="2"/>
+          <text x="700" y="64" text-anchor="middle" font-family="Cambria,serif" font-size="25" font-weight="700" fill="var(--ink)">Bán kết</text>
+          <text x="700" y="36" text-anchor="middle" font-family="ui-monospace,monospace" font-size="18" font-weight="700" fill="var(--copper)">17/09 · 19h00</text>
+          <text x="700" y="232" text-anchor="middle" font-size="16" fill="var(--ink-soft)">Trực tuyến</text>
+        </g>
+        <!-- chung ket -->
+        <g class="lblfade" style="animation-delay:.84s">
+          <circle cx="940" cy="196" r="15" fill="var(--copper)"/>
+          <circle cx="940" cy="196" r="23" fill="none" stroke="var(--copper)" stroke-width="2"/>
+          <line x1="940" y1="181" x2="940" y2="78" stroke="var(--copper)" stroke-width="2"/>
+          <text x="940" y="64" text-anchor="middle" font-family="Cambria,serif" font-size="25" font-weight="700" fill="var(--ink)">Chung kết</text>
+          <text x="940" y="36" text-anchor="middle" font-family="ui-monospace,monospace" font-size="18" font-weight="700" fill="var(--copper)">02/10 · 12h30</text>
+          <text x="940" y="238" text-anchor="middle" font-size="16" fill="var(--ink-soft)">E1-02.10</text>
+        </g>
+      </svg>
+    </div>
+    <div class="callout reveal" style="animation-delay:.95s;">Từ hạn đăng ký tới bán kết, các đội có <b>khoảng 6 tuần</b> để xây dựng sản phẩm, và thêm <b>2 tuần</b> để hoàn thiện trước chung kết.</div>
+  </div>
+</section>
+
+<!-- ============ 8: TAP HUAN ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Tập huấn</div>
+    <h1 class="headline reveal r2">7 buổi tập huấn</h1>
+  </div>
+  <div class="slide-body">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Buổi</th><th>Thời gian</th><th>Địa điểm</th></tr></thead>
+        <tbody class="stagger">
+          <tr><td><b>1</b></td><td>13h30, thứ Ba 04/08/2026</td><td>E1.03.11 (trực tiếp)</td></tr>
+          <tr><td><b>2</b></td><td>13h30, thứ Ba 11/08/2026</td><td>E1.03.11 (trực tiếp)</td></tr>
+          <tr><td><b>3</b></td><td>13h30, thứ Ba 18/08/2026</td><td>E1.03.11 (trực tiếp)</td></tr>
+          <tr><td><b>4</b></td><td>13h30, thứ Ba 25/08/2026</td><td>E1.03.11 (trực tiếp)</td></tr>
+          <tr><td><b>5</b></td><td>13h30, thứ Ba 01/09/2026</td><td>E1.03.11 (trực tiếp)</td></tr>
+          <tr class="hi"><td><b>6</b></td><td>20h00, thứ Ba 08/09/2026</td><td>Trực tuyến</td></tr>
+          <tr class="hi"><td><b>7</b></td><td>20h00, thứ Ba 15/09/2026</td><td>Trực tuyến</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout reveal" style="animation-delay:.85s;">Theo thể lệ, các đội cần <b>tham gia đầy đủ chương trình tập huấn</b>. Hai buổi online cuối rơi đúng giai đoạn nước rút trước bán kết, là lúc hỏi trực tiếp giảng viên về sản phẩm đang làm.</div>
+  </div>
+</section>
+
+<!-- ============ 9: 2 VONG THI - PHEU ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Vòng thi</div>
+    <h1 class="headline reveal r2">Hai vòng thi diễn ra thế nào</h1>
+  </div>
+  <div class="slide-body">
+    <div class="fig reveal r3">
+      <svg viewBox="0 0 1000 400" role="img" aria-label="Phễu từ đăng ký qua bán kết tới chung kết và 6 giải thưởng">
+        <!-- stage 1 -->
+        <g class="lblfade" style="animation-delay:.28s">
+          <path d="M20 30 L330 30 L298 370 L52 370 Z" fill="var(--panel)" stroke="var(--line)" stroke-width="2.5"/>
+          <text x="175" y="92" text-anchor="middle" font-family="ui-monospace,monospace" font-size="16" fill="var(--ink-mute)" letter-spacing="1.5">GIAI ĐOẠN 1</text>
+          <text x="175" y="150" text-anchor="middle" font-family="Cambria,serif" font-size="33" font-weight="700" fill="var(--ink)">Đăng ký</text>
+          <text x="175" y="204" text-anchor="middle" font-size="19" fill="var(--ink-soft)">Tất cả đội nộp hồ sơ</text>
+          <text x="175" y="234" text-anchor="middle" font-size="19" fill="var(--ink-soft)">trước 02/08</text>
+          <text x="175" y="300" text-anchor="middle" font-family="ui-monospace,monospace" font-size="16" fill="var(--teal)">Tham gia 7 buổi</text>
+          <text x="175" y="326" text-anchor="middle" font-family="ui-monospace,monospace" font-size="16" fill="var(--teal)">tập huấn</text>
+        </g>
+        <!-- stage 2 -->
+        <g class="lblfade" style="animation-delay:.44s">
+          <path d="M355 55 L650 55 L620 345 L385 345 Z" fill="var(--copper-soft)" stroke="var(--copper)" stroke-width="3"/>
+          <text x="502" y="112" text-anchor="middle" font-family="ui-monospace,monospace" font-size="16" fill="var(--copper)" letter-spacing="1.5">17/09 · ONLINE</text>
+          <text x="502" y="168" text-anchor="middle" font-family="Cambria,serif" font-size="33" font-weight="700" fill="var(--ink)">Bán kết</text>
+          <text x="502" y="220" text-anchor="middle" font-size="19" fill="var(--ink-soft)">Nộp mô tả, demo,</text>
+          <text x="502" y="248" text-anchor="middle" font-size="19" fill="var(--ink-soft)">sơ đồ và slide</text>
+          <text x="502" y="300" text-anchor="middle" font-size="17" fill="var(--copper)" font-weight="700">Chọn đội có tính</text>
+          <text x="502" y="324" text-anchor="middle" font-size="17" fill="var(--copper)" font-weight="700">ứng dụng cao</text>
+        </g>
+        <!-- stage 3 -->
+        <g class="lblfade" style="animation-delay:.60s">
+          <path d="M675 85 L928 85 L903 315 L700 315 Z" fill="var(--copper)" stroke="var(--copper)" stroke-width="3"/>
+          <text x="802" y="142" text-anchor="middle" font-family="ui-monospace,monospace" font-size="16" fill="var(--paper)" letter-spacing="1.5">02/10 · TRỰC TIẾP</text>
+          <text x="802" y="198" text-anchor="middle" font-family="Cambria,serif" font-size="33" font-weight="700" fill="var(--paper)">Chung kết</text>
+          <text x="802" y="248" text-anchor="middle" font-size="19" fill="var(--paper)" opacity=".92">10 phút demo</text>
+          <text x="802" y="278" text-anchor="middle" font-size="19" fill="var(--paper)" opacity=".92">5 phút phản biện</text>
+        </g>
+        <!-- arrows -->
+        <path class="lblfade" style="animation-delay:.52s" d="M334 200 L348 200" stroke="var(--ink-mute)" stroke-width="3.5"/>
+        <path class="lblfade" style="animation-delay:.52s" d="M336 190 L354 200 L336 210 Z" fill="var(--ink-mute)"/>
+        <path class="lblfade" style="animation-delay:.68s" d="M654 200 L668 200" stroke="var(--ink-mute)" stroke-width="3.5"/>
+        <path class="lblfade" style="animation-delay:.68s" d="M656 190 L674 200 L656 210 Z" fill="var(--ink-mute)"/>
+        <!-- outcome -->
+        <g class="lblfade" style="animation-delay:.78s">
+          <text x="958" y="190" text-anchor="middle" font-family="ui-monospace,monospace" font-size="40" font-weight="700" fill="var(--copper)">6</text>
+          <text x="958" y="218" text-anchor="middle" font-size="17" fill="var(--ink-soft)">giải</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 10: HO SO ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Hồ sơ dự thi</div>
+    <h1 class="headline reveal r2">Bốn thứ phải nộp</h1>
+  </div>
+  <div class="slide-body">
+    <ul class="checklist stagger">
+      <li><span><b>Mã nguồn hoặc tệp cấu hình</b> kèm hướng dẫn cài đặt và vận hành. Bắt buộc công bố rõ thành phần mã nguồn mở và dịch vụ bên thứ ba đã dùng</span></li>
+      <li><span><b>Tài liệu mô tả</b> bài toán, đối tượng sử dụng, kiến trúc hệ thống, quy trình tự động hoá, chức năng AI, dữ liệu đầu vào và kết quả đầu ra</span></li>
+      <li><span><b>Video demo</b> không quá 5 phút, kèm slide thuyết trình và tài khoản thử nghiệm nếu có</span></li>
+      <li><span><b>Cam kết dữ liệu:</b> không sử dụng dữ liệu cá nhân hoặc dữ liệu doanh nghiệp khi chưa được phép</span></li>
+    </ul>
+    <div class="callout reveal" style="animation-delay:.7s;"><b>Lời khuyên:</b> chuẩn bị hồ sơ song song với việc code. Riêng phần tài liệu, demo và trình bày đã chiếm 10 điểm trong thang chấm.</div>
+  </div>
+</section>
+
+<!-- ============ 11: CHAM DIEM - BAR CHART ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Chấm điểm</div>
+    <h1 class="headline reveal r2">6 tiêu chí, 100 điểm</h1>
+  </div>
+  <div class="slide-body">
+    <div class="fig reveal r3">
+      <svg viewBox="0 0 1000 400" role="img" aria-label="Biểu đồ thanh: điểm tối đa của 6 tiêu chí chấm, tổng 100 điểm">
+        <!-- grid ticks: bars start at x=470 (=0đ) and run 20px per point -->
+        <line x1="470" y1="12" x2="470" y2="372" stroke="var(--ink-mute)" stroke-width="1.5"/>
+        <line x1="670" y1="12" x2="670" y2="372" stroke="var(--line)" stroke-width="1"/>
+        <line x1="870" y1="12" x2="870" y2="372" stroke="var(--line)" stroke-width="1"/>
+        <text x="470" y="394" text-anchor="middle" font-family="ui-monospace,monospace" font-size="15" fill="var(--ink-mute)">0</text>
+        <text x="670" y="394" text-anchor="middle" font-family="ui-monospace,monospace" font-size="15" fill="var(--ink-mute)">10</text>
+        <text x="870" y="394" text-anchor="middle" font-family="ui-monospace,monospace" font-size="15" fill="var(--ink-mute)">20 điểm</text>
+
+        <!-- 25 -->
+        <text x="455" y="43" text-anchor="end" font-size="19" fill="var(--ink)" font-weight="700">Tính thực tiễn và giá trị cho doanh nghiệp</text>
+        <rect class="bargrow" style="animation-delay:.28s" x="470" y="20" width="500" height="34" rx="4" fill="var(--copper)"/>
+        <text class="lblfade" style="animation-delay:.60s" x="984" y="44" font-family="ui-monospace,monospace" font-size="22" font-weight="700" fill="var(--copper)">25</text>
+
+        <!-- 20 -->
+        <text x="455" y="105" text-anchor="end" font-size="19" fill="var(--ink)" font-weight="700">Mức độ hoàn thiện và trải nghiệm người dùng</text>
+        <rect class="bargrow" style="animation-delay:.36s" x="470" y="82" width="400" height="34" rx="4" fill="var(--copper)"/>
+        <text class="lblfade" style="animation-delay:.66s" x="884" y="106" font-family="ui-monospace,monospace" font-size="22" font-weight="700" fill="var(--copper)">20</text>
+
+        <!-- 20 -->
+        <text x="455" y="167" text-anchor="end" font-size="19" fill="var(--ink)" font-weight="700">Thiết kế quy trình tự động hoá và tích hợp</text>
+        <rect class="bargrow" style="animation-delay:.44s" x="470" y="144" width="400" height="34" rx="4" fill="var(--copper)"/>
+        <text class="lblfade" style="animation-delay:.72s" x="884" y="168" font-family="ui-monospace,monospace" font-size="22" font-weight="700" fill="var(--copper)">20</text>
+
+        <!-- 15 -->
+        <text x="455" y="229" text-anchor="end" font-size="19" fill="var(--ink)" font-weight="700">Ứng dụng AI phù hợp, an toàn, có trách nhiệm</text>
+        <rect class="bargrow" style="animation-delay:.52s" x="470" y="206" width="300" height="34" rx="4" fill="var(--copper)"/>
+        <text class="lblfade" style="animation-delay:.78s" x="784" y="230" font-family="ui-monospace,monospace" font-size="22" font-weight="700" fill="var(--copper)">15</text>
+
+        <!-- 10 -->
+        <text x="455" y="291" text-anchor="end" font-size="19" fill="var(--ink)" font-weight="700">Tính sáng tạo và khả năng mở rộng</text>
+        <rect class="bargrow" style="animation-delay:.60s" x="470" y="268" width="200" height="34" rx="4" fill="var(--copper)"/>
+        <text class="lblfade" style="animation-delay:.84s" x="684" y="292" font-family="ui-monospace,monospace" font-size="22" font-weight="700" fill="var(--copper)">10</text>
+
+        <!-- 10 -->
+        <text x="455" y="353" text-anchor="end" font-size="19" fill="var(--ink)" font-weight="700">Hồ sơ, trình bày, demo và phản biện</text>
+        <rect class="bargrow" style="animation-delay:.68s" x="470" y="330" width="200" height="34" rx="4" fill="var(--copper)"/>
+        <text class="lblfade" style="animation-delay:.90s" x="684" y="354" font-family="ui-monospace,monospace" font-size="22" font-weight="700" fill="var(--copper)">10</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 12: CHIEN THUAT - 100 DIEM ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Chấm điểm</div>
+    <h1 class="headline reveal r2">Nhìn thang điểm để biết dồn sức vào đâu</h1>
+  </div>
+  <div class="slide-body">
+    <div class="fig reveal r3">
+      <svg viewBox="0 0 1000 290" role="img" aria-label="Thanh 100 điểm chia nhóm: 45 điểm nghiệp vụ, 20 điểm hoàn thiện, 15 điểm AI, 20 điểm còn lại">
+        <!-- 45 nghiep vu -->
+        <g class="lblfade" style="animation-delay:.28s">
+          <rect class="segrow" style="animation-delay:.28s" x="10" y="78" width="437" height="96" rx="5" fill="var(--copper)"/>
+          <text x="228" y="132" text-anchor="middle" font-family="ui-monospace,monospace" font-size="42" font-weight="700" fill="var(--paper)">45</text>
+          <text x="228" y="158" text-anchor="middle" font-size="17" fill="var(--paper)" opacity=".92">điểm</text>
+          <text x="228" y="216" text-anchor="middle" font-family="Cambria,serif" font-size="25" font-weight="700" fill="var(--ink)">Hiểu nghiệp vụ</text>
+          <text x="228" y="248" text-anchor="middle" font-size="17" fill="var(--ink-soft)">Tính thực tiễn 25đ + thiết kế quy trình 20đ</text>
+        </g>
+        <!-- 20 hoan thien -->
+        <g class="lblfade" style="animation-delay:.42s">
+          <rect class="segrow" style="animation-delay:.42s" x="453" y="78" width="190" height="96" rx="5" fill="var(--teal)"/>
+          <text x="548" y="132" text-anchor="middle" font-family="ui-monospace,monospace" font-size="38" font-weight="700" fill="var(--paper)">20</text>
+          <text x="548" y="158" text-anchor="middle" font-size="16" fill="var(--paper)" opacity=".92">điểm</text>
+          <text x="548" y="216" text-anchor="middle" font-family="Cambria,serif" font-size="23" font-weight="700" fill="var(--ink)">Chạy mượt</text>
+          <text x="548" y="248" text-anchor="middle" font-size="17" fill="var(--ink-soft)">Hoàn thiện, ổn định</text>
+        </g>
+        <!-- 15 AI -->
+        <g class="lblfade" style="animation-delay:.54s">
+          <rect class="segrow" style="animation-delay:.54s" x="649" y="78" width="140" height="96" rx="5" fill="var(--copper)" opacity=".55"/>
+          <text x="719" y="132" text-anchor="middle" font-family="ui-monospace,monospace" font-size="36" font-weight="700" fill="var(--paper)">15</text>
+          <text x="719" y="158" text-anchor="middle" font-size="16" fill="var(--paper)" opacity=".92">điểm</text>
+          <text x="719" y="216" text-anchor="middle" font-family="Cambria,serif" font-size="23" font-weight="700" fill="var(--ink)">Phần AI</text>
+          <text x="719" y="248" text-anchor="middle" font-size="17" fill="var(--ink-soft)">Phù hợp, an toàn</text>
+        </g>
+        <!-- 20 con lai -->
+        <g class="lblfade" style="animation-delay:.66s">
+          <rect class="segrow" style="animation-delay:.66s" x="795" y="78" width="195" height="96" rx="5" fill="var(--ink-mute)" opacity=".5"/>
+          <text x="892" y="132" text-anchor="middle" font-family="ui-monospace,monospace" font-size="38" font-weight="700" fill="var(--paper)">20</text>
+          <text x="892" y="158" text-anchor="middle" font-size="16" fill="var(--paper)" opacity=".92">điểm</text>
+          <text x="892" y="216" text-anchor="middle" font-family="Cambria,serif" font-size="23" font-weight="700" fill="var(--ink)">Sáng tạo + hồ sơ</text>
+          <text x="892" y="248" text-anchor="middle" font-size="17" fill="var(--ink-soft)">Mở rộng 10đ + trình bày 10đ</text>
+        </g>
+        <!-- scale label -->
+        <text x="10" y="52" font-family="ui-monospace,monospace" font-size="16" fill="var(--ink-mute)" letter-spacing="1.2">TỔNG 100 ĐIỂM</text>
+        <line x1="10" y1="64" x2="990" y2="64" stroke="var(--line)" stroke-width="1"/>
+      </svg>
+    </div>
+    <div class="callout reveal" style="animation-delay:.8s;"><b>Sai lầm thường gặp:</b> dồn hết thời gian cho phần AI và công nghệ, bỏ quên phần chứng minh doanh nghiệp thật sự cần sản phẩm này. Phần nghiệp vụ chiếm 45 điểm, gấp ba lần phần AI.</div>
+  </div>
+</section>
+
+<!-- ============ 13: 4 LOP DE TAI - MAU CHEVRON ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Đề tài mẫu</div>
+    <h1 class="headline reveal r2">Một đề tài tốt gồm 4 lớp</h1>
+    <p class="lede reveal r3">Toàn bộ đề tài mẫu ở các slide sau đều mô tả theo đúng 4 lớp này. Khi tự nghĩ đề tài, hãy trả lời đủ 4 câu hỏi tương ứng.</p>
+  </div>
+  <div class="slide-body">
+    <div class="chev-strip fill stagger">
+      <div class="chev big"><span class="ctag">Lớp 1 · Bài toán</span><span class="ctxt">Doanh nghiệp đang mất thời gian hoặc mất tiền vì việc gì? Hiện họ làm tay ra sao?</span></div>
+      <div class="chev big t"><span class="ctag">Lớp 2 · Luồng tự động</span><span class="ctxt">Hệ thống nhận đầu vào từ đâu, xử lý qua những bước nào, trả kết quả ra đâu?</span></div>
+      <div class="chev big"><span class="ctag">Lớp 3 · AI làm gì</span><span class="ctxt">Chỗ nào trong luồng cần AI? AI đọc gì và quyết định gì thay con người?</span></div>
+      <div class="chev big t"><span class="ctag">Lớp 4 · Demo</span><span class="ctxt">Trước giám khảo sẽ bấm gì, nhập gì, và nhìn thấy kết quả gì trong 10 phút?</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 14: DE TAI NHOM 1 ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Đề tài mẫu · Nhóm 1</div>
+    <span class="sector-tag reveal r2">SME bán lẻ và thương mại</span>
+    <h1 class="headline reveal r2" style="font-size:clamp(21px,2.5vw,31px);margin-top:10px;">Cửa hàng, đại lý, nhà phân phối</h1>
+  </div>
+  <div class="slide-body stagger">
+    <div class="topicblk">
+      <h3>Trợ lý xử lý đơn hàng đa kênh</h3>
+      <div class="chev-strip fill">
+        <div class="chev"><span class="ctag">Bài toán</span><span class="ctxt">Đơn về từ Facebook, Zalo, sàn thương mại điện tử và điện thoại. Nhân viên chép tay vào Excel, sai sót và trùng đơn thường xuyên</span></div>
+        <div class="chev t"><span class="ctag">Luồng tự động</span><span class="ctxt">Nhận tin nhắn qua webhook, tách thông tin đơn, ghi vào cơ sở dữ liệu chung, tự tạo phiếu giao và nhắn xác nhận cho khách</span></div>
+        <div class="chev"><span class="ctag">AI làm gì</span><span class="ctxt">Đọc tin nhắn tự do của khách, trích ra tên hàng, số lượng, địa chỉ, số điện thoại, cảnh báo khi đơn thiếu thông tin</span></div>
+        <div class="chev t"><span class="ctag">Demo</span><span class="ctxt">Nhắn một tin đặt hàng viết lộn xộn, hệ thống tự tạo đơn hoàn chỉnh và hiện lên bảng điều khiển</span></div>
+      </div>
+    </div>
+    <div class="topicblk t">
+      <h3>Cảnh báo tồn kho và dự báo nhập hàng</h3>
+      <div class="chev-strip fill">
+        <div class="chev"><span class="ctag">Bài toán</span><span class="ctxt">Chủ cửa hàng không biết khi nào hết hàng, đến lúc phát hiện thì đã mất đơn hoặc phải nhập gấp giá cao</span></div>
+        <div class="chev t"><span class="ctag">Luồng tự động</span><span class="ctxt">Đọc dữ liệu bán hàng hàng ngày, tính tốc độ bán từng mặt hàng, gửi cảnh báo qua Zalo hoặc email khi sắp hết</span></div>
+        <div class="chev"><span class="ctag">AI làm gì</span><span class="ctxt">Dự báo lượng bán tuần tới theo lịch sử và mùa vụ, gợi ý số lượng nên nhập cho từng mặt hàng</span></div>
+        <div class="chev t"><span class="ctag">Demo</span><span class="ctxt">Nạp dữ liệu bán 3 tháng, hệ thống chỉ ra 5 mặt hàng cần nhập gấp kèm số lượng đề xuất</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 15: DE TAI NHOM 2 ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Đề tài mẫu · Nhóm 2</div>
+    <span class="sector-tag reveal r2">Cơ quan hành chính nhà nước</span>
+    <h1 class="headline reveal r2" style="font-size:clamp(21px,2.5vw,31px);margin-top:10px;">Uỷ ban, phòng ban, đơn vị sự nghiệp</h1>
+  </div>
+  <div class="slide-body stagger">
+    <div class="topicblk">
+      <h3>Soạn thảo và rà soát văn bản hành chính</h3>
+      <div class="chev-strip fill">
+        <div class="chev"><span class="ctag">Bài toán</span><span class="ctxt">Cán bộ mất nhiều giờ soạn công văn, tờ trình, quyết định theo đúng thể thức. Văn bản sai thể thức bị trả lại nhiều lần</span></div>
+        <div class="chev t"><span class="ctag">Luồng tự động</span><span class="ctxt">Chọn loại văn bản, điền thông tin qua biểu mẫu, hệ thống sinh bản nháp đúng thể thức, chuyển qua bước duyệt rồi lưu vào kho</span></div>
+        <div class="chev"><span class="ctag">AI làm gì</span><span class="ctxt">Sinh nội dung dự thảo theo ngữ cảnh, rà lỗi thể thức và chính tả, gợi ý căn cứ pháp lý liên quan</span></div>
+        <div class="chev t"><span class="ctag">Demo</span><span class="ctxt">Nhập yêu cầu bằng vài dòng, hệ thống xuất ra công văn hoàn chỉnh kèm cảnh báo chỗ cần kiểm tra lại</span></div>
+      </div>
+    </div>
+    <div class="topicblk t">
+      <h3>Cổng tiếp nhận và phân luồng hồ sơ người dân</h3>
+      <div class="chev-strip fill">
+        <div class="chev"><span class="ctag">Bài toán</span><span class="ctxt">Hồ sơ nộp lên bị chuyển nhầm phòng ban, người dân chờ lâu và phải hỏi lại nhiều lần về tình trạng xử lý</span></div>
+        <div class="chev t"><span class="ctag">Luồng tự động</span><span class="ctxt">Người dân nộp qua biểu mẫu trực tuyến, hệ thống tự phân loại và chuyển đúng bộ phận, gửi tin nhắn cập nhật ở từng bước</span></div>
+        <div class="chev"><span class="ctag">AI làm gì</span><span class="ctxt">Đọc nội dung hồ sơ để phân loại đúng lĩnh vực, phát hiện hồ sơ thiếu giấy tờ ngay từ lúc nộp</span></div>
+        <div class="chev t"><span class="ctag">Demo</span><span class="ctxt">Nộp thử 3 hồ sơ khác lĩnh vực, hệ thống phân đúng bộ phận và báo hồ sơ nào còn thiếu gì</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 16: DE TAI NHOM 3 ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Đề tài mẫu · Nhóm 3</div>
+    <span class="sector-tag reveal r2">Giáo dục và đào tạo</span>
+    <h1 class="headline reveal r2" style="font-size:clamp(21px,2.5vw,31px);margin-top:10px;">Trung tâm đào tạo, trường học</h1>
+  </div>
+  <div class="slide-body stagger">
+    <div class="topicblk">
+      <h3>Trợ lý tư vấn tuyển sinh và chăm sóc học viên</h3>
+      <div class="chev-strip fill">
+        <div class="chev"><span class="ctag">Bài toán</span><span class="ctxt">Trung tâm nhận hàng trăm câu hỏi mỗi ngày về học phí, lịch khai giảng, lộ trình học. Tư vấn viên trả lời lặp lại và bỏ sót khách quan tâm</span></div>
+        <div class="chev t"><span class="ctag">Luồng tự động</span><span class="ctxt">Nhận câu hỏi từ fanpage và website, trả lời tự động theo dữ liệu khoá học, ghi thông tin người quan tâm vào danh sách gọi lại</span></div>
+        <div class="chev"><span class="ctag">AI làm gì</span><span class="ctxt">Tra cứu dữ liệu khoá học thật để trả lời đúng thông tin, đánh giá mức độ quan tâm để xếp thứ tự ưu tiên gọi lại</span></div>
+        <div class="chev t"><span class="ctag">Demo</span><span class="ctxt">Hỏi vài câu về học phí và lịch học, hệ thống trả lời đúng dữ liệu và tự lưu thông tin người hỏi</span></div>
+      </div>
+    </div>
+    <div class="topicblk t">
+      <h3>Chấm và phản hồi bài tập tự động</h3>
+      <div class="chev-strip fill">
+        <div class="chev"><span class="ctag">Bài toán</span><span class="ctxt">Giảng viên mất hàng chục giờ mỗi kỳ để chấm bài và viết nhận xét cho từng sinh viên</span></div>
+        <div class="chev t"><span class="ctag">Luồng tự động</span><span class="ctxt">Sinh viên nộp bài qua cổng, hệ thống chấm theo rubric, sinh nhận xét, gửi kết quả về email và tổng hợp bảng điểm</span></div>
+        <div class="chev"><span class="ctag">AI làm gì</span><span class="ctxt">Đối chiếu bài làm với tiêu chí chấm, viết nhận xét cụ thể cho từng bài, đánh dấu bài cần giảng viên xem lại</span></div>
+        <div class="chev t"><span class="ctag">Demo</span><span class="ctxt">Nộp 5 bài mẫu chất lượng khác nhau, hệ thống chấm và sinh nhận xét riêng cho từng bài</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 17: DE TAI NHOM 4 ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Đề tài mẫu · Nhóm 4</div>
+    <span class="sector-tag reveal r2">Dịch vụ và sản xuất</span>
+    <h1 class="headline reveal r2" style="font-size:clamp(21px,2.5vw,31px);margin-top:10px;">Phòng khám, nhà hàng, xưởng sản xuất</h1>
+  </div>
+  <div class="slide-body stagger">
+    <div class="topicblk">
+      <h3>Đặt lịch và nhắc hẹn cho phòng khám</h3>
+      <div class="chev-strip fill">
+        <div class="chev"><span class="ctag">Bài toán</span><span class="ctxt">Lễ tân ghi lịch hẹn ra sổ, khách quên lịch không tới, bác sĩ trống giờ mà bệnh nhân khác lại không đặt được</span></div>
+        <div class="chev t"><span class="ctag">Luồng tự động</span><span class="ctxt">Khách đặt lịch trực tuyến theo lịch trống thật của bác sĩ, hệ thống tự nhắn nhắc trước 1 ngày, tự mở lại slot khi khách huỷ</span></div>
+        <div class="chev"><span class="ctag">AI làm gì</span><span class="ctxt">Nhận đặt lịch qua tin nhắn tự nhiên, gợi ý khung giờ phù hợp, phân loại mức độ ưu tiên theo triệu chứng khách mô tả</span></div>
+        <div class="chev t"><span class="ctag">Demo</span><span class="ctxt">Đặt lịch qua tin nhắn, nhận tin xác nhận, huỷ lịch và xem slot tự mở lại cho người khác</span></div>
+      </div>
+    </div>
+    <div class="topicblk t">
+      <h3>Bảng điều khiển vận hành và báo cáo tự động</h3>
+      <div class="chev-strip fill">
+        <div class="chev"><span class="ctag">Bài toán</span><span class="ctxt">Chủ doanh nghiệp phải chờ cuối tháng mới có báo cáo, dữ liệu nằm rải rác ở nhiều file và nhiều người giữ</span></div>
+        <div class="chev t"><span class="ctag">Luồng tự động</span><span class="ctxt">Gom dữ liệu từ các nguồn về một nơi, cập nhật bảng điều khiển theo thời gian thực, tự gửi báo cáo tổng hợp mỗi sáng</span></div>
+        <div class="chev"><span class="ctag">AI làm gì</span><span class="ctxt">Viết nhận xét báo cáo bằng ngôn ngữ quản lý, chỉ ra điểm bất thường, trả lời câu hỏi về số liệu bằng ngôn ngữ tự nhiên</span></div>
+        <div class="chev t"><span class="ctag">Demo</span><span class="ctxt">Hỏi "doanh thu tuần này so với tuần trước thế nào", hệ thống trả lời kèm biểu đồ và nhận xét</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 18: CACH CHON DE TAI ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Chọn đề tài</div>
+    <h1 class="headline reveal r2">Cách chọn đề tài dễ ăn điểm</h1>
+  </div>
+  <div class="slide-body">
+    <div class="grid grid-2 fill stagger">
+      <div class="card accent"><h3>Chọn doanh nghiệp có thật</h3><p>Người quen, cửa hàng gần nhà, chính CLB hoặc khoa của mình. Có người thật để hỏi và thử sản phẩm sẽ ăn trọn 25 điểm tính thực tiễn</p></div>
+      <div class="card accent-t"><h3>Chọn một quy trình, làm cho trọn</h3><p>Một quy trình chạy từ đầu tới cuối tốt hơn năm quy trình dở dang. Giám khảo cần thấy sản phẩm hoàn chỉnh trong 10 phút demo</p></div>
+      <div class="card accent"><h3>Đo được hiệu quả</h3><p>Trước đây mất 30 phút mỗi đơn, giờ còn 2 phút. Con số cụ thể thuyết phục hơn mọi lời mô tả</p></div>
+      <div class="card accent-t"><h3>Dùng mã nguồn mở</h3><p>Thể lệ ưu tiên giải pháp dùng công nghệ và mã nguồn mở. Ghi rõ đã dùng thư viện và dịch vụ nào ngay từ đầu</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 19: LOI MAT DIEM (chu co chu dich) ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Tránh</div>
+    <h1 class="headline reveal r2">Những lỗi khiến đội mất điểm oan</h1>
+  </div>
+  <div class="slide-body">
+    <ul class="biglist stagger">
+      <li><b>Làm sản phẩm không có người dùng cụ thể.</b> Không trả lời được câu hỏi "ai sẽ dùng cái này hàng ngày" là mất phần lớn 25 điểm tính thực tiễn</li>
+      <li><b>Nhét AI vào mọi chỗ.</b> AI chỉ chiếm 15 điểm và chấm cả tính phù hợp. Dùng AI ở chỗ một câu lệnh đơn giản làm được sẽ bị trừ</li>
+      <li><b>Demo bị lỗi giữa chừng.</b> Chuẩn bị sẵn dữ liệu mẫu và chạy thử nhiều lần trước ngày thi</li>
+      <li><b>Bỏ quên tài liệu và video.</b> 10 điểm hồ sơ và trình bày mất trắng nếu tới sát ngày mới làm</li>
+      <li><b>Dùng dữ liệu thật chưa xin phép.</b> Vi phạm quy định của thể lệ về bảo mật dữ liệu</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 20: GIAI THUONG - PODIUM ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Giải thưởng</div>
+    <h1 class="headline reveal r2">6 giải thưởng và quyền lợi</h1>
+  </div>
+  <div class="slide-body">
+    <div class="fig reveal r3">
+      <svg viewBox="0 0 1000 320" role="img" aria-label="Bục trao giải: 1 giải Nhất, 1 giải Nhì, 1 giải Ba và 3 giải Khuyến khích">
+        <!-- Nhi -->
+        <g class="lblfade" style="animation-delay:.34s">
+          <rect x="185" y="130" width="150" height="160" rx="4" fill="var(--panel)" stroke="var(--copper)" stroke-width="2.5"/>
+          <text x="260" y="114" text-anchor="middle" font-family="Cambria,serif" font-size="25" font-weight="700" fill="var(--ink)">Nhì</text>
+          <text x="260" y="192" text-anchor="middle" font-family="ui-monospace,monospace" font-size="36" font-weight="700" fill="var(--copper)">01</text>
+          <text x="260" y="228" text-anchor="middle" font-size="17" fill="var(--ink-soft)">Hiện kim</text>
+          <text x="260" y="254" text-anchor="middle" font-size="17" fill="var(--ink-soft)">Giấy khen</text>
+        </g>
+        <!-- Nhat -->
+        <g class="lblfade" style="animation-delay:.28s">
+          <rect x="345" y="62" width="164" height="228" rx="4" fill="var(--copper)" stroke="var(--copper)" stroke-width="2.5"/>
+          <text x="427" y="44" text-anchor="middle" font-family="Cambria,serif" font-size="31" font-weight="700" fill="var(--ink)">Nhất</text>
+          <text x="427" y="136" text-anchor="middle" font-family="ui-monospace,monospace" font-size="46" font-weight="700" fill="var(--paper)">01</text>
+          <text x="427" y="180" text-anchor="middle" font-size="17" fill="var(--paper)" opacity=".93">Hiện kim</text>
+          <text x="427" y="208" text-anchor="middle" font-size="17" fill="var(--paper)" opacity=".93">Giấy khen</text>
+          <text x="427" y="232" text-anchor="middle" font-size="17" fill="var(--paper)" opacity=".93">cấp trường</text>
+          <text x="427" y="266" text-anchor="middle" font-size="17" fill="var(--paper)" opacity=".93">Hoa chúc mừng</text>
+        </g>
+        <!-- Ba -->
+        <g class="lblfade" style="animation-delay:.40s">
+          <rect x="519" y="160" width="150" height="130" rx="4" fill="var(--panel)" stroke="var(--copper)" stroke-width="2.5"/>
+          <text x="594" y="144" text-anchor="middle" font-family="Cambria,serif" font-size="25" font-weight="700" fill="var(--ink)">Ba</text>
+          <text x="594" y="214" text-anchor="middle" font-family="ui-monospace,monospace" font-size="34" font-weight="700" fill="var(--copper)">01</text>
+          <text x="594" y="248" text-anchor="middle" font-size="17" fill="var(--ink-soft)">Hiện kim</text>
+          <text x="594" y="274" text-anchor="middle" font-size="17" fill="var(--ink-soft)">Giấy khen</text>
+        </g>
+        <!-- KK -->
+        <g class="lblfade" style="animation-delay:.48s">
+          <rect x="679" y="190" width="190" height="100" rx="4" fill="var(--panel)" stroke="var(--teal)" stroke-width="2.5"/>
+          <text x="774" y="174" text-anchor="middle" font-family="Cambria,serif" font-size="23" font-weight="700" fill="var(--ink)">Khuyến khích</text>
+          <text x="774" y="240" text-anchor="middle" font-family="ui-monospace,monospace" font-size="32" font-weight="700" fill="var(--teal)">03</text>
+          <text x="774" y="272" text-anchor="middle" font-size="17" fill="var(--ink-soft)">Hiện kim + Giấy khen</text>
+        </g>
+        <!-- all participants -->
+        <g class="lblfade" style="animation-delay:.58s">
+          <line x1="20" y1="290" x2="980" y2="290" stroke="var(--line)" stroke-width="2.5"/>
+          <text x="95" y="208" text-anchor="middle" font-family="Cambria,serif" font-size="21" font-weight="700" fill="var(--ink)">Mọi thí sinh</text>
+          <text x="95" y="240" text-anchor="middle" font-size="17" fill="var(--ink-soft)">Giấy chứng nhận</text>
+          <text x="95" y="264" text-anchor="middle" font-size="17" fill="var(--ink-soft)">tham gia</text>
+        </g>
+      </svg>
+    </div>
+    <div class="callout reveal" style="animation-delay:.75s;"><b>Hỗ trợ từ nhà tài trợ:</b> AZDIGI tài trợ 25 hosting thời hạn 3 tháng cho các đội thi. Sao Việt tặng quà cho Top 10. Cả hai đơn vị cử chuyên gia tham gia tập huấn và chấm thi.</div>
+  </div>
+</section>
+
+<!-- ============ 21: BAT DAU ============ -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="kicker reveal r1">Bắt đầu</div>
+    <h1 class="headline reveal r2">Việc cần làm ngay tuần này</h1>
+  </div>
+  <div class="slide-body">
+    <ul class="checklist stagger">
+      <li><span><b>Lập đội 2 tới 4 người</b>, ưu tiên có bạn hiểu nghiệp vụ chứ không chỉ toàn người code</span></li>
+      <li><span><b>Chọn một doanh nghiệp có thật</b> và hỏi họ đang mất thời gian nhất ở khâu nào</span></li>
+      <li><span><b>Viết bài toán theo 4 lớp</b> đã trình bày ở phần đề tài mẫu</span></li>
+      <li><span><b>Đăng ký trước 02/08/2026</b> theo biểu mẫu của Ban Tổ chức</span></li>
+      <li><span><b>Có mặt buổi tập huấn đầu tiên</b> lúc 13h30 ngày 04/08/2026 tại E1.03.11</span></li>
+    </ul>
+  </div>
+</section>
+
+  <div class="progress" id="progress" style="width:4.8%;"></div>
+  <button class="navbtn" id="prevBtn" aria-label="Slide trước">&#8592;</button>
+  <button class="navbtn" id="nextBtn" aria-label="Slide sau">&#8594;</button>
+  <div class="topbar">
+    <button class="iconbtn" id="fsBtn" aria-label="Toàn màn hình" title="Toàn màn hình (F)">&#9974;</button>
+  </div>
+  <div class="slide-foot" id="foot">
+    <span>Cuộc thi Xây dựng Hệ điều hành Doanh nghiệp số AI · Khoa CNTT HUTECH</span>
+    <span id="counter">1 / 21</span>
+  </div>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var total = slides.length;
+  var idx = 0;
+  var progress = document.getElementById('progress');
+  var counter = document.getElementById('counter');
+  var foot = document.getElementById('foot');
+
+  function render(){
+    slides.forEach(function(s,i){ s.classList.toggle('is-active', i===idx); });
+    progress.style.width = ((idx+1)/total*100) + '%';
+    counter.textContent = (idx+1) + ' / ' + total;
+    foot.style.display = idx===0 ? 'none' : 'flex';
+  }
+  function next(){ if(idx < total-1){ idx++; render(); } }
+  function prev(){ if(idx > 0){ idx--; render(); } }
+
+  document.getElementById('nextBtn').addEventListener('click', next);
+  document.getElementById('prevBtn').addEventListener('click', prev);
+
+  document.addEventListener('keydown', function(e){
+    if(['ArrowRight','ArrowDown','PageDown',' '].indexOf(e.key) > -1){ e.preventDefault(); next(); }
+    else if(['ArrowLeft','ArrowUp','PageUp','Backspace'].indexOf(e.key) > -1){ e.preventDefault(); prev(); }
+    else if(e.key === 'Home'){ idx = 0; render(); }
+    else if(e.key === 'End'){ idx = total-1; render(); }
+    else if(e.key === 'f' || e.key === 'F'){ toggleFullscreen(); }
+  });
+
+  document.getElementById('deck').addEventListener('click', function(e){
+    if(e.target.closest('.navbtn, .iconbtn, a, button')) return;
+    next();
+  });
+
+  function toggleFullscreen(){
+    if(!document.fullscreenElement){ document.documentElement.requestFullscreen().catch(function(){}); }
+    else{ document.exitFullscreen(); }
+  }
+  document.getElementById('fsBtn').addEventListener('click', toggleFullscreen);
+
+  render();
+})();
+</script>
+</body>
+</html>
