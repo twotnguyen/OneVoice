@@ -3,7 +3,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type {
@@ -37,9 +37,10 @@ async function runProcess(
   executable: string,
   args: readonly string[],
   timeoutMs = PROCESS_TIMEOUT_MS,
+  cwd?: string,
 ): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { shell: false });
+    const child = spawn(executable, args, { shell: false, cwd });
     const stdout: Buffer[] = [];
     let stdoutBytes = 0;
     let stderr = Buffer.alloc(0);
@@ -139,8 +140,10 @@ async function resolveFont(configuredPath?: string): Promise<string> {
   throw new Error("No supported local font was found");
 }
 
-function escapeFilterValue(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
+export function buildSceneEnableExpression(index: number): string {
+  const start = index * 4;
+  const end = start + 4;
+  return index === 2 ? `gte(t,${start})*lte(t,${end})` : `gte(t,${start})*lt(t,${end})`;
 }
 
 function validateStoryboard(storyboard: VideoStoryboard): void {
@@ -190,6 +193,7 @@ export class FfmpegVideoRenderer {
 
     try {
       const fontPath = await resolveFont(this.fontPath);
+      await copyFile(fontPath, path.join(workDirectory, "font.ttf"));
       if (request.imagePath) {
         if (!path.isAbsolute(request.imagePath) || !(await stat(request.imagePath)).isFile()) {
           throw new Error("Image input must be a trusted local file");
@@ -208,16 +212,16 @@ export class FfmpegVideoRenderer {
       }
 
       for (const [index, scene] of request.storyboard.scenes.entries()) {
-        const textPath = path.join(workDirectory, `scene-${index}.txt`);
+        const textFilename = `scene-${index}.txt`;
+        const textPath = path.join(workDirectory, textFilename);
         await writeFile(textPath, `${scene.lines.join("\n")}\n`, { mode: 0o600, flag: "wx" });
         const outputLabel = `[text${index}]`;
-        const start = index * 4;
-        const end = start + 4;
         filters.push(
-          `${currentVideo}drawtext=fontfile='${escapeFilterValue(fontPath)}':` +
-            `textfile='${escapeFilterValue(textPath)}':expansion=none:` +
+          `${currentVideo}drawtext=fontfile=font.ttf:` +
+            `textfile=${textFilename}:expansion=none:` +
             "fontcolor=white:fontsize=64:line_spacing=22:" +
-            `x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,${start},${end})'${outputLabel}`,
+            `x=(w-text_w)/2:y=(h-text_h)/2:` +
+            `enable='${buildSceneEnableExpression(index)}'${outputLabel}`,
         );
         currentVideo = outputLabel;
       }
@@ -250,7 +254,7 @@ export class FfmpegVideoRenderer {
         "-y",
         outputPath,
       ];
-      await runProcess(this.ffmpegPath, args);
+      await runProcess(this.ffmpegPath, args, PROCESS_TIMEOUT_MS, workDirectory);
       const probe = await probeVideo(outputPath, this.ffprobePath);
       if (
         !probe.formatName.includes("mp4") ||

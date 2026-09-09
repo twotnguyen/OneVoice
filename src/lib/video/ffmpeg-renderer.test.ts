@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ProductSnapshot } from "../catalog/types";
 import type { GeneratedProductContent } from "../content/types";
-import { FfmpegVideoRenderer, probeVideo } from "./ffmpeg-renderer";
+import {
+  buildSceneEnableExpression,
+  FfmpegVideoRenderer,
+  probeVideo,
+} from "./ffmpeg-renderer";
 import { compileProductStoryboard } from "./storyboard";
 
 const roots: string[] = [];
@@ -17,6 +21,12 @@ afterEach(async () => {
 });
 
 describe("FfmpegVideoRenderer", () => {
+  it("uses disjoint scene windows at the four- and eight-second boundaries", () => {
+    expect(buildSceneEnableExpression(0)).toBe("gte(t,0)*lt(t,4)");
+    expect(buildSceneEnableExpression(1)).toBe("gte(t,4)*lt(t,8)");
+    expect(buildSceneEnableExpression(2)).toBe("gte(t,8)*lte(t,12)");
+  });
+
   it(
     "does not return success for an absent, wrong-sized, wrong-codec, wrong-pixel-format, or unplayable file",
     async () => {
@@ -72,6 +82,56 @@ describe("FfmpegVideoRenderer", () => {
 
       await video.cleanup();
       await expect(readdir(root)).resolves.toEqual([]);
+    },
+    60_000,
+  );
+
+  it(
+    "renders when output and configured font paths contain filter metacharacters",
+    async () => {
+      const parent = await mkdtemp(path.join(tmpdir(), "onevoice-render-path-test-"));
+      roots.push(parent);
+      const root = path.join(parent, "media'colon:\\,brackets[];root");
+      const candidates = [
+        process.env.ONEVOICE_FONT_PATH,
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+      ].filter((candidate): candidate is string => Boolean(candidate));
+      let sourceFont: string | undefined;
+      for (const candidate of candidates) {
+        try {
+          if ((await stat(candidate)).isFile()) sourceFont = candidate;
+        } catch {
+          // Try the next supported platform font.
+        }
+        if (sourceFont) break;
+      }
+      expect(sourceFont).toBeDefined();
+      await mkdir(root, { recursive: true });
+      const unusualFontPath = path.join(root, "font'colon:\\,brackets[];.ttf");
+      await copyFile(sourceFont!, unusualFontPath);
+      const renderer = new FfmpegVideoRenderer({ outputRoot: root, fontPath: unusualFontPath });
+      const video = await renderer.render({
+        storyboard: {
+          schema: "onevoice.storyboard.v1",
+          template: "product-spotlight-v1",
+          canvas: { width: 1080, height: 1920, fps: 30, durationMs: 12_000 },
+          scenes: [
+            { kind: "hook", durationMs: 4_000, lines: ["Hook scene"] },
+            { kind: "facts", durationMs: 4_000, lines: ["Facts scene"] },
+            { kind: "cta", durationMs: 4_000, lines: ["CTA scene"] },
+          ],
+        },
+      });
+
+      await expect(probeVideo(video.path)).resolves.toMatchObject({
+        codecName: "h264",
+        width: 1080,
+        height: 1920,
+      });
+      await video.cleanup();
     },
     60_000,
   );

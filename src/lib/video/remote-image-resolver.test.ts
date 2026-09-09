@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { mkdtemp, readdir } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import type { LookupFunction } from "node:net";
+import { Readable } from "node:stream";
+import type { IncomingMessage } from "node:http";
+import type { RequestOptions } from "node:https";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { RemoteImageResolver } from "./remote-image-resolver";
 
 const roots: string[] = [];
+const publicAddress = { address: "93.184.216.34", family: 4 as const };
 
 async function temporaryRoot(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "onevoice-resolver-test-"));
@@ -16,133 +22,356 @@ async function temporaryRoot(): Promise<string> {
 }
 
 afterEach(async () => {
-  const { rm } = await import("node:fs/promises");
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-describe("RemoteImageResolver", () => {
-  it("rejects non-HTTPS and non-allowlisted URLs before fetching", async () => {
-    let calls = 0;
-    const resolver = new RemoteImageResolver({
-      allowedHostnames: ["images.example.com"],
-      temporaryRoot: await temporaryRoot(),
-      fetch: async () => {
-        calls += 1;
-        return new Response();
-      },
+function fakeResponse(
+  body: Uint8Array = new Uint8Array(),
+  statusCode = 200,
+  headers: Record<string, string> = {},
+): IncomingMessage {
+  return Object.assign(Readable.from(body.length ? [body] : []), { statusCode, headers }) as IncomingMessage;
+}
+
+async function run(executable: string, args: readonly string[]): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(executable, args, { shell: false });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${executable} exited with ${code}`));
     });
+  });
+}
+
+async function imageFixture(
+  root: string,
+  extension: "jpg" | "png" | "webp",
+  size = "16x12",
+): Promise<Buffer> {
+  const fixturePath = path.join(root, `fixture-${size.replace("x", "-")}.${extension}`);
+  await run("ffmpeg", [
+    "-nostdin",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    `color=c=red:s=${size}`,
+    "-frames:v",
+    "1",
+    "-y",
+    fixturePath,
+  ]);
+  return readFile(fixturePath);
+}
+
+type RequestSeam = (url: URL, options: RequestOptions) => Promise<IncomingMessage>;
+
+function resolverOptions(
+  temporaryRoot: string,
+  request: RequestSeam,
+  lookup: (hostname: string) => Promise<readonly { address: string; family: 4 | 6 }[]> =
+    async () => [publicAddress],
+) {
+  return { allowedHostnames: ["images.example.com"], temporaryRoot, request, lookup };
+}
+
+describe("RemoteImageResolver transport", () => {
+  it("rejects non-HTTPS, alternate ports, and non-allowlisted URLs before DNS or requests", async () => {
+    let lookupCalls = 0;
+    let requestCalls = 0;
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        await temporaryRoot(),
+        async () => {
+          requestCalls += 1;
+          return fakeResponse();
+        },
+        async () => {
+          lookupCalls += 1;
+          return [publicAddress];
+        },
+      ) as never,
+    );
 
     await expect(resolver.resolve("http://images.example.com/a.jpg")).resolves.toBeNull();
+    await expect(resolver.resolve("https://images.example.com:444/a.jpg")).resolves.toBeNull();
     await expect(resolver.resolve("https://evil.example/a.jpg")).resolves.toBeNull();
-    await expect(resolver.resolve("not a url")).resolves.toBeNull();
-    expect(calls).toBe(0);
+    expect({ lookupCalls, requestCalls }).toEqual({ lookupCalls: 0, requestCalls: 0 });
   });
 
-  it("manually revalidates the final URL after a redirect", async () => {
-    const seen: string[] = [];
-    const resolver = new RemoteImageResolver({
-      allowedHostnames: ["images.example.com"],
-      temporaryRoot: await temporaryRoot(),
-      fetch: async (input, init) => {
-        seen.push(String(input));
-        expect(init?.redirect).toBe("manual");
-        return new Response(null, {
-          status: 302,
-          headers: { location: "https://evil.example/private.jpg" },
-        });
-      },
-    });
-
-    await expect(resolver.resolve("https://images.example.com/start")).resolves.toBeNull();
-    expect(seen).toEqual(["https://images.example.com/start"]);
-  });
-
-  it.each(["image/jpeg", "image/png", "image/webp"] as const)(
-    "stores a bounded %s image below the temporary root and cleans it up",
-    async (mimeType) => {
-      const root = await temporaryRoot();
-      const resolver = new RemoteImageResolver({
-        allowedHostnames: ["images.example.com"],
-        temporaryRoot: root,
-        fetch: async (_input, init) => {
-          expect(init?.signal).toBeInstanceOf(AbortSignal);
-          return new Response(new Uint8Array([1, 2, 3, 4]), {
-            headers: { "content-type": `${mimeType}; charset=binary` },
-          });
+  it.each([
+    "0.0.0.1",
+    "10.0.0.1",
+    "100.64.0.1",
+    "127.0.0.1",
+    "169.254.1.1",
+    "172.16.0.1",
+    "192.168.0.1",
+    "192.0.2.1",
+    "224.0.0.1",
+    "::1",
+    "fe80::1",
+    "fc00::1",
+    "2001:db8::1",
+    "::ffff:127.0.0.1",
+  ])("rejects non-public DNS address %s before requesting", async (address) => {
+    let lookupCalls = 0;
+    let requestCalls = 0;
+    const family = address.includes(":") ? 6 : 4;
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        await temporaryRoot(),
+        async () => {
+          requestCalls += 1;
+          return fakeResponse();
         },
-      });
+        async () => {
+          lookupCalls += 1;
+          return [{ address, family } as { address: string; family: 4 | 6 }];
+        },
+      ) as never,
+    );
 
-      const asset = await resolver.resolve("https://images.example.com/../../escape.jpg");
-
-      expect(asset).toMatchObject({
-        mimeType,
-        bytes: 4,
-        sha256: "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a",
-      });
-      expect(path.relative(root, asset!.path)).not.toMatch(/^\.\.(?:[/\\]|$)/);
-      expect(path.basename(asset!.path)).toMatch(/^[0-9a-f-]+\.(?:jpg|png|webp)$/);
-
-      await asset!.cleanup();
-      await expect(readdir(root)).resolves.toEqual([]);
-    },
-  );
-
-  it("returns null for disallowed MIME types and removes temporary files", async () => {
-    const root = await temporaryRoot();
-    const resolver = new RemoteImageResolver({
-      allowedHostnames: ["images.example.com"],
-      temporaryRoot: root,
-      fetch: async () => new Response("svg", { headers: { "content-type": "image/svg+xml" } }),
-    });
-
-    await expect(resolver.resolve("https://images.example.com/a.svg")).resolves.toBeNull();
-    await expect(readdir(root)).resolves.toEqual([]);
+    await expect(resolver.resolve("https://images.example.com/a.jpg")).resolves.toBeNull();
+    expect(lookupCalls).toBe(1);
+    expect(requestCalls).toBe(0);
   });
 
-  it("enforces the streaming byte cap and cleans partial output", async () => {
-    const root = await temporaryRoot();
-    const chunk = new Uint8Array(4 * 1024 * 1024);
-    const resolver = new RemoteImageResolver({
-      allowedHostnames: ["images.example.com"],
-      temporaryRoot: root,
-      fetch: async () =>
-        new Response(
-          new ReadableStream({
-            start(controller) {
-              controller.enqueue(chunk);
-              controller.enqueue(chunk);
-              controller.enqueue(new Uint8Array([1]));
-              controller.close();
-            },
-          }),
-          { headers: { "content-type": "image/png" } },
-        ),
+  it("rejects a hop if any resolved address is non-public", async () => {
+    let requestCalls = 0;
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        await temporaryRoot(),
+        async () => {
+          requestCalls += 1;
+          return fakeResponse();
+        },
+        async () => [publicAddress, { address: "127.0.0.1", family: 4 }],
+      ) as never,
+    );
+
+    await expect(resolver.resolve("https://images.example.com/a.jpg")).resolves.toBeNull();
+    expect(requestCalls).toBe(0);
+  });
+
+  it("pins the validated address in the TLS request while preserving host and SNI", async () => {
+    const fixtureRoot = await temporaryRoot();
+    const png = await imageFixture(fixtureRoot, "png");
+    let requestCalls = 0;
+    const request: RequestSeam = async (url, options) => {
+      requestCalls += 1;
+      expect(url.hostname).toBe("images.example.com");
+      expect(options.servername).toBe("images.example.com");
+      expect(options.port).toBe(443);
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+      const pinned = await new Promise<{ address: string; family: number }>((resolve, reject) => {
+        const lookup = options.lookup as LookupFunction;
+        lookup("images.example.com", {}, (error, address, family) => {
+          if (error) reject(error);
+          else resolve({ address: address as string, family: family as number });
+        });
+      });
+      expect(pinned).toEqual(publicAddress);
+      return fakeResponse(png, 200, { "content-type": "image/png" });
+    };
+    const resolver = new RemoteImageResolver(
+      resolverOptions(path.join(fixtureRoot, "assets"), request) as never,
+    );
+
+    const asset = await resolver.resolve("https://images.example.com/a.png");
+
+    expect(requestCalls).toBe(1);
+    expect(asset).toMatchObject({
+      mimeType: "image/png",
+      sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      bytes: expect.any(Number),
     });
+    expect(path.basename(asset!.path)).toBe("normalized.png");
+    expect((await readFile(asset!.path)).subarray(1, 4).toString()).toBe("PNG");
+    await asset!.cleanup();
+  });
+
+  it("re-resolves redirects, rejects a rebound target, and drains the redirect response", async () => {
+    let lookups = 0;
+    let requests = 0;
+    let resumed = 0;
+    const redirect = fakeResponse(new Uint8Array([1, 2, 3]), 302, {
+      location: "https://images.example.com/final.jpg",
+    });
+    const originalResume = redirect.resume.bind(redirect);
+    redirect.resume = () => {
+      resumed += 1;
+      return originalResume();
+    };
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        await temporaryRoot(),
+        async () => {
+          requests += 1;
+          return redirect;
+        },
+        async () => {
+          lookups += 1;
+          return lookups === 1 ? [publicAddress] : [{ address: "127.0.0.1", family: 4 }];
+        },
+      ) as never,
+    );
+
+    await expect(resolver.resolve("https://images.example.com/start.jpg")).resolves.toBeNull();
+    expect({ lookups, requests, resumed }).toEqual({ lookups: 2, requests: 1, resumed: 1 });
+  });
+});
+
+describe("RemoteImageResolver content boundary", () => {
+  it.each([
+    ["jpg", "image/jpeg"],
+    ["png", "image/png"],
+    ["webp", "image/webp"],
+  ] as const)("decodes a real %s and returns one normalized PNG", async (extension, mimeType) => {
+    const root = await temporaryRoot();
+    const fixture = await imageFixture(root, extension);
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        path.join(root, "assets"),
+        async () => fakeResponse(fixture, 200, { "content-type": mimeType }),
+      ) as never,
+    );
+
+    const asset = await resolver.resolve(`https://images.example.com/a.${extension}`);
+
+    expect(asset?.mimeType).toBe("image/png");
+    expect(asset?.bytes).toBeGreaterThan(8);
+    expect((await readFile(asset!.path)).subarray(1, 4).toString()).toBe("PNG");
+    await asset!.cleanup();
+    await expect(readdir(path.join(root, "assets"))).resolves.toEqual([]);
+  });
+
+  it("rejects a MIME/codec mismatch and drains invalid responses", async () => {
+    const root = await temporaryRoot();
+    const jpeg = await imageFixture(root, "jpg");
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        path.join(root, "assets"),
+        async () => fakeResponse(jpeg, 200, { "content-type": "image/png" }),
+      ) as never,
+    );
+
+    await expect(resolver.resolve("https://images.example.com/mismatch.png")).resolves.toBeNull();
+    await expect(readdir(path.join(root, "assets"))).resolves.toEqual([]);
+  });
+
+  it("rejects truncated image content", async () => {
+    const root = await temporaryRoot();
+    const png = await imageFixture(root, "png");
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        path.join(root, "assets"),
+        async () => fakeResponse(png.subarray(0, 12), 200, { "content-type": "image/png" }),
+      ) as never,
+    );
+
+    await expect(resolver.resolve("https://images.example.com/truncated.png")).resolves.toBeNull();
+  });
+
+  it("rejects images beyond the dimension limit", async () => {
+    const root = await temporaryRoot();
+    const png = await imageFixture(root, "png", "8194x2");
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        path.join(root, "assets"),
+        async () => fakeResponse(png, 200, { "content-type": "image/png" }),
+      ) as never,
+    );
+
+    await expect(resolver.resolve("https://images.example.com/wide.png")).resolves.toBeNull();
+  });
+
+  it("enforces the eight MiB streaming cap and removes partial files", async () => {
+    const root = await temporaryRoot();
+    const oversized = Buffer.alloc(8 * 1024 * 1024 + 1);
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        path.join(root, "assets"),
+        async () => fakeResponse(oversized, 200, { "content-type": "image/png" }),
+      ) as never,
+    );
 
     await expect(resolver.resolve("https://images.example.com/large.png")).resolves.toBeNull();
-    await expect(readdir(root)).resolves.toEqual([]);
+    await expect(readdir(path.join(root, "assets"))).resolves.toEqual([]);
   });
 
-  it("uses a ten-second abort signal by default", async () => {
+  it("treats a response stream failure as a remote fallback and removes partial files", async () => {
     const root = await temporaryRoot();
-    const originalTimeout = AbortSignal.timeout;
-    let timeout: number | undefined;
-    AbortSignal.timeout = ((milliseconds: number) => {
-      timeout = milliseconds;
-      return originalTimeout(milliseconds);
-    }) as typeof AbortSignal.timeout;
+    const response = new Readable({
+      read() {
+        this.push(Buffer.from([137, 80, 78, 71]));
+        this.destroy(new Error("remote connection reset"));
+      },
+    });
+    Object.assign(response, {
+      statusCode: 200,
+      headers: { "content-type": "image/png" },
+    });
+    const resolver = new RemoteImageResolver(
+      resolverOptions(path.join(root, "assets"), async () => response as IncomingMessage) as never,
+    );
 
-    try {
-      const resolver = new RemoteImageResolver({
-        allowedHostnames: ["images.example.com"],
-        temporaryRoot: root,
-        fetch: async () => new Response(null, { status: 404 }),
-      });
-      await resolver.resolve("https://images.example.com/missing.jpg");
-    } finally {
-      AbortSignal.timeout = originalTimeout;
-    }
+    await expect(resolver.resolve("https://images.example.com/reset.png")).resolves.toBeNull();
+    await expect(readdir(path.join(root, "assets"))).resolves.toEqual([]);
+  });
 
-    expect(timeout).toBe(10_000);
+  it("returns null for remote status failures and drains their bodies", async () => {
+    let resumed = 0;
+    const response = fakeResponse(new Uint8Array([1, 2, 3]), 404);
+    const originalResume = response.resume.bind(response);
+    response.resume = () => {
+      resumed += 1;
+      return originalResume();
+    };
+    const resolver = new RemoteImageResolver(
+      resolverOptions(await temporaryRoot(), async () => response) as never,
+    );
+
+    await expect(resolver.resolve("https://images.example.com/missing.png")).resolves.toBeNull();
+    expect(resumed).toBe(1);
+  });
+
+  it("rethrows local temporary-root failures as safe operational errors", async () => {
+    const root = await temporaryRoot();
+    const rootFile = path.join(root, "not-a-directory");
+    await writeFile(rootFile, "file");
+    const png = await imageFixture(root, "png");
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        rootFile,
+        async () => fakeResponse(png, 200, { "content-type": "image/png" }),
+      ) as never,
+    );
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
+      "Image resolver local operation failed",
+    );
+  });
+
+  it("rethrows missing decoder configuration as a safe operational error", async () => {
+    const root = await temporaryRoot();
+    const png = await imageFixture(root, "png");
+    const options = {
+      ...resolverOptions(
+        path.join(root, "assets"),
+        async () => fakeResponse(png, 200, { "content-type": "image/png" }),
+      ),
+      ffprobePath: path.join(root, "missing-ffprobe"),
+    };
+    const resolver = new RemoteImageResolver(options as never);
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
+      "Image resolver configuration failed",
+    );
+    expect(await stat(path.join(root, "assets"))).toBeDefined();
+    await expect(readdir(path.join(root, "assets"))).resolves.toEqual([]);
   });
 });

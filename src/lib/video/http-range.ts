@@ -4,7 +4,7 @@ export type ByteRange = Readonly<{ start: number; end: number }>;
 
 export function parseByteRange(header: string, size: number): ByteRange | null {
   if (!Number.isSafeInteger(size) || size <= 0) return null;
-  const match = /^bytes=(\d*)-(\d*)$/.exec(header);
+  const match = /^bytes=[\t ]*(\d*)-(\d*)$/i.exec(header);
   if (!match || (!match[1] && !match[2])) return null;
 
   if (!match[1]) {

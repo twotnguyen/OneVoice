@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import type { FileHandle } from "node:fs/promises";
+
 export type VideoScene = Readonly<{
   kind: "hook" | "facts" | "cta";
   durationMs: 4_000;
@@ -61,15 +63,45 @@ export type VideoArtifactMetadata = Readonly<{
   rendererRevision: string;
 }>;
 
-export type VideoManifest = Readonly<{
-  renderId: string;
-  status: "succeeded" | "failed";
-  content?: Readonly<{ hook: string; caption: string; cta: string }>;
-  artifact?: VideoArtifactMetadata;
-  error?: Readonly<{ stage: string; code: string; message: string }>;
+export type VideoManifestContent = Readonly<{
+  hook: string;
+  caption: string;
+  cta: string;
 }>;
 
+export type VideoManifestError =
+  | Readonly<{
+      stage: "loading_product";
+      code: "CATALOG_FAILED" | "PRODUCT_NOT_FOUND";
+    }>
+  | Readonly<{
+      stage: "generating_content";
+      code: "AI_GENERATION_FAILED";
+    }>
+  | Readonly<{
+      stage: "rendering_video";
+      code: "VIDEO_RENDER_FAILED";
+    }>
+  | Readonly<{
+      stage: "storing_artifact";
+      code: "STORAGE_FAILED";
+    }>;
+
+export type VideoManifest =
+  | Readonly<{
+      renderId: string;
+      status: "succeeded";
+      content: VideoManifestContent;
+      artifact: VideoArtifactMetadata;
+    }>
+  | Readonly<{
+      renderId: string;
+      status: "failed";
+      content?: VideoManifestContent;
+      error: VideoManifestError;
+    }>;
+
 export type StoredVideo = Readonly<{
-  path: string;
+  handle: FileHandle;
   size: number;
 }>;

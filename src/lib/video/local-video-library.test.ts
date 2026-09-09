@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,7 +48,7 @@ describe("LocalVideoLibrary", () => {
     const video: RenderedVideo = {
       path: sourcePath,
       bytes: 4,
-      sha256: "abcd",
+      sha256: "a".repeat(64),
       durationMs: 12_000,
       width: 1080,
       height: 1920,
@@ -52,7 +61,11 @@ describe("LocalVideoLibrary", () => {
     const manifest: VideoManifest = {
       renderId,
       status: "succeeded",
-      content: { hook: "Hook", caption: "Caption", cta: "CTA" },
+      content: {
+        hook: "A valid product hook",
+        caption: "A valid product caption for this test.",
+        cta: "View product",
+      },
       artifact: {
         bytes: video.bytes,
         sha256: video.sha256,
@@ -74,10 +87,10 @@ describe("LocalVideoLibrary", () => {
       Buffer.from([0, 1, 2, 3]),
     );
     await expect(library.getRun(renderId)).resolves.toEqual(manifest);
-    await expect(library.readVideo(renderId)).resolves.toEqual({
-      path: path.join(directory, "video.mp4"),
-      size: 4,
-    });
+    const stored = await library.readVideo(renderId);
+    expect(stored?.size).toBe(4);
+    await expect(stored!.handle.readFile()).resolves.toEqual(Buffer.from([0, 1, 2, 3]));
+    await stored!.handle.close();
     expect(await readFile(path.join(directory, "manifest.json"), "utf8")).not.toContain(sourcePath);
   });
 
@@ -87,7 +100,7 @@ describe("LocalVideoLibrary", () => {
     const manifest: VideoManifest = {
       renderId,
       status: "failed",
-      error: { stage: "rendering_video", code: "RENDER_FAILED", message: "Video render failed" },
+      error: { stage: "rendering_video", code: "VIDEO_RENDER_FAILED" },
     };
 
     await library.save(renderId, manifest);
@@ -109,11 +122,12 @@ describe("LocalVideoLibrary", () => {
       library.save(renderId, {
         renderId: "d9428888-122b-11e1-b85c-61cd3cbb3210",
         status: "failed",
+        error: { stage: "loading_product", code: "PRODUCT_NOT_FOUND" },
       }),
     ).rejects.toThrow("Manifest render ID does not match");
   });
 
-  it("omits extra runtime fields so internal paths cannot enter manifests", async () => {
+  it("rejects unbounded or mismatched failure fields before persistence", async () => {
     const root = await temporaryRoot();
     const library = new LocalVideoLibrary(root);
     const manifest = {
@@ -121,26 +135,174 @@ describe("LocalVideoLibrary", () => {
       status: "failed" as const,
       error: {
         stage: "rendering_video",
-        code: "RENDER_FAILED",
-        message: "Video render failed",
-        internalPath: "/private/render/work.mp4",
+        code: "AI_GENERATION_FAILED",
+        message: "secret=/private/render/work.mp4",
       },
-      internalPath: "/private/media/root",
     };
 
-    await library.save(renderId, manifest);
+    await expect(library.save(renderId, manifest as never)).rejects.toThrow("Invalid video manifest");
+    await expect(readdir(root)).resolves.toEqual([]);
+  });
 
-    expect(await library.getRun(renderId)).toEqual({
+  it("rejects an existing render ID without replacing its artifact", async () => {
+    const root = await temporaryRoot();
+    const sourcePath = path.join(root, "source.mp4");
+    await writeFile(sourcePath, Buffer.from([1, 2, 3]));
+    const libraryRoot = path.join(root, "library");
+    const library = new LocalVideoLibrary(libraryRoot);
+    const failed: VideoManifest = {
       renderId,
       status: "failed",
-      error: {
-        stage: "rendering_video",
-        code: "RENDER_FAILED",
-        message: "Video render failed",
+      error: { stage: "loading_product", code: "PRODUCT_NOT_FOUND" },
+    };
+    await library.save(renderId, failed);
+
+    await expect(library.save(renderId, failed)).rejects.toThrow("Render ID already exists");
+    await expect(library.getRun(renderId)).resolves.toEqual(failed);
+    expect(await readdir(libraryRoot)).toEqual([renderId]);
+  });
+
+  it("removes staging data when video staging fails", async () => {
+    const root = await temporaryRoot();
+    const library = new LocalVideoLibrary(root);
+    const video: RenderedVideo = {
+      path: path.join(root, "missing.mp4"),
+      bytes: 4,
+      sha256: "a".repeat(64),
+      durationMs: 12_000,
+      width: 1080,
+      height: 1920,
+      codecName: "h264",
+      pixelFormat: "yuv420p",
+      formatName: "mov,mp4,m4a,3gp,3g2,mj2",
+      rendererRevision: "onevoice-ffmpeg-v1",
+      cleanup: async () => undefined,
+    };
+    const manifest: VideoManifest = {
+      renderId,
+      status: "succeeded",
+      content: {
+        hook: "A valid product hook",
+        caption: "A valid product caption for this test.",
+        cta: "View product",
       },
-    });
-    expect(await readFile(path.join(root, renderId, "manifest.json"), "utf8")).not.toContain(
-      "/private/",
+      artifact: {
+        bytes: 4,
+        sha256: "a".repeat(64),
+        durationMs: 12_000,
+        width: 1080,
+        height: 1920,
+        codecName: "h264",
+        pixelFormat: "yuv420p",
+        formatName: "mov,mp4,m4a,3gp,3g2,mj2",
+        rendererRevision: "onevoice-ffmpeg-v1",
+      },
+    };
+
+    await expect(library.save(renderId, manifest, video)).rejects.toThrow();
+    await expect(readdir(root)).resolves.toEqual([]);
+  });
+
+  it("rejects a symlink media root and render directory", async () => {
+    const parent = await temporaryRoot();
+    const outside = path.join(parent, "outside");
+    const linkedRoot = path.join(parent, "linked-root");
+    await mkdir(outside);
+    await symlink(outside, linkedRoot, "dir");
+    const failed: VideoManifest = {
+      renderId,
+      status: "failed",
+      error: { stage: "loading_product", code: "PRODUCT_NOT_FOUND" },
+    };
+
+    await expect(new LocalVideoLibrary(linkedRoot).save(renderId, failed)).rejects.toThrow(
+      "Unsafe media root",
     );
+    expect(await readdir(outside)).toEqual([]);
+
+    const safeRoot = path.join(parent, "safe-root");
+    await mkdir(safeRoot);
+    await symlink(outside, path.join(safeRoot, renderId), "dir");
+    await expect(new LocalVideoLibrary(safeRoot).save(renderId, failed)).rejects.toThrow(
+      "Unsafe render directory",
+    );
+    expect(await readdir(outside)).toEqual([]);
+  });
+
+  it("opens manifests and videos without following file symlinks", async () => {
+    const root = await temporaryRoot();
+    const directory = path.join(root, renderId);
+    const outsideManifest = path.join(root, "outside-manifest.json");
+    const outsideVideo = path.join(root, "outside-video.mp4");
+    await mkdir(directory);
+    await writeFile(outsideManifest, JSON.stringify({ renderId, status: "failed" }));
+    await writeFile(outsideVideo, Buffer.from([9, 9, 9]));
+    await symlink(outsideManifest, path.join(directory, "manifest.json"));
+    await symlink(outsideVideo, path.join(directory, "video.mp4"));
+    const library = new LocalVideoLibrary(root);
+
+    await expect(library.getRun(renderId)).rejects.toThrow("Unsafe manifest file");
+    await expect(library.readVideo(renderId)).rejects.toThrow("Unsafe video file");
+  });
+
+  it("rejects malformed persisted manifests without leaking their contents", async () => {
+    const root = await temporaryRoot();
+    const directory = path.join(root, renderId);
+    await mkdir(directory);
+    await writeFile(path.join(directory, "manifest.json"), "secret=/private/catalog.json");
+    const library = new LocalVideoLibrary(root);
+
+    const error = await library.getRun(renderId).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("Invalid video manifest");
+    expect((error as Error).message).not.toContain("secret");
+  });
+
+  it("returns an opened video handle that remains bound to the validated inode", async () => {
+    const root = await temporaryRoot();
+    const sourcePath = path.join(root, "source.mp4");
+    await writeFile(sourcePath, Buffer.from([1, 2, 3, 4]));
+    const library = new LocalVideoLibrary(path.join(root, "library"));
+    const video = {
+      path: sourcePath,
+      bytes: 4,
+      sha256: "a".repeat(64),
+      durationMs: 12_000,
+      width: 1080,
+      height: 1920,
+      codecName: "h264",
+      pixelFormat: "yuv420p",
+      formatName: "mov,mp4,m4a,3gp,3g2,mj2",
+      rendererRevision: "onevoice-ffmpeg-v1" as const,
+      cleanup: async () => undefined,
+    };
+    const manifest: VideoManifest = {
+      renderId,
+      status: "succeeded",
+      content: {
+        hook: "A valid product hook",
+        caption: "A valid product caption for this test.",
+        cta: "View product",
+      },
+      artifact: {
+        bytes: 4,
+        sha256: "a".repeat(64),
+        durationMs: 12_000,
+        width: 1080,
+        height: 1920,
+        codecName: "h264",
+        pixelFormat: "yuv420p",
+        formatName: "mov,mp4,m4a,3gp,3g2,mj2",
+        rendererRevision: "onevoice-ffmpeg-v1",
+      },
+    };
+    await library.save(renderId, manifest, video);
+    const stored = await library.readVideo(renderId);
+    const published = path.join(root, "library", renderId, "video.mp4");
+    await rename(published, `${published}.old`);
+    await writeFile(published, Buffer.from([9, 9, 9, 9]));
+
+    await expect(stored!.handle.readFile()).resolves.toEqual(Buffer.from([1, 2, 3, 4]));
+    await stored!.handle.close();
   });
 });

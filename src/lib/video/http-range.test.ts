@@ -17,7 +17,6 @@ describe("parseByteRange", () => {
     ["bytes=-0", 1000],
     ["bytes=0-1,4-5", 1000],
     ["items=0-1", 1000],
-    ["bytes= 0-1", 1000],
     ["bytes=0-a", 1000],
     ["bytes=0-1", 0],
     ["bytes=0-1", -1],
@@ -28,5 +27,11 @@ describe("parseByteRange", () => {
   it("clamps a valid range end and oversized suffix to the file", () => {
     expect(parseByteRange("bytes=900-1001", 1000)).toEqual({ start: 900, end: 999 });
     expect(parseByteRange("bytes=-2000", 1000)).toEqual({ start: 0, end: 999 });
+  });
+
+  it("accepts case-insensitive byte units and optional whitespace after equals", () => {
+    expect(parseByteRange("Bytes=0-99", 1000)).toEqual({ start: 0, end: 99 });
+    expect(parseByteRange("bytes= 0-99", 1000)).toEqual({ start: 0, end: 99 });
+    expect(parseByteRange("BYTES=\t-100", 1000)).toEqual({ start: 900, end: 999 });
   });
 });
