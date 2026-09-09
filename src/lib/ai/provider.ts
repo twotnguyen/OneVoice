@@ -1,22 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
-export type AiMessage = {
-  role: "system" | "user" | "assistant";
-  content: string;
-};
-
 export type GenerateTextInput = {
-  messages: AiMessage[];
-  temperature?: number;
+  prompt: string;
+  timeoutMs?: number;
 };
 
 export type GenerateTextResult = {
   text: string;
   model: string;
+  responseId?: string;
   usage?: {
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
   };
 };
 

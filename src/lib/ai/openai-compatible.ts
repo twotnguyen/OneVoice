@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { randomUUID } from "node:crypto";
+
 import { z } from "zod";
 
 import type {
@@ -14,25 +16,41 @@ type OpenAICompatibleConfig = {
   model: string;
 };
 
-const completionResponseSchema = z.object({
+const responseSchema = z.object({
+  id: z.string().optional(),
   model: z.string().optional(),
-  choices: z
+  output_text: z.string().optional(),
+  output: z
     .array(
       z.object({
-        message: z.object({
-          content: z.string(),
-        }),
+        content: z
+          .array(
+            z.object({
+              type: z.string().optional(),
+              text: z.string().optional(),
+            }),
+          )
+          .optional(),
       }),
     )
-    .min(1),
+    .optional(),
   usage: z
     .object({
-      prompt_tokens: z.number().int().nonnegative(),
-      completion_tokens: z.number().int().nonnegative(),
-      total_tokens: z.number().int().nonnegative(),
+      input_tokens: z.number().int().nonnegative().optional(),
+      output_tokens: z.number().int().nonnegative().optional(),
+      total_tokens: z.number().int().nonnegative().optional(),
     })
     .optional(),
 });
+
+function getResponseText(response: z.infer<typeof responseSchema>): string | undefined {
+  if (response.output_text?.trim()) return response.output_text;
+
+  return response.output
+    ?.flatMap((item) => item.content ?? [])
+    .find((content) => content.type === "output_text" && content.text?.trim())
+    ?.text;
+}
 
 export class OpenAICompatibleProvider implements AiProvider {
   private readonly baseUrl: string;
@@ -46,20 +64,19 @@ export class OpenAICompatibleProvider implements AiProvider {
 
   async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
     const response = await this.fetchImplementation(
-      `${this.baseUrl}/chat/completions`,
+      `${this.baseUrl}/responses`,
       {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.config.apiKey}`,
           "Content-Type": "application/json",
+          "x-session-id": randomUUID(),
         },
         body: JSON.stringify({
           model: this.config.model,
-          messages: input.messages,
-          ...(input.temperature === undefined
-            ? {}
-            : { temperature: input.temperature }),
+          input: input.prompt,
         }),
+        signal: AbortSignal.timeout(input.timeoutMs ?? 30_000),
       },
     );
 
@@ -67,18 +84,28 @@ export class OpenAICompatibleProvider implements AiProvider {
       throw new Error(`AI provider request failed with status ${response.status}`);
     }
 
-    const completion = completionResponseSchema.parse(await response.json());
-    const usage = completion.usage
+    const result = responseSchema.parse(await response.json());
+    const text = getResponseText(result);
+    if (!text) throw new Error("AI provider returned no output text");
+
+    const usage = result.usage
       ? {
-          inputTokens: completion.usage.prompt_tokens,
-          outputTokens: completion.usage.completion_tokens,
-          totalTokens: completion.usage.total_tokens,
+          ...(result.usage.input_tokens === undefined
+            ? {}
+            : { inputTokens: result.usage.input_tokens }),
+          ...(result.usage.output_tokens === undefined
+            ? {}
+            : { outputTokens: result.usage.output_tokens }),
+          ...(result.usage.total_tokens === undefined
+            ? {}
+            : { totalTokens: result.usage.total_tokens }),
         }
       : undefined;
 
     return {
-      text: completion.choices[0].message.content,
-      model: completion.model ?? this.config.model,
+      text,
+      model: result.model ?? this.config.model,
+      ...(result.id ? { responseId: result.id } : {}),
       ...(usage ? { usage } : {}),
     };
   }
