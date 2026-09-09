@@ -10,6 +10,7 @@ import { request as httpsRequest } from "node:https";
 import type { RequestOptions } from "node:https";
 import { isIP } from "node:net";
 import type { LookupFunction } from "node:net";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
@@ -22,6 +23,11 @@ const TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 5;
 const STDERR_LIMIT = 64 * 1024;
 const MAX_NORMALIZED_BYTES = 64 * 1024 * 1024;
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const TRUSTED_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
 const MIME_CODECS = {
   "image/jpeg": "mjpeg",
   "image/png": "png",
@@ -37,7 +43,7 @@ type ResolverOptions = Readonly<{
   request?: RequestSeam;
   ffmpegPath?: string;
   ffprobePath?: string;
-  writeChunk?: (handle: FileHandle, chunk: Buffer) => Promise<unknown>;
+  writeChunk?: (handle: FileHandle, chunk: Buffer) => Promise<{ bytesWritten: number }>;
 }>;
 
 class RemoteContentError extends Error {}
@@ -121,6 +127,68 @@ function ipv6Groups(address: string): readonly number[] | null {
     : null;
 }
 
+function matchesIpv6Cidr(
+  groups: readonly number[],
+  prefix: readonly number[],
+  prefixLength: number,
+): boolean {
+  const completeGroups = Math.floor(prefixLength / 16);
+  for (let index = 0; index < completeGroups; index += 1) {
+    if (groups[index] !== prefix[index]) return false;
+  }
+  const remainingBits = prefixLength % 16;
+  if (remainingBits === 0) return true;
+  const mask = (0xffff << (16 - remainingBits)) & 0xffff;
+  return (groups[completeGroups] & mask) === (prefix[completeGroups] & mask);
+}
+
+// Snapshot of Status=ALLOCATED rows in the IANA IPv6 Global Unicast Address Space registry:
+// https://www.iana.org/assignments/ipv6-unicast-address-assignments/ipv6-unicast-address-assignments.xhtml
+// Last reviewed: 2026-09-09. The partially allocated 2001::/23 and 6to4 2002::/16 are
+// intentionally rejected wholesale, so neither appears here.
+const IANA_ALLOCATED_IPV6_PREFIXES = [
+  ["2001:200::", 23],
+  ["2001:400::", 23],
+  ["2001:600::", 23],
+  ["2001:800::", 22],
+  ["2001:c00::", 23],
+  ["2001:e00::", 23],
+  ["2001:1200::", 23],
+  ["2001:1400::", 22],
+  ["2001:1800::", 23],
+  ["2001:1a00::", 23],
+  ["2001:1c00::", 22],
+  ["2001:2000::", 19],
+  ["2001:4000::", 23],
+  ["2001:4200::", 23],
+  ["2001:4400::", 23],
+  ["2001:4600::", 23],
+  ["2001:4800::", 23],
+  ["2001:4a00::", 23],
+  ["2001:4c00::", 23],
+  ["2001:5000::", 20],
+  ["2001:8000::", 19],
+  ["2001:a000::", 20],
+  ["2001:b000::", 20],
+  ["2003::", 18],
+  ["2400::", 12],
+  ["2410::", 12],
+  ["2600::", 12],
+  ["2610::", 23],
+  ["2620::", 23],
+  ["2630::", 12],
+  ["2800::", 12],
+  ["2a00::", 12],
+  ["2a10::", 12],
+  ["2c00::", 12],
+] as const;
+
+const ALLOCATED_IPV6_CIDRS = IANA_ALLOCATED_IPV6_PREFIXES.map(([address, prefixLength]) => {
+  const groups = ipv6Groups(address);
+  if (!groups) throw new Error("Invalid embedded IPv6 registry prefix");
+  return { groups, prefixLength };
+});
+
 function isPublicIpv6(address: string): boolean {
   const groups = ipv6Groups(address);
   if (!groups) return false;
@@ -129,20 +197,10 @@ function isPublicIpv6(address: string): boolean {
       `${groups[6] >> 8}.${groups[6] & 0xff}.${groups[7] >> 8}.${groups[7] & 0xff}`,
     );
   }
-  const first = groups[0];
-  if ((first & 0xe000) !== 0x2000) return false;
-  if (
-    (first === 0x2001 && groups[1] === 0x0000) ||
-    (first === 0x2001 && groups[1] === 0x0002 && groups[2] === 0x0000) ||
-    (first === 0x2001 && (groups[1] & 0xfff0) === 0x0010) ||
-    (first === 0x2001 && (groups[1] & 0xfff0) === 0x0020) ||
-    (first === 0x2001 && groups[1] === 0x0db8) ||
-    first === 0x2002 ||
-    (first === 0x3fff && (groups[1] & 0xf000) === 0)
-  ) {
-    return false;
-  }
-  return true;
+  if (matchesIpv6Cidr(groups, ipv6Groups("2001:db8::")!, 32)) return false;
+  return ALLOCATED_IPV6_CIDRS.some(({ groups: prefix, prefixLength }) =>
+    matchesIpv6Cidr(groups, prefix, prefixLength),
+  );
 }
 
 function isPublicAddress(address: DnsAddress): boolean {
@@ -181,35 +239,83 @@ async function runMediaProcess(
   executable: string,
   args: readonly string[],
   cwd: string,
-): Promise<{ ok: boolean; stdout: string }> {
+): Promise<{
+  ok: boolean;
+  stdout: Buffer;
+  timedOut: boolean;
+  signaled: boolean;
+  outputExceeded: boolean;
+}> {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, { shell: false, cwd });
     const stdout: Buffer[] = [];
     let stdoutBytes = 0;
     let stderrBytes = 0;
-    const timer = setTimeout(() => child.kill("SIGKILL"), TIMEOUT_MS);
+    let timedOut = false;
+    let outputExceeded = false;
+    const stopForExcessOutput = () => {
+      outputExceeded = true;
+      child.kill("SIGKILL");
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, TIMEOUT_MS);
     child.stdout.on("data", (chunk: Buffer) => {
       stdoutBytes += chunk.length;
-      if (stdoutBytes <= STDERR_LIMIT) stdout.push(chunk);
+      if (stdoutBytes > STDERR_LIMIT) stopForExcessOutput();
+      else stdout.push(chunk);
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      stderrBytes = Math.min(STDERR_LIMIT, stderrBytes + chunk.length);
+      stderrBytes += chunk.length;
+      if (stderrBytes > STDERR_LIMIT) stopForExcessOutput();
     });
     child.on("error", () => {
       clearTimeout(timer);
       reject(new ResolverConfigurationError());
     });
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       clearTimeout(timer);
-      resolve({ ok: code === 0, stdout: Buffer.concat(stdout).toString("utf8") });
+      resolve({
+        ok: code === 0 && signal === null && !timedOut && !outputExceeded,
+        stdout: Buffer.concat(stdout),
+        timedOut,
+        signaled: signal !== null,
+        outputExceeded,
+      });
     });
   });
+}
+
+async function writeAll(
+  handle: FileHandle,
+  chunk: Buffer,
+  writeChunk: (handle: FileHandle, chunk: Buffer) => Promise<{ bytesWritten: number }>,
+): Promise<void> {
+  let offset = 0;
+  while (offset < chunk.length) {
+    let result: { bytesWritten: number };
+    try {
+      result = await writeChunk(handle, chunk.subarray(offset));
+    } catch {
+      throw new ResolverLocalError();
+    }
+    if (
+      !result ||
+      !Number.isSafeInteger(result.bytesWritten) ||
+      result.bytesWritten <= 0 ||
+      result.bytesWritten > chunk.length - offset
+    ) {
+      throw new ResolverLocalError();
+    }
+    offset += result.bytesWritten;
+  }
 }
 
 async function normalizeImage(
   executable: string,
   cwd: string,
-  writeChunk: (handle: FileHandle, chunk: Buffer) => Promise<unknown>,
+  writeChunk: (handle: FileHandle, chunk: Buffer) => Promise<{ bytesWritten: number }>,
 ): Promise<void> {
   let outputHandle: FileHandle;
   try {
@@ -245,6 +351,7 @@ async function normalizeImage(
     { shell: false, cwd },
   );
   let timedOut = false;
+  let killedForSize = false;
   let stderr = Buffer.alloc(0);
   const timer = setTimeout(() => {
     timedOut = true;
@@ -254,10 +361,12 @@ async function normalizeImage(
     stderr = Buffer.concat([stderr, chunk]);
     if (stderr.length > STDERR_LIMIT) stderr = stderr.subarray(stderr.length - STDERR_LIMIT);
   });
-  const completion = new Promise<number | null>((resolve, reject) => {
-    child.on("error", () => reject(new ResolverConfigurationError()));
-    child.on("close", resolve);
-  });
+  const completion = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+      child.on("error", () => reject(new ResolverConfigurationError()));
+      child.on("close", (code, signal) => resolve({ code, signal }));
+    },
+  );
 
   try {
     let bytes = 0;
@@ -266,13 +375,15 @@ async function normalizeImage(
         const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value as Uint8Array);
         bytes += chunk.length;
         if (bytes > MAX_NORMALIZED_BYTES) {
+          killedForSize = true;
           child.kill("SIGKILL");
           throw new RemoteContentError();
         }
         try {
-          await writeChunk(outputHandle, chunk);
-        } catch {
+          await writeAll(outputHandle, chunk, writeChunk);
+        } catch (error) {
           child.kill("SIGKILL");
+          if (error instanceof ResolverLocalError) throw error;
           throw new ResolverLocalError();
         }
       }
@@ -280,8 +391,11 @@ async function normalizeImage(
       if (error instanceof ResolverLocalError || error instanceof RemoteContentError) throw error;
       throw new RemoteContentError();
     }
-    const code = await completion;
-    if (timedOut || code !== 0) throw new RemoteContentError();
+    const { code, signal } = await completion;
+    if (timedOut || (signal !== null && !killedForSize)) {
+      throw new ResolverConfigurationError();
+    }
+    if (code !== 0) throw new RemoteContentError();
     try {
       await outputHandle.sync();
     } catch {
@@ -300,7 +414,7 @@ function validSignature(bytes: Buffer, mimeType: keyof typeof MIME_CODECS): bool
     return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   }
   if (mimeType === "image/png") {
-    return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    return bytes.subarray(0, 8).equals(PNG_SIGNATURE);
   }
   return (
     bytes.length >= 12 &&
@@ -316,7 +430,11 @@ export class RemoteImageResolver {
   private readonly request: RequestSeam;
   private readonly ffmpegPath: string;
   private readonly ffprobePath: string;
-  private readonly writeChunk: (handle: FileHandle, chunk: Buffer) => Promise<unknown>;
+  private readonly writeChunk: (
+    handle: FileHandle,
+    chunk: Buffer,
+  ) => Promise<{ bytesWritten: number }>;
+  private capabilityValidation?: Promise<void>;
 
   constructor(options: ResolverOptions) {
     this.allowedHostnames = new Set(
@@ -411,7 +529,7 @@ export class RemoteImageResolver {
               throw new RemoteContentError();
             }
             try {
-              await this.writeChunk(sourceHandle, chunk);
+              await writeAll(sourceHandle, chunk, this.writeChunk);
             } catch {
               throw new ResolverLocalError();
             }
@@ -446,10 +564,13 @@ export class RemoteImageResolver {
         ],
         assetDirectory,
       );
+      if (probe.timedOut || probe.signaled || probe.outputExceeded) {
+        throw new ResolverConfigurationError();
+      }
       if (!probe.ok) throw new RemoteContentError();
       let parsed: { streams?: Array<{ codec_name?: unknown; width?: unknown; height?: unknown }> };
       try {
-        parsed = JSON.parse(probe.stdout) as typeof parsed;
+        parsed = JSON.parse(probe.stdout.toString("utf8")) as typeof parsed;
       } catch {
         throw new RemoteContentError();
       }
@@ -494,25 +615,98 @@ export class RemoteImageResolver {
   }
 
   private async validateMediaCapabilities(): Promise<void> {
-    const [ffmpeg, ffprobe] = await Promise.all([
-      runMediaProcess(this.ffmpegPath, ["-version"], process.cwd()),
-      runMediaProcess(this.ffprobePath, ["-version"], process.cwd()),
-    ]);
-    if (
-      !ffmpeg.ok ||
-      !ffprobe.ok ||
-      !/^ffmpeg version\b/m.test(ffmpeg.stdout) ||
-      !/^ffprobe version\b/m.test(ffprobe.stdout)
-    ) {
+    let capabilityDirectory: string | null = null;
+    try {
+      capabilityDirectory = await mkdtemp(path.join(tmpdir(), "onevoice-media-capability-"));
+      await open(
+        path.join(capabilityDirectory, "trusted.png"),
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+        0o600,
+      ).then(async (handle) => {
+        try {
+          await writeAll(handle, TRUSTED_PNG, (target, chunk) => target.write(chunk));
+          await handle.sync();
+        } finally {
+          await handle.close();
+        }
+      });
+      const [probe, decoded] = await Promise.all([
+        runMediaProcess(
+          this.ffprobePath,
+          [
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name,width,height",
+            "-of",
+            "json",
+            "trusted.png",
+          ],
+          capabilityDirectory,
+        ),
+        runMediaProcess(
+          this.ffmpegPath,
+          [
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            "trusted.png",
+            "-frames:v",
+            "1",
+            "-c:v",
+            "png",
+            "-f",
+            "image2pipe",
+            "pipe:1",
+          ],
+          capabilityDirectory,
+        ),
+      ]);
+      const metadata = JSON.parse(probe.stdout.toString("utf8")) as {
+        streams?: Array<{ codec_name?: unknown; width?: unknown; height?: unknown }>;
+      };
+      const stream = metadata.streams?.[0];
+      if (
+        !probe.ok ||
+        !decoded.ok ||
+        stream?.codec_name !== "png" ||
+        stream.width !== 1 ||
+        stream.height !== 1 ||
+        !validSignature(decoded.stdout, "image/png")
+      ) {
+        throw new ResolverConfigurationError();
+      }
+    } catch {
       throw new ResolverConfigurationError();
+    } finally {
+      if (capabilityDirectory) {
+        await rm(capabilityDirectory, { recursive: true, force: true }).catch(() => {
+          throw new ResolverConfigurationError();
+        });
+      }
     }
+  }
+
+  private ensureMediaCapabilities(): Promise<void> {
+    if (!this.capabilityValidation) {
+      const validation = this.validateMediaCapabilities();
+      this.capabilityValidation = validation.catch((error: unknown) => {
+        this.capabilityValidation = undefined;
+        throw error;
+      });
+    }
+    return this.capabilityValidation;
   }
 
   async resolve(value: string): Promise<ResolvedAsset | null> {
     let currentUrl = this.allowedUrl(value);
     if (!currentUrl) return null;
     try {
-      await this.validateMediaCapabilities();
+      await this.ensureMediaCapabilities();
     } catch {
       throw new Error("Image resolver configuration failed");
     }

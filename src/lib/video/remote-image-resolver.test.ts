@@ -5,7 +5,8 @@ import type { LookupFunction } from "node:net";
 import { Readable } from "node:stream";
 import type { IncomingMessage } from "node:http";
 import type { RequestOptions } from "node:https";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -122,6 +123,14 @@ describe("RemoteImageResolver transport", () => {
     "2001::1",
     "2002::1",
     "3fff::1",
+    "3ffe::1",
+    "3000::1",
+    "2001:100::1",
+    "2001:1000::1",
+    "2003:4000::1",
+    "2420::1",
+    "2611::1",
+    "2c10::1",
     "4000::1",
     "64:ff9b:1::1",
     "::ffff:127.0.0.1",
@@ -163,6 +172,79 @@ describe("RemoteImageResolver transport", () => {
 
     await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
     expect(requestCalls).toBe(1);
+  });
+
+  it("classifies a public IPv4-mapped IPv6 address through the IPv4 policy", async () => {
+    let requestCalls = 0;
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        await temporaryRoot(),
+        async () => {
+          requestCalls += 1;
+          return fakeResponse(new Uint8Array(), 404);
+        },
+        async () => [{ address: "::ffff:93.184.216.34", family: 6 }],
+      ) as never,
+    );
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    expect(requestCalls).toBe(1);
+  });
+
+  it("accepts every allocated IANA global-unicast prefix", async () => {
+    const addresses = [
+      "2001:200::1",
+      "2001:400::1",
+      "2001:600::1",
+      "2001:800::1",
+      "2001:c00::1",
+      "2001:e00::1",
+      "2001:1200::1",
+      "2001:1400::1",
+      "2001:1800::1",
+      "2001:1a00::1",
+      "2001:1c00::1",
+      "2001:2000::1",
+      "2001:4000::1",
+      "2001:4200::1",
+      "2001:4400::1",
+      "2001:4600::1",
+      "2001:4800::1",
+      "2001:4a00::1",
+      "2001:4c00::1",
+      "2001:5000::1",
+      "2001:8000::1",
+      "2001:a000::1",
+      "2001:b000::1",
+      "2003::1",
+      "2400::1",
+      "2410::1",
+      "2600::1",
+      "2610::1",
+      "2620::1",
+      "2630::1",
+      "2800::1",
+      "2a00::1",
+      "2a10::1",
+      "2c00::1",
+    ];
+    let address = addresses[0];
+    let requestCalls = 0;
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        await temporaryRoot(),
+        async () => {
+          requestCalls += 1;
+          return fakeResponse(new Uint8Array(), 404);
+        },
+        async () => [{ address, family: 6 }],
+      ) as never,
+    );
+
+    for (address of addresses) {
+      await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    }
+    expect(requestCalls).toBe(addresses.length);
   });
 
   it("rejects a hop if any resolved address is non-public", async () => {
@@ -402,6 +484,54 @@ describe("RemoteImageResolver content boundary", () => {
     await expect(readdir(path.join(root, "assets"))).resolves.toEqual([]);
   });
 
+  it("completes partial normalized-output writes", async () => {
+    const root = await temporaryRoot();
+    const png = await imageFixture(root, "png");
+    let sourceHandle: object | undefined;
+    let partialWrites = 0;
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(
+        path.join(root, "assets"),
+        async () => fakeResponse(png, 200, { "content-type": "image/png" }),
+      ),
+      writeChunk: async (handle: FileHandle, chunk: Buffer) => {
+        sourceHandle ??= handle;
+        if (handle === sourceHandle) return handle.write(chunk);
+        partialWrites += 1;
+        return handle.write(chunk.subarray(0, Math.min(3, chunk.length)));
+      },
+    } as never);
+
+    const asset = await resolver.resolve("https://images.example.com/a.png");
+
+    expect(partialWrites).toBeGreaterThan(1);
+    expect((await readFile(asset!.path)).subarray(0, 8)).toEqual(png.subarray(0, 8));
+    await run("ffprobe", ["-v", "error", asset!.path]);
+    await asset!.cleanup();
+  });
+
+  it("rethrows zero-progress normalized-output writes as a safe local error", async () => {
+    const root = await temporaryRoot();
+    const png = await imageFixture(root, "png");
+    let sourceHandle: object | undefined;
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(
+        path.join(root, "assets"),
+        async () => fakeResponse(png, 200, { "content-type": "image/png" }),
+      ),
+      writeChunk: async (handle: FileHandle, chunk: Buffer) => {
+        sourceHandle ??= handle;
+        if (handle === sourceHandle) return handle.write(chunk);
+        return { bytesWritten: 0, buffer: chunk };
+      },
+    } as never);
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
+      "Image resolver local operation failed",
+    );
+    await expect(readdir(path.join(root, "assets"))).resolves.toEqual([]);
+  });
+
   it("rethrows missing decoder configuration as a safe operational error", async () => {
     const root = await temporaryRoot();
     const png = await imageFixture(root, "png");
@@ -435,6 +565,58 @@ describe("RemoteImageResolver content boundary", () => {
       [field]: executable,
     };
     const resolver = new RemoteImageResolver(options as never);
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
+      "Image resolver configuration failed",
+    );
+  });
+
+  it.each([
+    ["ffmpegPath", "ffmpeg"],
+    ["ffprobePath", "ffprobe"],
+  ] as const)("rejects a banner-spoofing %s before making a request", async (field, binary) => {
+    const root = await temporaryRoot();
+    const executable = path.join(root, `${binary}-spoof`);
+    await writeFile(
+      executable,
+      `#!/bin/sh\nif [ "$1" = "-version" ]; then echo "${binary} version spoof"; exit 0; fi\nexit 1\n`,
+    );
+    await chmod(executable, 0o700);
+    let requestCalls = 0;
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(path.join(root, "assets"), async () => {
+        requestCalls += 1;
+        return fakeResponse();
+      }),
+      [field]: executable,
+    } as never);
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
+      "Image resolver configuration failed",
+    );
+    expect(requestCalls).toBe(0);
+    await writeFile(executable, `#!/bin/sh\nexec ${binary} "$@"\n`);
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    expect(requestCalls).toBe(1);
+    await writeFile(executable, "#!/bin/sh\nexit 1\n");
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    expect(requestCalls).toBe(2);
+  });
+
+  it("rethrows a runtime decoder signal after a successful capability smoke test", async () => {
+    const root = await temporaryRoot();
+    const executable = path.join(root, "ffmpeg-wrapper");
+    await writeFile(executable, '#!/bin/sh\nexec ffmpeg "$@"\n');
+    await chmod(executable, 0o700);
+    const png = await imageFixture(root, "png");
+    let response = fakeResponse(new Uint8Array(), 404);
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(path.join(root, "assets"), async () => response),
+      ffmpegPath: executable,
+    } as never);
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    await writeFile(executable, "#!/bin/sh\nkill -TERM $$\n");
+    response = fakeResponse(png, 200, { "content-type": "image/png" });
 
     await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
       "Image resolver configuration failed",
