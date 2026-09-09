@@ -35,6 +35,8 @@ Artifact được ghi vào `renders/<uuid>/video.mp4` và `renders/<uuid>/manife
 pnpm video:verify -- renders/<uuid>/video.mp4
 ```
 
+Verifier tải `FFPROBE_PATH` từ `.env`, chỉ đọc regular file local không rỗng (không theo symlink hoặc URL/protocol), và chỉ chấp nhận MP4 có major brand `isom`, `iso2`, `mp41`, `mp42` hoặc `avc1`.
+
 ## Cấu hình Supabase
 
 Điền vào `.env`:
@@ -101,13 +103,13 @@ docker compose exec app ffmpeg -version
 docker compose exec app ffprobe -version
 ```
 
-Image runtime cài FFmpeg, chạy ứng dụng bằng user không phải root và ghi media vào `/app/renders`. Named volume `onevoice-renders` giữ video khi container được tạo lại. Xem log bằng `docker compose logs -f app`; `docker compose down` giữ volume, còn `docker compose down -v` xóa vĩnh viễn các artifact trong volume.
+Image runtime cài FFmpeg, chạy ứng dụng bằng user không phải root và ghi media vào `/app/renders`. Compose cố định executable container-native `ffmpeg`/`ffprobe` và font `/usr/share/fonts/dejavu/DejaVuSans.ttf`, nên đường dẫn native trong `.env` không ghi đè cấu hình container. Named volume `onevoice-renders` giữ video khi container được tạo lại. Xem log bằng `docker compose logs -f app`; `docker compose down` giữ volume, còn `docker compose down -v` xóa vĩnh viễn các artifact trong volume.
 
-Compose chỉ chạy web app; không thêm database, queue hay worker. Cơ sở dữ liệu chính chạy trên Supabase Cloud.
+Compose chỉ chạy web app, bind mặc định tại `127.0.0.1:3000`; không thêm database, queue hay worker. Cơ sở dữ liệu chính chạy trên Supabase Cloud. Muốn cho máy khác truy cập phải thiết kế riêng authentication, TLS và network policy trước khi đổi bind address; không expose cấu hình local này trực tiếp.
 
 ## Giới hạn bản local
 
-Render hiện chạy đồng bộ trong web process và chỉ phù hợp cho phát triển/demo local, không expose trực tiếp ra Internet. AI có timeout 30 giây, tải/chuẩn hóa ảnh 10 giây và FFmpeg 45 giây. Ảnh không tải được sẽ chuyển sang video chỉ có chữ. Khi chuyển sang production, tác vụ render phải được đưa sang durable queue/worker thay vì giữ request web mở.
+Render hiện chạy đồng bộ trong web process và chỉ phù hợp cho phát triển/demo local, không expose trực tiếp ra Internet. AI có timeout 30 giây, tải/chuẩn hóa ảnh 10 giây và FFmpeg 45 giây. Status/type/byte/decode không hợp lệ từ ảnh remote có thể chuyển sang video chỉ có chữ. Lỗi local về temporary directory/filesystem/tool capability, timeout, signal hoặc giới hạn stderr dừng luồng an toàn với `IMAGE_RESOLUTION_FAILED`; chúng không bị che bằng fallback. Khi chuyển sang production, tác vụ render phải được đưa sang durable queue/worker thay vì giữ request web mở.
 
 ## Cấu trúc foundation
 

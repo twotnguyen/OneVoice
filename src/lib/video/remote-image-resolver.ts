@@ -660,7 +660,10 @@ export class RemoteImageResolver {
     try {
       capabilityDirectory = await mkdtemp(path.join(tmpdir(), "onevoice-media-capability-"));
       for (const { mimeType, bytes } of TRUSTED_IMAGES) {
-        const fixtureDirectory = path.join(capabilityDirectory, MIME_CODECS[mimeType]);
+        const fixtureDirectory = path.join(
+          /* turbopackIgnore: true */ capabilityDirectory,
+          MIME_CODECS[mimeType],
+        );
         await mkdir(fixtureDirectory, { mode: 0o700 });
         const sourceHandle = await open(
           path.join(fixtureDirectory, "source.bin"),

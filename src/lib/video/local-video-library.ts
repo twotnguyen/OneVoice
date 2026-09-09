@@ -176,7 +176,7 @@ export class LocalVideoLibrary {
 
     let stagingDirectory: string | null = await mkdtemp(path.join(root, ".stage-"));
     try {
-      const stageRealPath = await realpath(stagingDirectory);
+      const stageRealPath = await realpath(/* turbopackIgnore: true */ stagingDirectory);
       if (!stageRealPath.startsWith(`${root}${path.sep}`)) {
         throw new Error("Unsafe staging directory");
       }

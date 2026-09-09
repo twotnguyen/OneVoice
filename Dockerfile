@@ -24,6 +24,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV ONEVOICE_MEDIA_ROOT="/app/renders"
+ENV FFMPEG_PATH="ffmpeg"
+ENV FFPROBE_PATH="ffprobe"
+ENV ONEVOICE_FONT_PATH="/usr/share/fonts/dejavu/DejaVuSans.ttf"
 WORKDIR /app
 
 RUN apk add --no-cache ffmpeg font-dejavu \

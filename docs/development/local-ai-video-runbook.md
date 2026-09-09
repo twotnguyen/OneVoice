@@ -19,7 +19,7 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Nếu `ffmpeg` hoặc `ffprobe` không nằm trên `PATH`, đặt đường dẫn executable trong `FFMPEG_PATH` và `FFPROBE_PATH`.
+Nếu `ffmpeg` hoặc `ffprobe` không nằm trên `PATH`, đặt đường dẫn executable trong `FFMPEG_PATH` và `FFPROBE_PATH`. Lệnh `pnpm video:verify` tự tải `.env` nếu file tồn tại.
 
 ## 2. Cấu hình `.env`
 
@@ -78,7 +78,7 @@ Mở <http://localhost:3000> và thực hiện:
 pnpm video:verify -- renders/<uuid>/video.mp4
 ```
 
-Verifier chỉ thành công khi artifact là MP4, H.264, `yuv420p`, 1080×1920 và có duration dương; output cũng ghi duration và kích thước file. Mỗi render nằm tại:
+Verifier chỉ thành công khi artifact là MP4 có major brand trong allow-list `isom`, `iso2`, `mp41`, `mp42`, `avc1`, video H.264, `yuv420p`, 1080×1920 và duration dương; QuickTime MOV, 3GP và ISO-BMFF khác bị từ chối. Input được resolve thành absolute local path trước khi gọi ffprobe và phải là regular file đọc được, không rỗng; URL/protocol và symlink bị từ chối. Verifier giới hạn output, dừng ffprobe sau 10 giây, và chỉ in metadata hoặc mã lỗi an toàn, không in path, nội dung file hay stderr của ffprobe. Mỗi render nằm tại:
 
 ```text
 renders/<uuid>/video.mp4
@@ -103,7 +103,9 @@ docker compose exec app ffmpeg -version
 docker compose exec app ffprobe -version
 ```
 
-Compose chỉ khởi động web app. Image runtime cài gói Alpine `ffmpeg` cùng font DejaVu mà renderer dùng, chạy bằng user `nextjs` không phải root, đặt `ONEVOICE_MEDIA_ROOT=/app/renders` và mount named volume `onevoice-renders` vào đó. Supabase vẫn là dịch vụ ngoài; bản này không tạo database, queue hoặc worker container.
+Compose chỉ khởi động web app và bind `127.0.0.1:3000`. Image runtime cài gói Alpine `ffmpeg` cùng font DejaVu mà renderer dùng, chạy bằng user `nextjs` không phải root, đặt `ONEVOICE_MEDIA_ROOT=/app/renders` và mount named volume `onevoice-renders` vào đó. Compose cũng cố định `FFMPEG_PATH=ffmpeg`, `FFPROBE_PATH=ffprobe` và `ONEVOICE_FONT_PATH=/usr/share/fonts/dejavu/DejaVuSans.ttf`; các đường dẫn native trong `.env` không thể ghi đè ba giá trị container này. Supabase vẫn là dịch vụ ngoài; bản này không tạo database, queue hoặc worker container.
+
+Cấu hình này không có authentication boundary cho render endpoints. Nếu cần truy cập từ máy khác, phải thiết kế và kiểm thử authentication, TLS termination, network policy/rate limiting riêng trước khi đổi loopback bind; không publish trực tiếp cấu hình local-only ra LAN hoặc Internet.
 
 `docker compose down` xóa container nhưng giữ artifact trong named volume. Chỉ chạy lệnh sau khi chủ động muốn xóa media:
 
@@ -118,7 +120,8 @@ Có thể xem dung lượng và mount point bằng `docker volume inspect onevoi
 - AI generation có timeout 30 giây.
 - Tải hoặc chuẩn hóa ảnh có timeout 10 giây và chỉ chấp nhận host/type/kích thước đã giới hạn.
 - FFmpeg render có timeout 45 giây.
-- Nếu ảnh từ catalog không tải hoặc chuẩn hóa được, pipeline tiếp tục bằng fallback video chỉ có chữ; nội dung sản phẩm vẫn đến từ snapshot đã chọn.
+- Remote image bị từ chối do HTTP status, redirect/host, content type, giới hạn byte, signature/codec/dimension hoặc decode nonzero có thể trả về fallback video chỉ có chữ; nội dung sản phẩm vẫn đến từ snapshot đã chọn.
+- Lỗi local về temporary directory/filesystem, tool capability, timeout, process signal, giới hạn stderr/output hoặc cleanup không fallback. Pipeline dừng an toàn với `IMAGE_RESOLUTION_FAILED` để cấu hình vận hành không bị che khuất.
 - Render chạy đồng bộ trong web process. Restart có thể làm mất tác vụ đang chạy; không có durable retry, lịch sử job hay phân phối tải.
 - Artifact nằm trên filesystem local/named volume, không phải object storage và không phù hợp để chia sẻ giữa nhiều web replica.
 
@@ -132,7 +135,11 @@ Trước khi public/production, chuyển orchestration sang durable queue và wo
 | AI không trả nội dung | Chạy `pnpm ai:verify`; kiểm tra base URL, API key, model và timeout 30 giây. |
 | Luôn dùng video chỉ có chữ | Kiểm tra `ONEVOICE_IMAGE_HOSTS`, HTTPS URL, DNS và log mã lỗi ảnh an toàn. |
 | Render thất bại | Chạy `ffmpeg -version`, `ffprobe -version`; kiểm tra quyền ghi `ONEVOICE_MEDIA_ROOT` và font path. |
-| Verifier trả non-zero | Artifact không đúng MP4/H.264/`yuv420p`/1080×1920, duration không dương, file hỏng hoặc ffprobe không chạy được. Verifier cố ý không in path, nội dung file hay stderr của ffprobe. |
+| `FILE_UNREADABLE` | Input là URL/protocol, symlink, không phải regular file local đọc được, rỗng hoặc không tồn tại. |
+| `PROFILE_MISMATCH` | Artifact không đúng MP4 brand/H.264/`yuv420p`/1080×1920/duration, là MOV/3GP hoặc ffprobe từ chối media. |
+| `FFPROBE_UNAVAILABLE` | Kiểm tra `FFPROBE_PATH` và quyền chạy executable. |
+| `FFPROBE_TIMEOUT` | ffprobe vượt deadline 10 giây và đã bị terminate/reap. |
+| `FFPROBE_OUTPUT_LIMIT` / `FFPROBE_PARSE_FAILED` | ffprobe trả output quá giới hạn hoặc JSON sai; verifier không in raw output. |
 | Container không ghi được media | Chạy `docker compose config`, kiểm tra volume mount và quyền của `/app/renders` bằng user `nextjs`. |
 
 ## 7. Bằng chứng kiểm thử và giấy phép FFmpeg

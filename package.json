@@ -25,7 +25,7 @@
     "data:import": "node --experimental-strip-types scripts/import-products-to-supabase.ts",
     "data:verify": "node --experimental-strip-types scripts/verify-supabase-data.ts",
     "ai:verify": "node --env-file-if-exists=.env --experimental-strip-types scripts/verify-ai-provider.ts",
-    "video:verify": "node --experimental-strip-types scripts/verify-rendered-video.ts"
+    "video:verify": "node --env-file-if-exists=.env --experimental-strip-types scripts/verify-rendered-video.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.116.0",
