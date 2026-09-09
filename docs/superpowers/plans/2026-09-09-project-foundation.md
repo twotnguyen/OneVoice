@@ -40,7 +40,7 @@
 **Files:**
 - Create: `src/lib/env/server.test.ts`, `src/lib/env/server.ts`
 - Create: `src/lib/supabase/server.ts`
-- Create: `.env.example`, `supabase/config.toml`, `supabase/migrations/20260909000000_healthcheck.sql`, `supabase/seed.sql`
+- Create: `.env.example`, `supabase/config.toml`, `supabase/migrations/20260909013047_20260909000000_healthcheck.sql`, `supabase/seed.sql`
 
 **Interfaces:**
 - Produces: `readServerEnv(source?: NodeJS.ProcessEnv): ServerEnv`.
