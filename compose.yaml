@@ -12,8 +12,11 @@ services:
         required: false
     environment:
       NODE_ENV: production
+      ONEVOICE_MEDIA_ROOT: /app/renders
     ports:
       - "3000:3000"
+    volumes:
+      - onevoice-renders:/app/renders
     restart: unless-stopped
     healthcheck:
       test:
@@ -25,3 +28,6 @@ services:
       timeout: 3s
       retries: 12
       start_period: 10s
+
+volumes:
+  onevoice-renders:
