@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { promises as dns } from "node:dns";
 import { constants } from "node:fs";
 import { lstat, mkdir, mkdtemp, open, readFile, rm } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { RequestOptions } from "node:https";
@@ -20,6 +21,7 @@ const MAX_PIXELS = 40_000_000;
 const TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 5;
 const STDERR_LIMIT = 64 * 1024;
+const MAX_NORMALIZED_BYTES = 64 * 1024 * 1024;
 const MIME_CODECS = {
   "image/jpeg": "mjpeg",
   "image/png": "png",
@@ -35,6 +37,7 @@ type ResolverOptions = Readonly<{
   request?: RequestSeam;
   ffmpegPath?: string;
   ffprobePath?: string;
+  writeChunk?: (handle: FileHandle, chunk: Buffer) => Promise<unknown>;
 }>;
 
 class RemoteContentError extends Error {}
@@ -126,15 +129,16 @@ function isPublicIpv6(address: string): boolean {
       `${groups[6] >> 8}.${groups[6] & 0xff}.${groups[7] >> 8}.${groups[7] & 0xff}`,
     );
   }
-  if (groups.slice(0, 6).every((group) => group === 0)) return false;
   const first = groups[0];
+  if ((first & 0xe000) !== 0x2000) return false;
   if (
-    (first & 0xfe00) === 0xfc00 ||
-    (first & 0xffc0) === 0xfe80 ||
-    (first & 0xffc0) === 0xfec0 ||
-    (first & 0xff00) === 0xff00 ||
+    (first === 0x2001 && groups[1] === 0x0000) ||
+    (first === 0x2001 && groups[1] === 0x0002 && groups[2] === 0x0000) ||
+    (first === 0x2001 && (groups[1] & 0xfff0) === 0x0010) ||
+    (first === 0x2001 && (groups[1] & 0xfff0) === 0x0020) ||
     (first === 0x2001 && groups[1] === 0x0db8) ||
-    (first === 0x0100 && groups.slice(1, 4).every((group) => group === 0))
+    first === 0x2002 ||
+    (first === 0x3fff && (groups[1] & 0xf000) === 0)
   ) {
     return false;
   }
@@ -202,6 +206,95 @@ async function runMediaProcess(
   });
 }
 
+async function normalizeImage(
+  executable: string,
+  cwd: string,
+  writeChunk: (handle: FileHandle, chunk: Buffer) => Promise<unknown>,
+): Promise<void> {
+  let outputHandle: FileHandle;
+  try {
+    outputHandle = await open(
+      path.join(cwd, "normalized.png"),
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+      0o600,
+    );
+  } catch {
+    throw new ResolverLocalError();
+  }
+  const child = spawn(
+    executable,
+    [
+      "-nostdin",
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-i",
+      "source.bin",
+      "-map_metadata",
+      "-1",
+      "-frames:v",
+      "1",
+      "-c:v",
+      "png",
+      "-pix_fmt",
+      "rgba",
+      "-f",
+      "image2pipe",
+      "pipe:1",
+    ],
+    { shell: false, cwd },
+  );
+  let timedOut = false;
+  let stderr = Buffer.alloc(0);
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGKILL");
+  }, TIMEOUT_MS);
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr = Buffer.concat([stderr, chunk]);
+    if (stderr.length > STDERR_LIMIT) stderr = stderr.subarray(stderr.length - STDERR_LIMIT);
+  });
+  const completion = new Promise<number | null>((resolve, reject) => {
+    child.on("error", () => reject(new ResolverConfigurationError()));
+    child.on("close", resolve);
+  });
+
+  try {
+    let bytes = 0;
+    try {
+      for await (const value of child.stdout) {
+        const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value as Uint8Array);
+        bytes += chunk.length;
+        if (bytes > MAX_NORMALIZED_BYTES) {
+          child.kill("SIGKILL");
+          throw new RemoteContentError();
+        }
+        try {
+          await writeChunk(outputHandle, chunk);
+        } catch {
+          child.kill("SIGKILL");
+          throw new ResolverLocalError();
+        }
+      }
+    } catch (error) {
+      if (error instanceof ResolverLocalError || error instanceof RemoteContentError) throw error;
+      throw new RemoteContentError();
+    }
+    const code = await completion;
+    if (timedOut || code !== 0) throw new RemoteContentError();
+    try {
+      await outputHandle.sync();
+    } catch {
+      throw new ResolverLocalError();
+    }
+  } finally {
+    clearTimeout(timer);
+    await outputHandle.close().catch(() => {
+      throw new ResolverLocalError();
+    });
+  }
+}
+
 function validSignature(bytes: Buffer, mimeType: keyof typeof MIME_CODECS): boolean {
   if (mimeType === "image/jpeg") {
     return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
@@ -223,6 +316,7 @@ export class RemoteImageResolver {
   private readonly request: RequestSeam;
   private readonly ffmpegPath: string;
   private readonly ffprobePath: string;
+  private readonly writeChunk: (handle: FileHandle, chunk: Buffer) => Promise<unknown>;
 
   constructor(options: ResolverOptions) {
     this.allowedHostnames = new Set(
@@ -233,6 +327,7 @@ export class RemoteImageResolver {
     this.request = options.request ?? defaultRequest;
     this.ffmpegPath = options.ffmpegPath ?? "ffmpeg";
     this.ffprobePath = options.ffprobePath ?? "ffprobe";
+    this.writeChunk = options.writeChunk ?? ((handle, chunk) => handle.write(chunk));
   }
 
   private allowedUrl(value: string, base?: URL): URL | null {
@@ -280,6 +375,7 @@ export class RemoteImageResolver {
     mimeType: keyof typeof MIME_CODECS,
   ): Promise<ResolvedAsset> {
     let assetDirectory: string | null = null;
+    let responseComplete = false;
     try {
       try {
         await mkdir(this.temporaryRoot, { recursive: true, mode: 0o700 });
@@ -303,7 +399,10 @@ export class RemoteImageResolver {
             } catch {
               throw new RemoteContentError();
             }
-            if (next.done) break;
+            if (next.done) {
+              responseComplete = true;
+              break;
+            }
             const value = next.value;
             const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value as Uint8Array);
             bytes += chunk.length;
@@ -312,7 +411,7 @@ export class RemoteImageResolver {
               throw new RemoteContentError();
             }
             try {
-              await sourceHandle.write(chunk);
+              await this.writeChunk(sourceHandle, chunk);
             } catch {
               throw new ResolverLocalError();
             }
@@ -370,29 +469,7 @@ export class RemoteImageResolver {
         throw new RemoteContentError();
       }
 
-      const normalized = await runMediaProcess(
-        this.ffmpegPath,
-        [
-          "-nostdin",
-          "-hide_banner",
-          "-loglevel",
-          "error",
-          "-i",
-          "source.bin",
-          "-map_metadata",
-          "-1",
-          "-frames:v",
-          "1",
-          "-c:v",
-          "png",
-          "-pix_fmt",
-          "rgba",
-          "-y",
-          "normalized.png",
-        ],
-        assetDirectory,
-      );
-      if (!normalized.ok) throw new RemoteContentError();
+      await normalizeImage(this.ffmpegPath, assetDirectory, this.writeChunk);
       const normalizedPath = path.join(assetDirectory, "normalized.png");
       const normalizedBytes = await readFile(normalizedPath).catch(() => {
         throw new ResolverLocalError();
@@ -411,13 +488,34 @@ export class RemoteImageResolver {
         cleanup: () => rm(cleanupDirectory, { recursive: true, force: true }),
       };
     } finally {
+      if (!responseComplete && !response.destroyed) response.destroy();
       if (assetDirectory) await rm(assetDirectory, { recursive: true, force: true });
+    }
+  }
+
+  private async validateMediaCapabilities(): Promise<void> {
+    const [ffmpeg, ffprobe] = await Promise.all([
+      runMediaProcess(this.ffmpegPath, ["-version"], process.cwd()),
+      runMediaProcess(this.ffprobePath, ["-version"], process.cwd()),
+    ]);
+    if (
+      !ffmpeg.ok ||
+      !ffprobe.ok ||
+      !/^ffmpeg version\b/m.test(ffmpeg.stdout) ||
+      !/^ffprobe version\b/m.test(ffprobe.stdout)
+    ) {
+      throw new ResolverConfigurationError();
     }
   }
 
   async resolve(value: string): Promise<ResolvedAsset | null> {
     let currentUrl = this.allowedUrl(value);
     if (!currentUrl) return null;
+    try {
+      await this.validateMediaCapabilities();
+    } catch {
+      throw new Error("Image resolver configuration failed");
+    }
     const signal = AbortSignal.timeout(TIMEOUT_MS);
 
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {

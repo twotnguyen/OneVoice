@@ -146,6 +146,10 @@ export function buildSceneEnableExpression(index: number): string {
   return index === 2 ? `gte(t,${start})*lte(t,${end})` : `gte(t,${start})*lt(t,${end})`;
 }
 
+export function buildImageOverlayEnableExpression(): string {
+  return "gte(t,4)*lt(t,8)";
+}
+
 function validateStoryboard(storyboard: VideoStoryboard): void {
   if (
     storyboard.schema !== "onevoice.storyboard.v1" ||
@@ -207,7 +211,10 @@ export class FfmpegVideoRenderer {
           "[1:v]scale=800:800:force_original_aspect_ratio=decrease," +
             "pad=800:800:(ow-iw)/2:(oh-ih)/2:color=white@0[asset]",
         );
-        filters.push(`${currentVideo}[asset]overlay=(W-w)/2:260:enable='between(t,4,8)'[base]`);
+        filters.push(
+          `${currentVideo}[asset]overlay=(W-w)/2:260:` +
+            `enable='${buildImageOverlayEnableExpression()}'[base]`,
+        );
         currentVideo = "[base]";
       }
 

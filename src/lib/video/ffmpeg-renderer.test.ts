@@ -3,18 +3,33 @@
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ProductSnapshot } from "../catalog/types";
 import type { GeneratedProductContent } from "../content/types";
 import {
   buildSceneEnableExpression,
+  buildImageOverlayEnableExpression,
   FfmpegVideoRenderer,
   probeVideo,
 } from "./ffmpeg-renderer";
 import { compileProductStoryboard } from "./storyboard";
 
 const roots: string[] = [];
+
+async function captureProcess(executable: string, args: readonly string[]): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, { shell: false });
+    const output: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => output.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve(Buffer.concat(output));
+      else reject(new Error(`${executable} exited with ${code}`));
+    });
+  });
+}
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -25,6 +40,38 @@ describe("FfmpegVideoRenderer", () => {
     expect(buildSceneEnableExpression(0)).toBe("gte(t,0)*lt(t,4)");
     expect(buildSceneEnableExpression(1)).toBe("gte(t,4)*lt(t,8)");
     expect(buildSceneEnableExpression(2)).toBe("gte(t,8)*lte(t,12)");
+    expect(buildImageOverlayEnableExpression()).toBe("gte(t,4)*lt(t,8)");
+  });
+
+  it("enables the facts image at second four and disables it at second eight in real FFmpeg", async () => {
+    const expression = buildImageOverlayEnableExpression();
+    const frames = await captureProcess("ffmpeg", [
+      "-nostdin",
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "color=black:s=2x2:r=1:d=10",
+      "-f",
+      "lavfi",
+      "-i",
+      "color=white:s=2x2:r=1:d=10",
+      "-filter_complex",
+      `[0:v][1:v]overlay=enable='${expression}',format=gray`,
+      "-frames:v",
+      "10",
+      "-f",
+      "rawvideo",
+      "pipe:1",
+    ]);
+    const firstPixel = (second: number) => frames[second * 4];
+
+    expect(firstPixel(3)).toBeLessThan(128);
+    expect(firstPixel(4)).toBeGreaterThan(128);
+    expect(firstPixel(7)).toBeGreaterThan(128);
+    expect(firstPixel(8)).toBeLessThan(128);
   });
 
   it(

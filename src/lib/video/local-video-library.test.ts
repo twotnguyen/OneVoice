@@ -3,6 +3,7 @@
 import {
   mkdir,
   mkdtemp,
+  open,
   readFile,
   readdir,
   rename,
@@ -10,6 +11,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -304,5 +306,92 @@ describe("LocalVideoLibrary", () => {
 
     await expect(stored!.handle.readFile()).resolves.toEqual(Buffer.from([1, 2, 3, 4]));
     await stored!.handle.close();
+  });
+
+  it("copies a multi-chunk video without whole-file FileHandle buffering", async () => {
+    const root = await temporaryRoot();
+    const sourcePath = path.join(root, "large-source.mp4");
+    const source = Buffer.alloc(1024 * 1024 + 17, 0x5a);
+    await writeFile(sourcePath, source);
+    const library = new LocalVideoLibrary(path.join(root, "library"));
+    const video: RenderedVideo = {
+      path: sourcePath,
+      bytes: source.length,
+      sha256: "a".repeat(64),
+      durationMs: 12_000,
+      width: 1080,
+      height: 1920,
+      codecName: "h264",
+      pixelFormat: "yuv420p",
+      formatName: "mov,mp4,m4a,3gp,3g2,mj2",
+      rendererRevision: "onevoice-ffmpeg-v1",
+      cleanup: async () => undefined,
+    };
+    const manifest: VideoManifest = {
+      renderId,
+      status: "succeeded",
+      content: {
+        hook: "A valid product hook",
+        caption: "A valid product caption for this test.",
+        cta: "View product",
+      },
+      artifact: {
+        bytes: source.length,
+        sha256: "a".repeat(64),
+        durationMs: 12_000,
+        width: 1080,
+        height: 1920,
+        codecName: "h264",
+        pixelFormat: "yuv420p",
+        formatName: "mov,mp4,m4a,3gp,3g2,mj2",
+        rendererRevision: "onevoice-ffmpeg-v1",
+      },
+    };
+    const sampleHandle = await open(sourcePath, "r");
+    const prototype = Object.getPrototypeOf(sampleHandle) as {
+      readFile: FileHandle["readFile"];
+    };
+    await sampleHandle.close();
+    const originalReadFile = prototype.readFile;
+    prototype.readFile = (async () => {
+      throw new Error("whole-file buffering is forbidden");
+    }) as FileHandle["readFile"];
+
+    try {
+      await library.save(renderId, manifest, video);
+    } finally {
+      prototype.readFile = originalReadFile;
+    }
+
+    await expect(
+      readFile(path.join(root, "library", renderId, "video.mp4")),
+    ).resolves.toEqual(source);
+  });
+
+  it("closes the opened video handle when post-open validation fails", async () => {
+    const root = await temporaryRoot();
+    const directory = path.join(root, renderId);
+    await mkdir(directory);
+    await writeFile(path.join(directory, "video.mp4"), Buffer.from([1, 2, 3]));
+    let closeCalls = 0;
+    const library = new LocalVideoLibrary(root, {
+      openFile: async (...args: Parameters<typeof open>) => {
+        const handle = await Reflect.apply(open, undefined, args) as FileHandle;
+        if (path.basename(String(args[0])) === "video.mp4") {
+          const originalClose = handle.close;
+          handle.stat = (async () => {
+            throw new Error("simulated fstat failure");
+          }) as FileHandle["stat"];
+          handle.close = async () => {
+            closeCalls += 1;
+            return originalClose();
+          };
+        }
+        return handle;
+      },
+    });
+
+    await expect(library.readVideo(renderId)).rejects.toThrow("simulated fstat failure");
+    expect(closeCalls).toBe(1);
   });
 });

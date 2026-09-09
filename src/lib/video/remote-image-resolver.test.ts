@@ -5,7 +5,7 @@ import type { LookupFunction } from "node:net";
 import { Readable } from "node:stream";
 import type { IncomingMessage } from "node:http";
 import type { RequestOptions } from "node:https";
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -116,6 +116,14 @@ describe("RemoteImageResolver transport", () => {
     "fe80::1",
     "fc00::1",
     "2001:db8::1",
+    "2001:2::1",
+    "2001:10::1",
+    "2001:20::1",
+    "2001::1",
+    "2002::1",
+    "3fff::1",
+    "4000::1",
+    "64:ff9b:1::1",
     "::ffff:127.0.0.1",
   ])("rejects non-public DNS address %s before requesting", async (address) => {
     let lookupCalls = 0;
@@ -138,6 +146,23 @@ describe("RemoteImageResolver transport", () => {
     await expect(resolver.resolve("https://images.example.com/a.jpg")).resolves.toBeNull();
     expect(lookupCalls).toBe(1);
     expect(requestCalls).toBe(0);
+  });
+
+  it("accepts a representative global-unicast IPv6 address", async () => {
+    let requestCalls = 0;
+    const resolver = new RemoteImageResolver(
+      resolverOptions(
+        await temporaryRoot(),
+        async () => {
+          requestCalls += 1;
+          return fakeResponse(new Uint8Array(), 404);
+        },
+        async () => [{ address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 }],
+      ) as never,
+    );
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    expect(requestCalls).toBe(1);
   });
 
   it("rejects a hop if any resolved address is non-public", async () => {
@@ -344,16 +369,37 @@ describe("RemoteImageResolver content boundary", () => {
     const rootFile = path.join(root, "not-a-directory");
     await writeFile(rootFile, "file");
     const png = await imageFixture(root, "png");
+    const response = fakeResponse(png, 200, { "content-type": "image/png" });
     const resolver = new RemoteImageResolver(
       resolverOptions(
         rootFile,
-        async () => fakeResponse(png, 200, { "content-type": "image/png" }),
+        async () => response,
       ) as never,
     );
 
     await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
       "Image resolver local operation failed",
     );
+    expect(response.destroyed).toBe(true);
+  });
+
+  it("destroys the response when a local chunk write fails", async () => {
+    const root = await temporaryRoot();
+    const png = await imageFixture(root, "png");
+    const response = fakeResponse(png, 200, { "content-type": "image/png" });
+    const options = {
+      ...resolverOptions(path.join(root, "assets"), async () => response),
+      writeChunk: async () => {
+        throw new Error("simulated local disk failure");
+      },
+    };
+    const resolver = new RemoteImageResolver(options as never);
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
+      "Image resolver local operation failed",
+    );
+    expect(response.destroyed).toBe(true);
+    await expect(readdir(path.join(root, "assets"))).resolves.toEqual([]);
   });
 
   it("rethrows missing decoder configuration as a safe operational error", async () => {
@@ -371,7 +417,27 @@ describe("RemoteImageResolver content boundary", () => {
     await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
       "Image resolver configuration failed",
     );
-    expect(await stat(path.join(root, "assets"))).toBeDefined();
-    await expect(readdir(path.join(root, "assets"))).resolves.toEqual([]);
+  });
+
+  it.each([
+    ["ffmpegPath", "/usr/bin/false"],
+    ["ffmpegPath", "/usr/bin/true"],
+    ["ffprobePath", "/usr/bin/false"],
+    ["ffprobePath", "/usr/bin/true"],
+  ] as const)("rejects a wrong or nonworking %s before remote decoding", async (field, executable) => {
+    const root = await temporaryRoot();
+    const png = await imageFixture(root, "png");
+    const options = {
+      ...resolverOptions(
+        path.join(root, "assets"),
+        async () => fakeResponse(png, 200, { "content-type": "image/png" }),
+      ),
+      [field]: executable,
+    };
+    const resolver = new RemoteImageResolver(options as never);
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
+      "Image resolver configuration failed",
+    );
   });
 });
