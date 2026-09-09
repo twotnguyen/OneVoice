@@ -382,17 +382,18 @@ async function normalizeImage(
     NORMALIZATION_ARGS,
     { shell: false, cwd },
   );
-  let timedOut = false;
-  let outputExceeded = false;
+  let killReason: "normalized-size" | "stderr" | "timeout" | null = null;
   let stderrBytes = 0;
   const timer = setTimeout(() => {
-    timedOut = true;
-    child.kill("SIGKILL");
+    if (killReason === null) {
+      killReason = "timeout";
+      child.kill("SIGKILL");
+    }
   }, TIMEOUT_MS);
   child.stderr.on("data", (chunk: Buffer) => {
     stderrBytes += chunk.length;
-    if (stderrBytes > STDERR_LIMIT) {
-      outputExceeded = true;
+    if (stderrBytes > STDERR_LIMIT && killReason === null) {
+      killReason = "stderr";
       child.kill("SIGKILL");
     }
   });
@@ -410,9 +411,11 @@ async function normalizeImage(
         const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value as Uint8Array);
         bytes += chunk.length;
         if (bytes > MAX_NORMALIZED_BYTES) {
-          outputExceeded = true;
-          child.kill("SIGKILL");
-          throw new ResolverConfigurationError();
+          if (killReason === null) {
+            killReason = "normalized-size";
+            child.kill("SIGKILL");
+          }
+          break;
         }
         try {
           await writeAll(outputHandle, chunk, writeChunk);
@@ -433,7 +436,8 @@ async function normalizeImage(
       throw new RemoteContentError();
     }
     const { code, signal } = await completion;
-    if (timedOut || signal !== null || outputExceeded) {
+    if (killReason === "normalized-size") throw new RemoteContentError();
+    if (killReason !== null || signal !== null) {
       throw new ResolverConfigurationError();
     }
     if (code !== 0) throw new MediaProcessNonzeroError();

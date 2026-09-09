@@ -795,4 +795,47 @@ describe("RemoteImageResolver content boundary", () => {
       ),
     );
   });
+
+  it("returns null for cached-smoke runtime normalized-size overflow without replay", async () => {
+    const root = await temporaryRoot();
+    const executable = path.join(root, "ffmpeg-wrapper");
+    await writeFile(executable, '#!/bin/sh\nexec ffmpeg "$@"\n');
+    await chmod(executable, 0o700);
+    const png = await imageFixture(root, "png");
+    let response = fakeResponse(new Uint8Array(), 404);
+    let requestCalls = 0;
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(path.join(root, "assets"), async () => {
+        requestCalls += 1;
+        return response;
+      }),
+      ffmpegPath: executable,
+    } as never);
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+
+    const logPath = path.join(root, "overflow.log");
+    await writeFile(
+      executable,
+      `#!/usr/bin/env node
+require("node:fs").appendFileSync(${JSON.stringify(logPath)}, "call\\n");
+const chunk = Buffer.alloc(1024 * 1024);
+let remaining = 65;
+function write() {
+  while (remaining > 0) {
+    remaining -= 1;
+    if (!process.stdout.write(chunk)) {
+      process.stdout.once("drain", write);
+      return;
+    }
+  }
+}
+write();
+`,
+    );
+    response = fakeResponse(png, 200, { "content-type": "image/png" });
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    expect(requestCalls).toBe(2);
+    expect(await readFile(logPath, "utf8")).toBe("call\n");
+  });
 });
