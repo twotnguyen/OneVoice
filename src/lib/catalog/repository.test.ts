@@ -7,6 +7,195 @@ import type { Database } from "@/lib/supabase/database.types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 describe("CatalogRepository", () => {
+  it("lists only scoped, usable, in-stock laptops with a positive price", async () => {
+    const contentReadyRow: Database["public"]["Views"]["content_ready_products"]["Row"] = {
+      availability: "InStock",
+      brand: "ASUS",
+      breadcrumbs: [{ name: "Laptop", url: "https://example.com/laptop" }],
+      canonical_url: "https://example.com/laptop-asus",
+      category_name: "Laptop",
+      collected_at: "2026-08-31T00:00:00Z",
+      compare_at_price_vnd: 32_000_000,
+      completeness_score: 1,
+      created_at: "2026-08-31T00:00:00Z",
+      currency: "VND",
+      description: "<p>Raw description</p>",
+      description_text: "Raw description",
+      extractor_version: "1.0.0",
+      id: "prod-1",
+      in_stock: true,
+      name: "Laptop ASUS",
+      normalized_attributes: { cpu: "Intel Core i7" },
+      organization_id: "org-1",
+      price_vnd: 30_000_000,
+      product_type: "laptop",
+      quality: "usable",
+      sku: "LAP-01",
+      slug: "laptop-asus",
+      source_http_status: 200,
+      source_name: "Example",
+      source_product_id: "source-1",
+      source_url: "https://example.com/laptop-asus",
+      specification_count: 1,
+      specifications: [{ name: "CPU", value: "Intel Core i7" }],
+      stock_quantity: 4,
+      updated_at: "2026-08-31T00:00:00Z",
+    };
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({
+        data: [contentReadyRow],
+        count: 1,
+        error: null,
+      }),
+    };
+    const client = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient<Database>;
+    const repository = new CatalogRepository({ client });
+
+    const result = await repository.listStudioProducts(
+      { organizationId: "org-1" },
+      { page: 1, pageSize: 18 }
+    );
+
+    expect(client.from).toHaveBeenCalledWith("content_ready_products");
+    expect(query.eq).toHaveBeenCalledWith("organization_id", "org-1");
+    expect(query.eq).toHaveBeenCalledWith("product_type", "laptop");
+    expect(query.eq).toHaveBeenCalledWith("quality", "usable");
+    expect(query.eq).toHaveBeenCalledWith("in_stock", true);
+    expect(query.gt).toHaveBeenCalledWith("price_vnd", 0);
+    expect(query.order).toHaveBeenCalledWith("price_vnd", {
+      ascending: false,
+      nullsFirst: false,
+    });
+    expect(query.range).toHaveBeenCalledWith(0, 17);
+    expect(result.items[0]).toEqual({
+      id: "prod-1",
+      name: "Laptop ASUS",
+      sku: "LAP-01",
+      brand: "ASUS",
+      priceVnd: 30_000_000,
+      currency: "VND",
+      stockQuantity: 4,
+      collectedAt: "2026-08-31T00:00:00Z",
+    });
+    expect(result).toMatchObject({ total: 1, page: 1, pageSize: 18, totalPages: 1 });
+  });
+
+  it("returns an organization-scoped snapshot with only allow-listed facts", async () => {
+    const specifications = Array.from({ length: 10 }, (_, index) => ({
+      name: `Specification ${index + 1}`,
+      value: `Value ${index + 1}`,
+    }));
+    const contentContextRow: Database["public"]["Views"]["product_content_context"]["Row"] = {
+      active_promotions: [{ label: "Raw promotion" }],
+      brand: "ASUS",
+      collected_at: "2026-08-31T00:00:00Z",
+      compare_at_price: 32_000_000,
+      completeness_score: 1,
+      current_price: 30_000_000,
+      in_stock: true,
+      is_data_stale: false,
+      name: "Laptop ASUS",
+      normalized_attributes: { unsafe: "arbitrary JSON" },
+      organization_id: "org-1",
+      primary_image_url: "https://example.com/laptop.jpg",
+      product_id: "prod-1",
+      product_type: "laptop",
+      quality: "usable",
+      sku: "LAP-01",
+      specifications,
+      stock_quantity: 4,
+    };
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: contentContextRow, error: null }),
+    };
+    const client = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient<Database>;
+    const repository = new CatalogRepository({ client });
+
+    const snapshot = await repository.getProductSnapshot(
+      { organizationId: "org-1" },
+      "prod-1"
+    );
+
+    expect(client.from).toHaveBeenCalledWith("product_content_context");
+    expect(query.eq).toHaveBeenCalledWith("product_id", "prod-1");
+    expect(query.eq).toHaveBeenCalledWith("organization_id", "org-1");
+    expect(snapshot).toEqual({
+      productId: "prod-1",
+      organizationId: "org-1",
+      name: "Laptop ASUS",
+      sku: "LAP-01",
+      brand: "ASUS",
+      priceVnd: 30_000_000,
+      currency: "VND",
+      stockQuantity: 4,
+      collectedAt: "2026-08-31T00:00:00Z",
+      primaryImageUrl: "https://example.com/laptop.jpg",
+      facts: [
+        { ref: "product.name", label: "Product", value: "Laptop ASUS", critical: true },
+        { ref: "product.sku", label: "SKU", value: "LAP-01", critical: true },
+        { ref: "offer.price", label: "Price", value: "30000000 VND", critical: true },
+        { ref: "inventory.stock", label: "Stock", value: "4", critical: true },
+        ...specifications.slice(0, 8).map((specification, index) => ({
+          ref: `spec.${index}`,
+          label: specification.name,
+          value: specification.value,
+          critical: true,
+        })),
+      ],
+    });
+    expect(snapshot?.facts).toHaveLength(12);
+    expect(snapshot).not.toHaveProperty("description");
+    expect(snapshot).not.toHaveProperty("source_payload");
+    expect(snapshot).not.toHaveProperty("breadcrumbs");
+    expect(snapshot).not.toHaveProperty("normalizedAttributes");
+  });
+
+  it.each([null, 0])("returns no snapshot when price is %s", async (currentPrice) => {
+    const contentContextRow: Database["public"]["Views"]["product_content_context"]["Row"] = {
+      active_promotions: null,
+      brand: "ASUS",
+      collected_at: "2026-08-31T00:00:00Z",
+      compare_at_price: null,
+      completeness_score: 1,
+      current_price: currentPrice,
+      in_stock: true,
+      is_data_stale: false,
+      name: "Laptop ASUS",
+      normalized_attributes: null,
+      organization_id: "org-1",
+      primary_image_url: null,
+      product_id: "prod-1",
+      product_type: "laptop",
+      quality: "usable",
+      sku: "LAP-01",
+      specifications: [],
+      stock_quantity: 4,
+    };
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: contentContextRow, error: null }),
+    };
+    const client = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient<Database>;
+    const repository = new CatalogRepository({ client });
+
+    await expect(
+      repository.getProductSnapshot({ organizationId: "org-1" }, "prod-1")
+    ).resolves.toBeNull();
+  });
+
   it("filters and paginates products correctly", async () => {
     const mockQueryBuilder: Record<string, unknown> = {
       select: vi.fn().mockReturnThis(),
