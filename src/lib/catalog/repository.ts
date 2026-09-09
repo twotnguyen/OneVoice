@@ -1,0 +1,293 @@
+// SPDX-License-Identifier: Apache-2.0
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import type { Database } from "@/lib/supabase/database.types";
+import type {
+  CatalogPagination,
+  CatalogQueryFilters,
+  CatalogQuerySort,
+  PaginatedResult,
+  ProductContentContext,
+  ProductDetail,
+} from "./types";
+
+export interface CatalogRepositoryOptions {
+  client: SupabaseClient<Database>;
+  defaultOrganizationId?: string;
+}
+
+export class CatalogRepository {
+  private readonly client: SupabaseClient<Database>;
+  private readonly defaultOrgId: string;
+
+  constructor(options: CatalogRepositoryOptions) {
+    this.client = options.client;
+    this.defaultOrgId =
+      options.defaultOrganizationId ?? "a0000000-0000-0000-0000-000000000001";
+  }
+
+  async listProducts(
+    filters: CatalogQueryFilters = {},
+    sort: CatalogQuerySort = {},
+    pagination: CatalogPagination = {}
+  ): Promise<PaginatedResult<Database["public"]["Tables"]["products"]["Row"]>> {
+    const page = Math.max(1, pagination.page ?? 1);
+    const pageSize = Math.max(1, Math.min(100, pagination.pageSize ?? 20));
+    const offset = (page - 1) * pageSize;
+
+    let query = this.client
+      .from("products")
+      .select("*", { count: "exact" });
+
+    const orgId = filters.organizationId ?? this.defaultOrgId;
+    query = query.eq("organization_id", orgId);
+
+    if (filters.search && filters.search.trim()) {
+      const term = filters.search.trim();
+      query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%`);
+    }
+
+    if (filters.brand) {
+      query = query.eq("brand", filters.brand);
+    }
+
+    if (filters.productType) {
+      query = query.eq("product_type", filters.productType);
+    }
+
+    if (filters.quality) {
+      query = query.eq("quality", filters.quality);
+    }
+
+    if (typeof filters.inStock === "boolean") {
+      query = query.eq("in_stock", filters.inStock);
+    }
+
+    if (typeof filters.minPrice === "number") {
+      query = query.gte("price_vnd", filters.minPrice);
+    }
+
+    if (typeof filters.maxPrice === "number") {
+      query = query.lte("price_vnd", filters.maxPrice);
+    }
+
+    const sortField = sort.field ?? "created_at";
+    const ascending = sort.direction === "asc";
+    query = query.order(sortField, { ascending, nullsFirst: false });
+
+    query = query.range(offset, offset + pageSize - 1);
+
+    const { data, count, error } = await query;
+    if (error) {
+      throw new Error(`Failed to list products: ${error.message}`);
+    }
+
+    const total = count ?? 0;
+    return {
+      data: data ?? [],
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async getProductDetail(id: string): Promise<ProductDetail | null> {
+    const { data: product, error: prodErr } = await this.client
+      .from("products")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (prodErr || !product) {
+      return null;
+    }
+
+    const [imagesRes, variantsRes, catMapRes, promoMapRes] = await Promise.all([
+      this.client
+        .from("product_images")
+        .select("*")
+        .eq("product_id", id)
+        .order("position", { ascending: true }),
+      this.client
+        .from("product_variants")
+        .select("*")
+        .eq("product_id", id),
+      this.client
+        .from("product_categories")
+        .select("is_primary, category:categories(id, name, slug)")
+        .eq("product_id", id),
+      this.client
+        .from("active_product_promotions")
+        .select("*")
+        .eq("product_id", id),
+    ]);
+
+    const categories = (catMapRes.data ?? [])
+      .map((entry) => {
+        const cat = entry.category as { id: string; name: string; slug: string | null } | null;
+        if (!cat) return null;
+        return {
+          id: cat.id,
+          name: cat.name,
+          slug: cat.slug,
+          isPrimary: entry.is_primary,
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => Boolean(c));
+
+    const activePromotions = (promoMapRes.data ?? []).map((p) => ({
+      id: p.promotion_id ?? "",
+      sourceCode: p.source_code,
+      label: p.label ?? "",
+      discountType: p.discount_type,
+      discountValue: p.discount_value,
+      startsAt: p.starts_at,
+      expiresAt: p.expires_at,
+      isFlashSale: p.is_flash_sale ?? false,
+    }));
+
+    return {
+      id: product.id,
+      organizationId: product.organization_id,
+      sourceName: product.source_name,
+      sourceUrl: product.source_url,
+      canonicalUrl: product.canonical_url,
+      sourceProductId: product.source_product_id,
+      slug: product.slug,
+      sku: product.sku,
+      name: product.name,
+      brand: product.brand,
+      productType: product.product_type,
+      categoryName: product.category_name,
+      description: product.description,
+      descriptionText: product.description_text,
+      priceVnd: product.price_vnd,
+      compareAtPriceVnd: product.compare_at_price_vnd,
+      currency: product.currency,
+      availability: product.availability,
+      inStock: product.in_stock,
+      stockQuantity: product.stock_quantity,
+      quality: product.quality as ProductDetail["quality"],
+      completenessScore: product.completeness_score,
+      specificationCount: product.specification_count,
+      collectedAt: product.collected_at,
+      extractorVersion: product.extractor_version,
+      sourceHttpStatus: product.source_http_status,
+      normalizedAttributes: product.normalized_attributes as Record<string, unknown> | null,
+      specifications: product.specifications as unknown[] | null,
+      breadcrumbs: product.breadcrumbs as unknown[] | null,
+      images: (imagesRes.data ?? []).map((img) => ({
+        id: img.id,
+        sourceUrl: img.source_url,
+        position: img.position,
+        isPrimary: img.is_primary,
+        altText: img.alt_text,
+      })),
+      variants: (variantsRes.data ?? []).map((v) => ({
+        id: v.id,
+        sourceVariantId: v.source_variant_id,
+        sku: v.sku,
+        name: v.name,
+        priceVnd: v.price_vnd,
+        compareAtPriceVnd: v.compare_at_price_vnd,
+        inStock: v.in_stock,
+        stockQuantity: v.stock_quantity,
+        options: v.options as Record<string, unknown> | null,
+        imageUrl: v.image_url,
+      })),
+      categories,
+      activePromotions,
+    };
+  }
+
+  async getContentReadyProducts(
+    pagination: CatalogPagination = {}
+  ): Promise<PaginatedResult<Database["public"]["Views"]["content_ready_products"]["Row"]>> {
+    const page = Math.max(1, pagination.page ?? 1);
+    const pageSize = Math.max(1, Math.min(100, pagination.pageSize ?? 20));
+    const offset = (page - 1) * pageSize;
+
+    const { data, count, error } = await this.client
+      .from("content_ready_products")
+      .select("*", { count: "exact" })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Failed to get content-ready products: ${error.message}`);
+    }
+
+    const total = count ?? 0;
+    return {
+      data: data ?? [],
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async getRandomContentReadyProduct(): Promise<Database["public"]["Views"]["content_ready_products"]["Row"] | null> {
+    const { count, error: countErr } = await this.client
+      .from("content_ready_products")
+      .select("*", { count: "exact", head: true });
+
+    if (countErr || !count || count === 0) {
+      return null;
+    }
+
+    const randomIndex = Math.floor(Math.random() * count);
+    const { data, error } = await this.client
+      .from("content_ready_products")
+      .select("*")
+      .range(randomIndex, randomIndex)
+      .limit(1);
+
+    if (error || !data || data.length === 0) {
+      return null;
+    }
+
+    return data[0];
+  }
+
+  async getProductContentContext(productId: string): Promise<ProductContentContext | null> {
+    const { data, error } = await this.client
+      .from("product_content_context")
+      .select("*")
+      .eq("product_id", productId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return {
+      productId: data.product_id ?? productId,
+      organizationId: data.organization_id,
+      name: data.name,
+      sku: data.sku,
+      brand: data.brand,
+      productType: data.product_type,
+      currentPrice: data.current_price,
+      compareAtPrice: data.compare_at_price,
+      inStock: data.in_stock,
+      stockQuantity: data.stock_quantity,
+      primaryImageUrl: data.primary_image_url,
+      normalizedAttributes: data.normalized_attributes as Record<string, unknown> | null,
+      specifications: data.specifications as unknown[] | null,
+      activePromotions: (data.active_promotions as Array<{
+        code: string | null;
+        label: string;
+        discount_type: string | null;
+        discount_value: number | null;
+        expires_at: string | null;
+        is_flash_sale: boolean;
+      }>) ?? [],
+      quality: data.quality,
+      completenessScore: data.completeness_score,
+      collectedAt: data.collected_at,
+      isDataStale: data.is_data_stale,
+    };
+  }
+}

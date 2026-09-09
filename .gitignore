@@ -1,0 +1,161 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# -----------------------------------------------------------------------------
+# Dependencies and package-manager caches
+# -----------------------------------------------------------------------------
+/node_modules/
+.pnp
+.pnp.*
+.yarn/cache/
+.yarn/install-state.gz
+.pnpm-store/
+
+# -----------------------------------------------------------------------------
+# Build output, test output and generated caches
+# -----------------------------------------------------------------------------
+/.next/
+/out/
+/dist/
+/build/
+/coverage/
+/.turbo/
+/.vitest/
+/.vercel/
+/test-results/
+/playwright-report/
+/blob-report/
+*.tsbuildinfo
+
+# Generated media can be recreated by the content/video pipeline
+/renders/
+/exports/
+/generated-media/
+/uploads/
+/public/uploads/
+/storage/
+/volumes/
+
+# Large generated media and archives belong in object storage or Git LFS
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+*.wav
+*.flac
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+
+# Temporary working files
+/tmp/
+/temp/
+*.tmp
+*.temp
+*.cache
+
+# -----------------------------------------------------------------------------
+# Environment variables, API keys and credentials
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.*.example
+.envrc
+.direnv/
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Common cloud/provider credential exports
+credentials.json
+credentials.*.json
+service-account.json
+service-account.*.json
+secrets.json
+secrets.*.json
+*.credentials.json
+*.secret.json
+oauth-credentials*.json
+firebase-adminsdk*.json
+.secrets/
+.credentials/
+.sentryclirc
+
+# Local-only configuration that may contain tokens
+*.local
+.npmrc.local
+compose.override.yaml
+compose.override.yml
+
+# -----------------------------------------------------------------------------
+# Supabase local state
+# Keep config.toml, migrations and seed.sql under version control.
+# -----------------------------------------------------------------------------
+/supabase/.branches/
+/supabase/.temp/
+/supabase/.env
+/supabase/.env.*
+
+# Local databases and dumps
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.dump
+*.bak
+
+# -----------------------------------------------------------------------------
+# Large/local datasets
+# The complete data directory stays local and is not stored in Git.
+# -----------------------------------------------------------------------------
+/data/
+
+# -----------------------------------------------------------------------------
+# Logs and runtime state
+# -----------------------------------------------------------------------------
+*.log
+*.log.*
+pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.pid
+*.pid.lock
+
+# -----------------------------------------------------------------------------
+# Editors and operating systems
+# -----------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.example.json
+
+# -----------------------------------------------------------------------------
+# Local AI/model artifacts
+# Model weights must be fetched separately, not stored in Git.
+# -----------------------------------------------------------------------------
+/models/
+/.cache/
+*.safetensors
+*.ckpt
+*.onnx
+*.gguf
+*.pth
+*.pt
+
+references/

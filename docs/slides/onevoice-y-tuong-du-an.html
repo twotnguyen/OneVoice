@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>OneVoice — Hệ điều hành marketing đến đơn hàng</title>
+  <style>
+    :root {
+      --navy: #0b2138; --navy-2: #102b48; --ink: #14263b; --muted: #667789;
+      --paper: #f3f6f9; --white: #ffffff; --line: rgba(20, 38, 59, .14);
+      --blue: #315fd2; --cyan: #28b3b8; --orange: #f1783b; --red: #d6554c; --green: #17866b;
+      --font: "Avenir Next", Avenir, "Helvetica Neue", Arial, sans-serif;
+      --mono: Menlo, Monaco, "Courier New", monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #061525; color: var(--ink); font-family: var(--font); }
+    button { font: inherit; }
+    #stage { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 15% 10%, rgba(49, 95, 210, .22), transparent 32%), #061525; }
+    #deck { position: relative; width: 1280px; height: 720px; overflow: hidden; transform-origin: center center; background: var(--paper); box-shadow: 0 26px 84px rgba(0, 0, 0, .3); }
+    .slide { position: absolute; inset: 0; display: none; padding: 56px 72px 54px; overflow: hidden; isolation: isolate; background: var(--paper); }
+    .slide.is-active { display: block; }
+    .slide::before { content: ""; position: absolute; inset: 0; z-index: -2; background-image: linear-gradient(rgba(20, 38, 59, .036) 1px, transparent 1px), linear-gradient(90deg, rgba(20, 38, 59, .036) 1px, transparent 1px); background-size: 40px 40px; mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, .45) 72%, transparent 96%); }
+    .dark { color: #f4f8fb; background: var(--navy); }
+    .dark::before { background-image: linear-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .045) 1px, transparent 1px); }
+    .slide-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; margin-bottom: 26px; }
+    .section-name { margin: 0 0 10px; color: var(--blue); font-size: 15px; font-weight: 700; }
+    .dark .section-name { color: #8adce1; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 0; font-size: 70px; line-height: 1; letter-spacing: -.052em; font-weight: 760; text-wrap: balance; }
+    h2 { max-width: 920px; margin-bottom: 0; font-size: 43px; line-height: 1.06; letter-spacing: -.04em; font-weight: 740; text-wrap: balance; }
+    h3 { margin-bottom: 8px; font-size: 23px; line-height: 1.2; letter-spacing: -.02em; }
+    p { font-size: 20px; line-height: 1.43; }
+    .lede { max-width: 900px; color: var(--muted); font-size: 24px; line-height: 1.42; }
+    .dark .lede { color: rgba(244, 248, 251, .72); }
+    .page-no { color: var(--muted); font: 14px/1 var(--mono); white-space: nowrap; }
+    .dark .page-no { color: rgba(255, 255, 255, .55); }
+    .mono { font-family: var(--mono); } .blue { color: var(--blue); } .orange { color: var(--orange); } .green { color: var(--green); }
+    .signal-rail { position: absolute; left: 72px; right: 72px; bottom: 28px; height: 8px; border-top: 2px solid var(--line); }
+    .dark .signal-rail { border-color: rgba(255, 255, 255, .18); }
+    .signal-rail::before { content: ""; position: absolute; top: -2px; left: 0; width: var(--progress, 8%); height: 2px; background: var(--orange); }
+    .signal-rail::after { content: ""; position: absolute; top: -6px; left: calc(var(--progress, 8%) - 5px); width: 10px; height: 10px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 5px rgba(241, 120, 59, .17); }
+    .source { position: absolute; left: 72px; bottom: 41px; color: var(--muted); font-size: 12px; }
+    .dark .source { color: rgba(255, 255, 255, .5); }
+
+    /* Cover */
+    .cover { padding: 70px 78px; color: #f5f9fc; background: var(--navy); }
+    .cover::after { content: ""; position: absolute; right: -120px; top: -180px; width: 700px; height: 700px; border: 118px solid rgba(40, 179, 184, .13); border-radius: 50%; z-index: -1; }
+    .cover-label { display: flex; align-items: center; gap: 15px; margin-bottom: 116px; font-size: 17px; font-weight: 650; }
+    .pulse { display: flex; gap: 6px; } .pulse i { display: block; width: 14px; height: 4px; border-radius: 4px; background: #8adce1; }
+    .cover h1 { font-size: 86px; }
+    .cover .subtitle { max-width: 760px; margin-top: 22px; color: rgba(245, 249, 252, .76); font-size: 28px; line-height: 1.35; }
+    .cover-path { position: absolute; left: 78px; bottom: 72px; display: flex; align-items: center; gap: 16px; color: rgba(255, 255, 255, .7); font: 15px/1 var(--mono); }
+    .cover-path i { width: 46px; height: 2px; background: var(--cyan); }
+
+    /* Business islands */
+    .islands { position: relative; height: 424px; margin-top: 4px; }
+    .island { position: absolute; width: 250px; padding: 17px 20px 18px; background: rgba(255, 255, 255, .84); border-left: 5px solid var(--blue); box-shadow: 0 14px 35px rgba(15, 41, 67, .1); }
+    .island h3 { font-size: 21px; } .island p { margin: 0; color: var(--muted); font-size: 17px; line-height: 1.34; }
+    .island.a { left: 0; top: 34px; transform: rotate(-1deg); } .island.b { left: 314px; top: 130px; transform: rotate(1deg); }
+    .island.c { left: 630px; top: 22px; transform: rotate(-.7deg); } .island.d { right: 0; top: 112px; transform: rotate(1.2deg); }
+    .island.e { left: 164px; bottom: 0; transform: rotate(.5deg); } .island.f { right: 172px; bottom: 2px; transform: rotate(-.6deg); }
+    .break-line { position: absolute; left: 430px; top: 245px; width: 405px; border-top: 2px dashed rgba(214, 85, 76, .48); color: var(--red); font: 15px/1 var(--mono); text-align: center; }
+    .break-line span { position: relative; top: -10px; padding: 0 13px; background: var(--paper); }
+
+    /* Main gap */
+    .gap-stage { display: grid; grid-template-columns: 1fr 210px 1fr; align-items: center; height: 400px; }
+    .gap-side { padding: 42px 28px; } .gap-side:first-child { border-top: 5px solid var(--blue); } .gap-side:last-child { border-top: 5px solid var(--orange); }
+    .gap-side .big { margin-bottom: 10px; font-size: 40px; line-height: 1.08; font-weight: 750; letter-spacing: -.04em; }
+    .gap-side p { color: var(--muted); font-size: 19px; }
+    .gap-hole { position: relative; height: 230px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+    .gap-hole::before { content: "×"; position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; color: white; background: var(--red); font-size: 31px; transform: translate(-50%, -50%); }
+    .gap-label { position: absolute; left: 0; right: 0; bottom: 35px; color: var(--red); font: 14px/1.3 var(--mono); text-align: center; }
+
+    /* Closed loop */
+    .loop { position: relative; height: 380px; margin-top: 14px; }
+    .loop-line { position: absolute; left: 42px; right: 42px; top: 142px; height: 4px; background: rgba(49, 95, 210, .2); }
+    .loop-line::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 84%; background: var(--blue); }
+    .loop-nodes { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 18px; }
+    .loop-node { position: relative; padding-top: 112px; }
+    .loop-node::before { content: ""; position: absolute; top: 129px; width: 22px; height: 22px; border-radius: 50%; background: var(--navy); border: 6px solid #7d9cf0; transform: translateX(2px); }
+    .loop-node:last-child::before { border-color: var(--orange); }
+    .loop-node h3 { margin-top: 58px; font-size: 19px; } .loop-node p { margin: 0; color: rgba(244, 248, 251, .62); font-size: 15px; line-height: 1.35; }
+    .learning-loop { position: absolute; right: 26px; bottom: -8px; width: 338px; padding: 13px 18px; border: 1px solid rgba(255, 255, 255, .18); color: rgba(244, 248, 251, .66); font-size: 16px; }
+    .learning-loop b { color: white; }
+
+    /* Opportunity */
+    .opportunity { display: grid; grid-template-columns: .88fr 1.12fr; gap: 70px; align-items: center; height: 410px; }
+    .stock-signal { position: relative; padding-left: 104px; }
+    .stock-signal .fifteen { font-size: 140px; line-height: .8; font-weight: 760; letter-spacing: -.08em; color: var(--blue); }
+    .stock-signal .unit { margin: 20px 0 0 8px; color: var(--muted); font-size: 21px; }
+    .deadline { position: absolute; left: 0; top: 30px; width: 82px; height: 82px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--orange); font: 700 17px/1.05 var(--font); text-align: center; }
+    .reason { padding-left: 32px; border-left: 2px solid var(--line); } .reason h3 { font-size: 28px; } .reason p { color: var(--muted); }
+    .reason .proposal { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--ink); font-size: 22px; font-weight: 600; }
+    .modes { display: flex; gap: 32px; margin-top: 26px; color: var(--muted); font-size: 16px; } .modes b { color: var(--blue); }
+
+    /* Video factory */
+    .factory { display: grid; grid-template-columns: 1fr 230px 1fr; align-items: center; gap: 34px; height: 410px; }
+    .input-list { border-top: 2px solid var(--blue); }
+    .input-row { display: grid; grid-template-columns: 122px 1fr; gap: 18px; padding: 17px 0; border-bottom: 1px solid var(--line); }
+    .input-row b { color: var(--blue); font: 15px/1.4 var(--mono); } .input-row span { color: var(--muted); font-size: 18px; }
+    .engine { display: grid; place-items: center; width: 220px; height: 220px; border-radius: 50%; color: white; background: var(--navy-2); text-align: center; box-shadow: 0 0 0 12px rgba(49, 95, 210, .08); }
+    .engine strong { display: block; font-size: 25px; } .engine small { display: block; margin-top: 8px; color: rgba(255, 255, 255, .65); font-size: 14px; }
+    .video-frame { justify-self: end; width: 240px; height: 370px; padding: 20px; border: 10px solid #102943; border-radius: 32px; color: white; background: linear-gradient(155deg, #21486e, #081a2d 75%); box-shadow: 0 18px 35px rgba(9, 31, 55, .2); }
+    .laptop-art { position: relative; height: 145px; margin-top: 18px; }
+    .laptop-art::before { content: ""; position: absolute; left: 24px; top: 14px; width: 142px; height: 89px; border: 4px solid #7ccfd5; transform: skewY(-5deg); background: linear-gradient(135deg, #386fd9, #193861); }
+    .laptop-art::after { content: ""; position: absolute; left: 15px; top: 110px; width: 165px; height: 15px; background: #9ab0bd; clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%); }
+    .video-frame h3 { margin-bottom: 10px; font-size: 21px; } .video-frame p { margin-bottom: 14px; color: rgba(255, 255, 255, .68); font: 14px/1.45 var(--mono); } .video-frame b { color: #ff9c65; font-size: 16px; }
+
+    /* Truth Guard */
+    .guard-scene { display: grid; grid-template-columns: 1fr 150px 1fr; align-items: center; gap: 36px; height: 326px; margin-top: 4px; }
+    .price-version { padding: 34px; border-top: 5px solid var(--blue); background: rgba(255, 255, 255, .75); } .price-version.current { border-color: var(--green); }
+    .price-version .stamp { color: var(--muted); font: 14px/1 var(--mono); } .price-version .price { margin: 22px 0 10px; font-size: 52px; font-weight: 760; letter-spacing: -.05em; } .price-version p { margin: 0; color: var(--muted); font-size: 17px; }
+    .guard-stop { display: grid; place-items: center; width: 126px; height: 126px; border-radius: 50%; color: white; background: var(--red); box-shadow: 0 0 0 16px rgba(214, 85, 76, .12); font-size: 50px; font-weight: 700; }
+    .guard-result { margin-top: 8px; padding: 15px 24px; border-left: 5px solid var(--red); background: rgba(214, 85, 76, .08); font-size: 19px; }
+    .guard-checks { margin-top: 12px; color: var(--muted); font: 13px/1.35 var(--mono); text-align: center; }
+
+    /* Conversation */
+    .conversation { display: grid; grid-template-columns: .9fr 1.1fr; gap: 54px; align-items: center; height: 408px; }
+    .chat { padding: 24px; border: 1px solid rgba(255, 255, 255, .17); background: rgba(255, 255, 255, .035); } .chat-title { margin-bottom: 18px; color: #8adce1; font-size: 18px; font-weight: 700; }
+    .bubble { max-width: 88%; margin: 10px 0; padding: 13px 15px; font-size: 16px; line-height: 1.4; } .bubble.customer { margin-left: auto; background: var(--blue); } .bubble.ai { color: rgba(255, 255, 255, .85); background: rgba(255, 255, 255, .09); }
+    .evidence { margin-top: 14px; padding: 13px 15px; border-left: 3px solid var(--cyan); color: rgba(255, 255, 255, .6); font: 12px/1.5 var(--mono); }
+    .draft-order { padding: 30px 34px; color: var(--ink); background: #f7f9fb; } .draft-order .order-state { float: right; color: var(--orange); font: 13px/1 var(--mono); } .draft-order h3 { font-size: 28px; }
+    .order-row { display: grid; grid-template-columns: 140px 1fr; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 17px; } .order-row span { color: var(--muted); }
+    .confirm-note { margin-top: 20px; color: var(--green); font-size: 17px; font-weight: 650; } .human-note { margin-top: 14px; color: rgba(255, 255, 255, .56); font-size: 13px; }
+
+    /* Passport */
+    .passport { display: grid; grid-template-columns: 310px 1fr; gap: 58px; align-items: center; height: 400px; }
+    .passport-cover { padding: 30px 28px; color: white; background: var(--navy-2); border-top: 8px solid var(--cyan); }
+    .passport-cover .code { color: #8adce1; font: 14px/1 var(--mono); } .passport-cover h3 { margin: 32px 0 12px; font-size: 32px; } .passport-cover p { color: rgba(255, 255, 255, .68); font-size: 17px; }
+    .passport-cover .revenue { margin-top: 34px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, .18); color: #ff9c65; font-size: 18px; font-weight: 700; }
+    .lineage { position: relative; padding-left: 40px; } .lineage::before { content: ""; position: absolute; left: 11px; top: 12px; bottom: 12px; width: 2px; background: rgba(49, 95, 210, .28); }
+    .lineage-row { position: relative; display: grid; grid-template-columns: 145px 1fr; gap: 28px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+    .lineage-row::before { content: ""; position: absolute; left: -35px; top: 20px; width: 14px; height: 14px; border-radius: 50%; background: var(--paper); border: 4px solid var(--blue); }
+    .lineage-row:last-child::before { border-color: var(--orange); } .lineage-row b { font-size: 18px; } .lineage-row span { color: var(--muted); font-size: 17px; }
+
+    /* DX-OS */
+    .hpdi { display: grid; grid-template-columns: 160px 1fr; gap: 30px; height: 395px; align-items: stretch; }
+    .hpdi-letters { display: grid; grid-template-rows: repeat(4, 1fr); color: rgba(49, 95, 210, .1); font-size: 72px; line-height: 1; font-weight: 800; text-align: center; }
+    .hpdi-rows { display: grid; grid-template-rows: repeat(4, 1fr); } .hpdi-row { display: grid; grid-template-columns: 190px 1fr; gap: 24px; align-items: center; border-bottom: 1px solid var(--line); }
+    .hpdi-row b { font-size: 20px; } .hpdi-row span { color: var(--muted); font-size: 18px; } .open-core { position: absolute; right: 72px; bottom: 63px; color: var(--blue); font: 13px/1 var(--mono); }
+
+    /* MVP */
+    .mvp { display: grid; grid-template-columns: .92fr 1.08fr; gap: 68px; height: 420px; } .mvp-scope { padding-top: 4px; }
+    .scope-row { display: grid; grid-template-columns: 26px 1fr; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 18px; }
+    .scope-row i { width: 12px; height: 12px; margin-top: 6px; border-radius: 50%; background: var(--green); }
+    .demo-strip { padding-left: 32px; border-left: 2px solid var(--line); } .demo-strip h3 { margin-bottom: 14px; font-size: 25px; }
+    .demo-step { display: grid; grid-template-columns: 38px 1fr; gap: 14px; padding: 9px 0; } .demo-step b { color: var(--orange); font: 15px/1.5 var(--mono); } .demo-step span { color: var(--muted); font-size: 17px; } .later-note { margin-top: 13px; color: var(--muted); font-size: 14px; }
+
+    /* Close */
+    .closing { display: grid; grid-template-columns: 1.08fr .92fr; gap: 76px; align-items: center; height: 520px; }
+    .closing h2 { max-width: 680px; font-size: 55px; } .closing .definition { max-width: 650px; margin-top: 26px; color: rgba(255, 255, 255, .72); font-size: 21px; line-height: 1.5; }
+    .asks { padding-left: 38px; border-left: 1px solid rgba(255, 255, 255, .2); } .asks h3 { color: #8adce1; font-size: 22px; }
+    .ask { padding: 17px 0; border-bottom: 1px solid rgba(255, 255, 255, .15); font-size: 18px; line-height: 1.4; }
+    .closing-tag { margin-top: 24px; color: #ff9c65; font: 14px/1.4 var(--mono); }
+
+    /* Controls */
+    .controls { position: fixed; right: 48px; bottom: 18px; display: flex; gap: 8px; z-index: 100; }
+    .controls button { width: 42px; height: 42px; border: 1px solid rgba(255, 255, 255, .22); border-radius: 50%; color: white; background: rgba(6, 21, 37, .8); cursor: pointer; backdrop-filter: blur(9px); }
+    .controls button:hover, .controls button:focus-visible { outline: none; border-color: #8adce1; box-shadow: 0 0 0 3px rgba(138, 220, 225, .2); }
+    #slideCount { position: fixed; left: 18px; bottom: 18px; z-index: 100; padding: 9px 13px; border: 1px solid rgba(255, 255, 255, .18); border-radius: 22px; color: white; background: rgba(6, 21, 37, .8); font: 13px/1 var(--mono); backdrop-filter: blur(9px); }
+    #notesPanel { position: fixed; left: 50%; bottom: 18px; z-index: 101; display: none; width: min(760px, calc(100vw - 410px)); max-height: 120px; padding: 14px 18px; overflow: auto; transform: translateX(-50%); border: 1px solid rgba(255, 255, 255, .2); color: white; background: rgba(6, 21, 37, .94); font-size: 14px; line-height: 1.4; }
+    #notesPanel.is-visible { display: block; }
+    #overview { position: fixed; inset: 0; z-index: 200; display: none; grid-template-columns: repeat(4, 1fr); gap: 18px; padding: 28px; overflow: auto; background: #07192a; }
+    #overview.is-visible { display: grid; }
+    .thumb { position: relative; height: 166px; padding: 0; overflow: hidden; border: 1px solid rgba(255, 255, 255, .25); background: var(--paper); cursor: pointer; }
+    .thumb:hover, .thumb:focus-visible { outline: 3px solid var(--cyan); } .thumb-inner { width: 1280px; height: 720px; transform: scale(.18); transform-origin: top left; pointer-events: none; }
+    @media (prefers-reduced-motion: no-preference) { .is-active .reveal { animation: reveal .42s ease both; } .is-active .delay-1 { animation-delay: .1s; } .is-active .delay-2 { animation-delay: .2s; } @keyframes reveal { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } } }
+    @media print { html, body { overflow: visible; background: white; } #stage { position: static; display: block; background: white; } #deck { width: 1280px; height: auto; overflow: visible; transform: none !important; box-shadow: none; } .slide { position: relative; display: block !important; width: 1280px; height: 720px; page-break-after: always; } .controls, #slideCount, #notesPanel, #overview { display: none !important; } }
+  </style>
+</head>
+<body>
+  <main id="stage">
+    <div id="deck">
+      <section class="slide cover is-active" data-notes="Mở đầu khoảng 20 giây. OneVoice là tên tạm. Nhấn mạnh đây là đề xuất để xin góp ý về bài toán, phạm vi MVP và cơ hội kết nối một cửa hàng thử nghiệm.">
+        <div class="cover-label"><span class="pulse" aria-hidden="true"><i></i><i></i><i></i></span><span>Đề xuất dự án DX-OS 2026</span></div>
+        <h1 class="reveal">OneVoice</h1>
+        <p class="subtitle reveal delay-1">Hệ điều hành marketing đến đơn hàng cho doanh nghiệp Việt Nam</p>
+        <div class="cover-path reveal delay-2"><span>Tín hiệu kinh doanh</span><i></i><span>Nội dung</span><i></i><span>Đơn hàng</span></div>
+      </section>
+
+      <section class="slide" style="--progress:16.7%" data-notes="Dùng cửa hàng máy tính làm bối cảnh. Vấn đề không phải thiếu phần mềm. Vấn đề là các công cụ không chia sẻ cùng một nguồn dữ liệu và cùng một hành trình khách hàng.">
+        <header class="slide-head"><div><p class="section-name">Bài toán doanh nghiệp</p><h2>Dữ liệu cửa hàng đang nằm ở nhiều “ốc đảo”</h2></div><span class="page-no">02 / 12</span></header>
+        <div class="islands reveal"><article class="island a"><h3>Danh mục sản phẩm</h3><p>Cấu hình và hình ảnh nằm trong sheet hoặc website</p></article><article class="island b"><h3>Tồn kho</h3><p>Nhân viên phải kiểm tra thủ công trước khi tư vấn</p></article><article class="island c"><h3>Nội dung</h3><p>Mỗi ngày lại nghĩ xem nên quảng bá sản phẩm nào</p></article><article class="island d"><h3>Mạng xã hội</h3><p>Bài đăng và lịch đăng nằm ở nhiều nơi</p></article><article class="island e"><h3>Tin nhắn</h3><p>Khách hỏi đêm muộn dễ bị bỏ sót</p></article><article class="island f"><h3>Đơn hàng</h3><p>Không biết khách đến từ nội dung nào</p></article><div class="break-line"><span>đứt dữ liệu</span></div></div>
+        <div class="signal-rail"></div>
+      </section>
+
+      <section class="slide" style="--progress:25%" data-notes="Nêu khoảng đứt rõ nhất. Công cụ marketing biết tương tác nhưng không biết kết quả bán hàng. Hộp thư bán hàng lại không biết chiến dịch nào đã tạo ra khách.">
+        <header class="slide-head"><div><p class="section-name">Khoảng đứt chính</p><h2>Nội dung và đơn hàng không giữ được ngữ cảnh của nhau</h2></div><span class="page-no">03 / 12</span></header>
+        <div class="gap-stage reveal"><div class="gap-side"><div class="big">Đăng được,<br><span class="blue">không biết ai mua</span></div><p>Công cụ nội dung dừng ở lượt xem, lượt thích và bình luận.</p></div><div class="gap-hole"><div class="gap-label">mất nguồn chiến dịch</div></div><div class="gap-side"><div class="big">Trả lời được,<br><span class="orange">không biết khách đến từ đâu</span></div><p>Hộp thư thiếu dữ liệu của bài viết đã kéo khách vào cuộc trò chuyện.</p></div></div>
+        <div class="signal-rail"></div>
+      </section>
+
+      <section class="slide dark" style="--progress:33.3%" data-notes="Đây là định nghĩa sản phẩm. Mỗi nút là một trạng thái có dữ liệu và trách nhiệm rõ. Kết quả ở cuối quay lại giúp hệ thống đề xuất chiến dịch tiếp theo.">
+        <header class="slide-head"><div><p class="section-name">Giải pháp OneVoice</p><h2>Một vòng vận hành từ tín hiệu kinh doanh tới kết quả bán hàng</h2></div><span class="page-no">04 / 12</span></header>
+        <div class="loop reveal"><div class="loop-line"></div><div class="loop-nodes"><div class="loop-node"><h3>Tín hiệu</h3><p>Tồn kho, khuyến mãi hoặc nhu cầu</p></div><div class="loop-node"><h3>Cơ hội</h3><p>AI đề xuất lý do và mục tiêu</p></div><div class="loop-node"><h3>Nội dung</h3><p>Bài viết, hình ảnh hoặc video</p></div><div class="loop-node"><h3>Phê duyệt</h3><p>Máy soát trước, người quyết định</p></div><div class="loop-node"><h3>Hội thoại</h3><p>Giữ nguồn chiến dịch</p></div><div class="loop-node"><h3>Đơn hàng</h3><p>Khách kiểm tra và xác nhận</p></div><div class="loop-node"><h3>Kết quả</h3><p>Biết nội dung nào tạo ra đơn</p></div></div><div class="learning-loop"><b>Vòng học:</b> kết quả thật quay lại hỗ trợ quyết định marketing tiếp theo.</div></div>
+        <div class="signal-rail"></div>
+      </section>
+
+      <section class="slide" style="--progress:41.7%" data-notes="Opportunity Engine là nơi thể hiện Agentic AI. AI phải giải thích được vì sao chọn sản phẩm và hành động. Hệ thống hỗ trợ cả chế độ tự phát hiện và chế độ nhân viên chọn trước.">
+        <header class="slide-head"><div><p class="section-name">Opportunity Engine</p><h2>Dữ liệu tạo ra một cơ hội có lý do rõ ràng</h2></div><span class="page-no">05 / 12</span></header>
+        <div class="opportunity reveal"><div class="stock-signal"><div class="deadline">còn<br>3 ngày</div><div class="fifteen">15</div><div class="unit">máy Acer Nitro V còn trong kho</div></div><div class="reason"><h3>Tín hiệu được phát hiện</h3><p>Tồn kho cao hơn ngưỡng trong khi chương trình giảm giá sắp kết thúc.</p><div class="proposal">Đề xuất video ngắn tập trung vào RTX 4060 và màn hình 144 Hz.</div><div class="modes"><span><b>Tự động:</b> hệ thống phát hiện tín hiệu</span><span><b>Có hướng dẫn:</b> nhân viên chọn sản phẩm</span></div></div></div>
+        <div class="source">Số liệu sản phẩm trên slide chỉ dùng để minh họa luồng.</div><div class="signal-rail"></div>
+      </section>
+
+      <section class="slide" style="--progress:50%" data-notes="Video dùng ảnh sản phẩm thật để giữ đúng hình dáng. AI viết kịch bản từ dữ liệu đã duyệt. Revideo dựng hình và phụ đề, VieNeu-TTS tạo giọng Việt. Một template có thể tạo nhiều biến thể.">
+        <header class="slide-head"><div><p class="section-name">Nhà máy nội dung AI</p><h2>Một mẫu video sử dụng dữ liệu mới nhất của từng sản phẩm</h2></div><span class="page-no">06 / 12</span></header>
+        <div class="factory reveal"><div class="input-list"><div class="input-row"><b>Dữ liệu</b><span>Cấu hình, giá, tồn kho và chương trình</span></div><div class="input-row"><b>Hình ảnh</b><span>Ảnh sản phẩm thật của cửa hàng</span></div><div class="input-row"><b>Kịch bản</b><span>AI viết theo mục tiêu chiến dịch</span></div><div class="input-row"><b>Phát âm</b><span>Chuẩn hóa RTX, CPU, RAM, SSD và giá tiền</span></div></div><div class="engine"><div><strong>Revideo</strong><small>dựng hình và phụ đề</small><strong style="margin-top:16px">VieNeu-TTS</strong><small>giọng Việt chạy local</small></div></div><div class="video-frame"><div class="laptop-art"></div><h3>Acer Nitro V 15</h3><p>RTX 4060<br>RAM 16 GB<br>SSD 512 GB</p><b>Ưu đãi còn 3 ngày</b></div></div>
+        <div class="source">Stack video dự kiến, cần khóa phiên bản và hoàn tất kiểm tra giấy phép trước khi nộp.</div><div class="signal-rail"></div>
+      </section>
+
+      <section class="slide" style="--progress:58.3%" data-notes="Đây là khoảnh khắc demo nổi bật. Sau khi video được tạo, thay giá sản phẩm. Khi lịch đăng chạy, Truth Guard đối chiếu lại phiên bản dữ liệu và chặn nội dung cũ.">
+        <header class="slide-head"><div><p class="section-name">Truth Guard</p><h2>Hệ thống chặn nội dung khi dữ liệu nguồn đã thay đổi</h2></div><span class="page-no">07 / 12</span></header>
+        <div class="guard-scene reveal"><div class="price-version"><span class="stamp">VIDEO · phiên bản 12</span><div class="price">19,9 triệu</div><p>Nội dung được tạo lúc 09:10</p></div><div class="guard-stop">×</div><div class="price-version current"><span class="stamp">SẢN PHẨM · phiên bản 13</span><div class="price">18,9 triệu</div><p>Quản lý cập nhật lúc 09:25</p></div></div>
+        <div class="guard-result reveal delay-1"><b>Chặn lịch đăng:</b> giá trong video không còn khớp dữ liệu hiện tại. Cần tạo lại hoặc phê duyệt ngoại lệ.</div><div class="guard-checks">kiểm tra khi tạo · khi duyệt · trước khi đăng · trước khi trả lời · trước khi tạo đơn</div>
+        <div class="source">Tình huống và mức giá dùng để minh họa cơ chế kiểm tra phiên bản.</div><div class="signal-rail"></div>
+      </section>
+
+      <section class="slide dark" style="--progress:66.7%" data-notes="AI có thể tư vấn tới bước tạo đơn nháp nhưng không tự xác nhận thay khách. Nguồn dữ liệu và thời điểm cập nhật xuất hiện trong giao diện quản lý. Khi thiếu bằng chứng, hệ thống chuyển người.">
+        <header class="slide-head"><div><p class="section-name">Tư vấn và chốt đơn</p><h2>AI trả lời có bằng chứng, khách hàng giữ quyền xác nhận</h2></div><span class="page-no">08 / 12</span></header>
+        <div class="conversation reveal"><div><div class="chat"><div class="chat-title">Hộp thư OneVoice</div><div class="bubble customer">Máy này chơi Valorant ổn không?</div><div class="bubble ai">RTX 4060 và RAM 16 GB đáp ứng tốt Valorant. Bạn ưu tiên màn hình 144 Hz hay thời lượng pin?</div><div class="evidence">Nguồn: SKU ANV15-4060<br>Dữ liệu cập nhật: 09:25<br>Trạng thái: đủ bằng chứng</div></div><div class="human-note">Khách được thông báo đang trao đổi với AI. Nhân viên có thể tiếp quản bất cứ lúc nào.</div></div><div class="draft-order"><span class="order-state">ĐƠN NHÁP</span><h3>Khách kiểm tra trước khi xác nhận</h3><div class="order-row"><span>Sản phẩm</span><b>Acer Nitro V 15</b></div><div class="order-row"><span>Cấu hình</span><b>RTX 4060 · RAM 16 GB</b></div><div class="order-row"><span>Giao hàng</span><b>TP. Thủ Đức, TP.HCM</b></div><div class="order-row"><span>Thanh toán</span><b>COD hoặc yêu cầu đặt cọc</b></div><div class="confirm-note">Khách tự kiểm tra và xác nhận trên trang đơn hàng</div></div></div>
+        <div class="signal-rail"></div>
+      </section>
+
+      <section class="slide" style="--progress:75%" data-notes="Content Passport là hồ sơ truy vết của mỗi nội dung. Nó nối nguồn dữ liệu, phê duyệt, tương tác và đơn hàng. Đây là điểm khác biệt với công cụ tạo nội dung hoặc chatbot riêng lẻ.">
+        <header class="slide-head"><div><p class="section-name">Content Passport</p><h2>Mỗi nội dung giữ được đường đi tới đơn hàng</h2></div><span class="page-no">09 / 12</span></header>
+        <div class="passport reveal"><div class="passport-cover"><span class="code">CONTENT · C-024</span><h3>Video Acer Nitro V</h3><p>Dữ liệu nguồn phiên bản 13<br>Đã duyệt trước khi đăng</p><div class="revenue">Kết quả: 1 đơn được xác nhận</div></div><div class="lineage"><div class="lineage-row"><b>Cơ hội</b><span>Tồn kho 15 máy, khuyến mãi còn ba ngày</span></div><div class="lineage-row"><b>Chiến dịch</b><span>Ưu tiên hiệu năng chơi game</span></div><div class="lineage-row"><b>Nội dung</b><span>Video C-024, quản lý đã duyệt</span></div><div class="lineage-row"><b>Tương tác</b><span>Bình luận và hội thoại giữ nguồn C-024</span></div><div class="lineage-row"><b>Khách hàng</b><span>Đủ thông tin để tạo đơn nháp</span></div><div class="lineage-row"><b>Đơn hàng</b><span>Khách xác nhận COD</span></div></div></div>
+        <div class="source">Các kết quả trên slide là dữ liệu minh họa cho kịch bản demo.</div><div class="signal-rail"></div>
+      </section>
+
+      <section class="slide" style="--progress:83.3%" data-notes="Liên hệ trực tiếp với đề bài. AI chỉ nằm ở lớp I sau khi nhân sự, quy trình và dữ liệu đã rõ. Kiến trúc adapter cho phép thay nền tảng mà vẫn giữ trục dữ liệu lõi.">
+        <header class="slide-head"><div><p class="section-name">Mô hình DX-OS</p><h2>OneVoice mô phỏng đủ bốn không gian H–P–D–I</h2></div><span class="page-no">10 / 12</span></header>
+        <div class="hpdi reveal"><div class="hpdi-letters"><span>H</span><span>P</span><span>D</span><span>I</span></div><div class="hpdi-rows"><div class="hpdi-row"><b>Nhân sự</b><span>Phân quyền, phê duyệt, tiếp quản hội thoại và xác nhận ngoại lệ</span></div><div class="hpdi-row"><b>Quy trình</b><span>Trigger, trạng thái, Truth Guard và đường đi từ chiến dịch tới đơn hàng</span></div><div class="hpdi-row"><b>Dữ liệu</b><span>Một nguồn sự thật cho sản phẩm, giá, tồn kho, khách hàng và đơn</span></div><div class="hpdi-row"><b>Trí tuệ</b><span>Phát hiện cơ hội, tạo nội dung và tư vấn dựa trên bằng chứng</span></div></div></div>
+        <div class="open-core">open-core · self-host · adapter mở</div><div class="source">Nguồn mô hình: VFOSSA, “Giới thiệu mô hình DX-OS và chủ đề cuộc thi PMNM OLP 2026”.</div><div class="signal-rail"></div>
+      </section>
+
+      <section class="slide" style="--progress:91.7%" data-notes="Nhấn mạnh kỷ luật phạm vi. MVP chỉ làm những gì cần để chứng minh lát cắt xuyên suốt. Các nền tảng thứ hai, thanh toán thật, AI Human và livestream được đưa sang giai đoạn sau.">
+        <header class="slide-head"><div><p class="section-name">Phạm vi thực hiện</p><h2>MVP chứng minh một luồng chạy trọn</h2></div><span class="page-no">11 / 12</span></header>
+        <div class="mvp reveal"><div class="mvp-scope"><div class="scope-row"><i></i><span>Khoảng 10 sản phẩm và một chương trình khuyến mãi</span></div><div class="scope-row"><i></i><span>Một trigger phát hiện cơ hội tồn kho</span></div><div class="scope-row"><i></i><span>Một video thật có Content Passport</span></div><div class="scope-row"><i></i><span>Truth Guard phát hiện thay đổi giá</span></div><div class="scope-row"><i></i><span>Một kênh tương tác, AI tư vấn và chuyển người</span></div><div class="scope-row"><i></i><span>Đơn nháp, trang xác nhận và truy vết nguồn</span></div></div><div class="demo-strip"><h3>Kịch bản demo</h3><div class="demo-step"><b>01</b><span>Phát hiện tồn kho và đề xuất chiến dịch</span></div><div class="demo-step"><b>02</b><span>Tạo video từ dữ liệu sản phẩm</span></div><div class="demo-step"><b>03</b><span>Thay giá để Truth Guard chặn nội dung cũ</span></div><div class="demo-step"><b>04</b><span>Khách nhắn tin, AI tư vấn có nguồn</span></div><div class="demo-step"><b>05</b><span>Khách kiểm tra và xác nhận đơn</span></div><div class="demo-step"><b>06</b><span>Dashboard truy vết đơn về video ban đầu</span></div><div class="later-note">Để sau: nhiều nền tảng, thanh toán thật, AI Human, livestream, OCR và DevOps Agent.</div></div></div>
+        <div class="signal-rail"></div>
+      </section>
+
+      <section class="slide dark" style="--progress:100%" data-notes="Kết thúc bằng ba điều cần giảng viên góp ý. Ưu tiên xin kết nối một cửa hàng để xác nhận bài toán, lấy dữ liệu mẫu hợp pháp và đo thử quy trình.">
+        <div class="closing"><div><p class="section-name">Đề nghị góp ý</p><h2>Từ dữ liệu sản phẩm tới đơn hàng, trong một luồng có kiểm soát</h2><p class="definition">OneVoice tập trung vào một khoảng đứt cụ thể: nội dung marketing, hội thoại khách hàng và kết quả bán hàng chưa dùng chung ngữ cảnh.</p><div class="closing-tag">nguồn mở · tự host · có người kiểm soát · truy vết được</div></div><div class="asks"><h3>Nhóm mong nhận góp ý về</h3><div class="ask">Luồng nghiệp vụ đã đủ sát cửa hàng máy tính chưa?</div><div class="ask">Phạm vi MVP còn phần nào cần cắt?</div><div class="ask">Có thể kết nối nhóm với một cửa hàng để thử nghiệm dữ liệu và quy trình không?</div></div></div>
+        <div class="source">Tài liệu nền: VFOSSA DX-OS 2026 và ghi chú ý tưởng OneVoice của nhóm.</div><div class="signal-rail"></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="slideCount" aria-live="polite">01 / 12</div>
+  <aside id="notesPanel" aria-label="Gợi ý thuyết trình"></aside>
+  <nav class="controls" aria-label="Điều khiển trình chiếu"><button id="prevBtn" type="button" aria-label="Slide trước" title="Slide trước (←)">←</button><button id="overviewBtn" type="button" aria-label="Xem tổng quan" title="Tổng quan (O)">▦</button><button id="notesBtn" type="button" aria-label="Hiện ghi chú" title="Ghi chú (N)">N</button><button id="fullBtn" type="button" aria-label="Toàn màn hình" title="Toàn màn hình (F)">⛶</button><button id="nextBtn" type="button" aria-label="Slide sau" title="Slide sau (→)">→</button></nav>
+  <div id="overview" aria-label="Tổng quan các slide"></div>
+
+  <script>
+    (() => {
+      const deck = document.getElementById('deck');
+      const slides = [...deck.querySelectorAll('.slide')];
+      const count = document.getElementById('slideCount');
+      const notesPanel = document.getElementById('notesPanel');
+      const overview = document.getElementById('overview');
+      let index = 0;
+      let notesVisible = false;
+      function fitDeck() { const scale = Math.min(window.innerWidth / 1280, window.innerHeight / 720); deck.style.transform = `scale(${scale})`; }
+      function show(nextIndex, updateHash = true) { index = Math.max(0, Math.min(slides.length - 1, nextIndex)); slides.forEach((slide, i) => slide.classList.toggle('is-active', i === index)); count.textContent = `${String(index + 1).padStart(2, '0')} / ${String(slides.length).padStart(2, '0')}`; notesPanel.textContent = slides[index].dataset.notes || ''; if (updateHash) history.replaceState(null, '', `#${index + 1}`); }
+      function toggleNotes() { notesVisible = !notesVisible; notesPanel.classList.toggle('is-visible', notesVisible); }
+      function buildOverview() { overview.innerHTML = ''; slides.forEach((slide, i) => { const thumb = document.createElement('button'); thumb.type = 'button'; thumb.className = 'thumb'; thumb.setAttribute('aria-label', `Mở slide ${i + 1}`); const clone = slide.cloneNode(true); clone.classList.add('is-active'); clone.style.position = 'relative'; const inner = document.createElement('div'); inner.className = 'thumb-inner'; inner.appendChild(clone); thumb.appendChild(inner); thumb.addEventListener('click', () => { overview.classList.remove('is-visible'); show(i); }); overview.appendChild(thumb); }); }
+      function toggleOverview() { const visible = overview.classList.toggle('is-visible'); if (visible) buildOverview(); }
+      function toggleFullscreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); }
+      document.getElementById('prevBtn').addEventListener('click', () => show(index - 1));
+      document.getElementById('nextBtn').addEventListener('click', () => show(index + 1));
+      document.getElementById('overviewBtn').addEventListener('click', toggleOverview);
+      document.getElementById('notesBtn').addEventListener('click', toggleNotes);
+      document.getElementById('fullBtn').addEventListener('click', toggleFullscreen);
+      document.addEventListener('keydown', event => { if (overview.classList.contains('is-visible') && event.key === 'Escape') { overview.classList.remove('is-visible'); return; } if (['ArrowRight', 'PageDown', ' '].includes(event.key)) { event.preventDefault(); show(index + 1); } if (['ArrowLeft', 'PageUp'].includes(event.key)) { event.preventDefault(); show(index - 1); } if (event.key === 'Home') show(0); if (event.key === 'End') show(slides.length - 1); if (event.key.toLowerCase() === 'o') toggleOverview(); if (event.key.toLowerCase() === 'n') toggleNotes(); if (event.key.toLowerCase() === 'f') toggleFullscreen(); });
+      let touchStart = null;
+      document.addEventListener('touchstart', event => { touchStart = event.changedTouches[0].clientX; }, { passive: true });
+      document.addEventListener('touchend', event => { if (touchStart === null) return; const distance = event.changedTouches[0].clientX - touchStart; if (Math.abs(distance) > 60) show(index + (distance < 0 ? 1 : -1)); touchStart = null; }, { passive: true });
+      window.addEventListener('resize', fitDeck);
+      const hashIndex = Number(location.hash.slice(1)) - 1;
+      fitDeck(); show(Number.isInteger(hashIndex) && hashIndex >= 0 ? hashIndex : 0, false);
+    })();
+  </script>
+</body>
+</html>

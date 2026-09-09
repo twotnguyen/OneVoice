@@ -1,0 +1,46 @@
+{
+  "name": "onevoice",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:reset": "supabase db reset",
+    "supabase:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts",
+    "data:import:dry": "node --experimental-strip-types scripts/import-products-to-supabase.ts --dry-run",
+    "data:import": "node --experimental-strip-types scripts/import-products-to-supabase.ts",
+    "data:verify": "node --experimental-strip-types scripts/verify-supabase-data.ts",
+    "ai:verify": "node --env-file-if-exists=.env --experimental-strip-types scripts/verify-ai-provider.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.116.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.4",
+    "supabase": "2.117.0",
+    "typescript": "6.0.3",
+    "vitest": "5.0.0"
+  }
+}
