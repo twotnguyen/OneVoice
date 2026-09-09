@@ -16,7 +16,7 @@ import type {
   StudioProduct,
 } from "./types";
 
-const MAX_SPECIFICATION_FACTS = 8;
+const MAX_PRODUCT_FACTS = 8;
 
 export interface CatalogRepositoryOptions {
   client: SupabaseClient<Database>;
@@ -43,7 +43,7 @@ export class CatalogRepository {
     pageSize: number;
     totalPages: number;
   }>> {
-    const page = Math.max(1, pagination.page ?? 1);
+    const page = Math.min(100, Math.max(1, pagination.page ?? 1));
     const pageSize = Math.max(1, Math.min(100, pagination.pageSize ?? 20));
     const offset = (page - 1) * pageSize;
 
@@ -105,7 +105,11 @@ export class CatalogRepository {
       .eq("organization_id", scope.organizationId)
       .maybeSingle();
 
-    if (error || !data?.name || !data.current_price || data.current_price <= 0) {
+    if (error) {
+      throw new Error("Failed to get product snapshot");
+    }
+
+    if (!data?.name || !data.current_price || data.current_price <= 0) {
       return null;
     }
 
@@ -129,7 +133,7 @@ export class CatalogRepository {
             critical: true,
           }]),
       ...this.toSpecificationFacts(data.specifications),
-    ];
+    ].slice(0, MAX_PRODUCT_FACTS);
 
     return {
       productId,
@@ -171,7 +175,7 @@ export class CatalogRepository {
         value: specification.value,
         critical: true,
       }];
-    }).slice(0, MAX_SPECIFICATION_FACTS);
+    });
   }
 
   async listProducts(

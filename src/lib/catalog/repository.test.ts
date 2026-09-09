@@ -145,7 +145,7 @@ describe("CatalogRepository", () => {
         { ref: "product.sku", label: "SKU", value: "LAP-01", critical: true },
         { ref: "offer.price", label: "Price", value: "30000000 VND", critical: true },
         { ref: "inventory.stock", label: "Stock", value: "4", critical: true },
-        ...specifications.slice(0, 8).map((specification, index) => ({
+        ...specifications.slice(0, 4).map((specification, index) => ({
           ref: `spec.${index}`,
           label: specification.name,
           value: specification.value,
@@ -153,7 +153,7 @@ describe("CatalogRepository", () => {
         })),
       ],
     });
-    expect(snapshot?.facts).toHaveLength(12);
+    expect(snapshot?.facts).toHaveLength(8);
     expect(snapshot).not.toHaveProperty("description");
     expect(snapshot).not.toHaveProperty("source_payload");
     expect(snapshot).not.toHaveProperty("breadcrumbs");
@@ -194,6 +194,51 @@ describe("CatalogRepository", () => {
     await expect(
       repository.getProductSnapshot({ organizationId: "org-1" }, "prod-1")
     ).resolves.toBeNull();
+  });
+
+  it("throws a safe repository error when the snapshot query fails", async () => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: null,
+        error: { message: "sensitive database detail" },
+      }),
+    };
+    const client = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient<Database>;
+    const repository = new CatalogRepository({ client });
+
+    const snapshot = repository.getProductSnapshot(
+      { organizationId: "org-1" },
+      "prod-1"
+    );
+
+    await expect(snapshot).rejects.toThrow("Failed to get product snapshot");
+    await expect(snapshot).rejects.not.toThrow("sensitive database detail");
+  });
+
+  it("clamps studio product pages to the supported range", async () => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({ data: [], count: 0, error: null }),
+    };
+    const client = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient<Database>;
+    const repository = new CatalogRepository({ client });
+
+    const result = await repository.listStudioProducts(
+      { organizationId: "org-1" },
+      { page: 101, pageSize: 18 }
+    );
+
+    expect(query.range).toHaveBeenCalledWith(1782, 1799);
+    expect(result.page).toBe(100);
   });
 
   it("filters and paginates products correctly", async () => {
