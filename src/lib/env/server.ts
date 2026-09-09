@@ -10,6 +10,19 @@ const serverEnvironmentSchema = z.object({
   AI_BASE_URL: z.url().transform((value) => value.replace(/\/+$/, "")),
   AI_API_KEY: z.string().min(1),
   AI_MODEL: z.string().min(1),
+  ONEVOICE_ORGANIZATION_ID: z.uuid().default("a0000000-0000-0000-0000-000000000001"),
+  ONEVOICE_MEDIA_ROOT: z.string().min(1).default("renders"),
+  ONEVOICE_IMAGE_HOSTS: z.string().default("product.hstatic.net").transform((value, context) => {
+    const hosts = value.split(",").map((host) => host.trim().toLowerCase()).filter(Boolean);
+    if (hosts.length === 0) {
+      context.addIssue({ code: "custom", message: "ONEVOICE_IMAGE_HOSTS must not be empty" });
+      return z.NEVER;
+    }
+    return hosts;
+  }),
+  FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
+  FFPROBE_PATH: z.string().min(1).default("ffprobe"),
+  ONEVOICE_FONT_PATH: z.string().optional().transform((value) => value?.trim() || undefined),
 });
 
 export type ServerEnv = {
@@ -23,6 +36,14 @@ export type ServerEnv = {
     baseUrl: string;
     apiKey: string;
     model: string;
+  };
+  runtime: {
+    organizationId: string;
+    mediaRoot: string;
+    imageHosts: string[];
+    ffmpegPath: string;
+    ffprobePath: string;
+    fontPath?: string;
   };
 };
 
@@ -42,6 +63,14 @@ export function readServerEnv(
       baseUrl: environment.AI_BASE_URL,
       apiKey: environment.AI_API_KEY,
       model: environment.AI_MODEL,
+    },
+    runtime: {
+      organizationId: environment.ONEVOICE_ORGANIZATION_ID,
+      mediaRoot: environment.ONEVOICE_MEDIA_ROOT,
+      imageHosts: environment.ONEVOICE_IMAGE_HOSTS,
+      ffmpegPath: environment.FFMPEG_PATH,
+      ffprobePath: environment.FFPROBE_PATH,
+      fontPath: environment.ONEVOICE_FONT_PATH,
     },
   };
 }
