@@ -14,6 +14,8 @@ import { LocalVideoLibrary } from "@/lib/video/local-video-library";
 import { RemoteImageResolver } from "@/lib/video/remote-image-resolver";
 import { compileProductStoryboard } from "@/lib/video/storyboard";
 import { ProductVideoPipeline } from "./product-video-pipeline";
+import { RenderProgressStore } from "./progress-store";
+import { resolveExecutablePath } from "./runtime-paths";
 
 function absoluteRuntimePath(value: string): string {
   return path.isAbsolute(value)
@@ -25,6 +27,8 @@ function compose() {
   const environment = readServerEnv();
   const mediaRoot = absoluteRuntimePath(environment.runtime.mediaRoot);
   const scope = { organizationId: environment.runtime.organizationId } as const;
+  const ffmpegPath = resolveExecutablePath(environment.runtime.ffmpegPath);
+  const ffprobePath = resolveExecutablePath(environment.runtime.ffprobePath);
   const catalog = new CatalogRepository({
     client: createSupabaseServerClient(),
     defaultOrganizationId: scope.organizationId,
@@ -33,16 +37,17 @@ function compose() {
   const imageResolver = new RemoteImageResolver({
     allowedHostnames: environment.runtime.imageHosts,
     temporaryRoot: path.join(mediaRoot, ".images"),
-    ffmpegPath: environment.runtime.ffmpegPath,
-    ffprobePath: environment.runtime.ffprobePath,
+    ffmpegPath,
+    ffprobePath,
   });
   const renderer = new FfmpegVideoRenderer({
     outputRoot: path.join(mediaRoot, ".output"),
-    ffmpegPath: environment.runtime.ffmpegPath,
-    ffprobePath: environment.runtime.ffprobePath,
+    ffmpegPath,
+    ffprobePath,
     fontPath: environment.runtime.fontPath,
   });
   const library = new LocalVideoLibrary(mediaRoot);
+  const progress = new RenderProgressStore();
   const pipeline = new ProductVideoPipeline({
     catalog,
     generateContent: (snapshot) => generateProductContent(provider, snapshot),
@@ -51,7 +56,7 @@ function compose() {
     renderer,
     library,
   });
-  return { catalog, library, pipeline, scope };
+  return { catalog, library, pipeline, progress, scope };
 }
 
 let composition: ReturnType<typeof compose> | undefined;

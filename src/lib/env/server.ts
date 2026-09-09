@@ -10,7 +10,10 @@ const serverEnvironmentSchema = z.object({
   AI_BASE_URL: z.url().transform((value) => value.replace(/\/+$/, "")),
   AI_API_KEY: z.string().min(1),
   AI_MODEL: z.string().min(1),
-  ONEVOICE_ORGANIZATION_ID: z.uuid().default("a0000000-0000-0000-0000-000000000001"),
+  ONEVOICE_ORGANIZATION_ID: z.string().regex(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    "ONEVOICE_ORGANIZATION_ID must be a canonical UUID",
+  ).default("a0000000-0000-0000-0000-000000000001"),
   ONEVOICE_MEDIA_ROOT: z.string().min(1).default("renders"),
   ONEVOICE_IMAGE_HOSTS: z.string().default("product.hstatic.net").transform((value, context) => {
     const hosts = value.split(",").map((host) => host.trim().toLowerCase()).filter(Boolean);

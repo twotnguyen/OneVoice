@@ -52,6 +52,12 @@ const errorSchema = z.discriminatedUnion("stage", [
     .strict(),
   z
     .object({
+      stage: z.literal("resolving_asset"),
+      code: z.literal("IMAGE_RESOLUTION_FAILED"),
+    })
+    .strict(),
+  z
+    .object({
       stage: z.literal("rendering_video"),
       code: z.literal("VIDEO_RENDER_FAILED"),
     })

@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { StoredVideo, VideoManifest } from "@/lib/video/types";
+import { RenderProgressStore } from "@/lib/render/progress-store";
 import { createRenderStatusRoute } from "./[renderId]/route";
 import { createDownloadRoute } from "./[renderId]/download/route";
 import { createVideoRoute } from "./[renderId]/video/route";
@@ -66,6 +67,7 @@ describe("POST /api/renders", () => {
   it.each([
     ["PRODUCT_NOT_FOUND", "loading_product", 404],
     ["AI_GENERATION_FAILED", "generating_content", 502],
+    ["IMAGE_RESOLUTION_FAILED", "resolving_asset", 500],
     ["VIDEO_RENDER_FAILED", "rendering_video", 500],
     ["STORAGE_FAILED", "storing_artifact", 500],
   ] as const)("maps %s to a safe response", async (code, stage, status) => {
@@ -76,6 +78,28 @@ describe("POST /api/renders", () => {
     const response = await route.POST(renderRequest({ renderId, productId }));
     expect(response.status).toBe(status);
     expect(await response.json()).toEqual({ error: { code, stage } });
+  });
+
+  it("registers actual pipeline stages and always clears progress", async () => {
+    const progress = new RenderProgressStore();
+    let observedDuringRun: unknown;
+    const route = createRendersRoute({
+      scope,
+      progress,
+      pipeline: {
+        async create(command) {
+          command.onStage?.("resolving_asset");
+          observedDuringRun = progress.get(renderId);
+          return success;
+        },
+      },
+    });
+
+    const response = await route.POST(renderRequest({ renderId, productId }));
+
+    expect(response.status).toBe(201);
+    expect(observedDuringRun).toEqual({ renderId, status: "running", stage: "resolving_asset" });
+    expect(progress.get(renderId)).toBeNull();
   });
 });
 
@@ -88,7 +112,32 @@ describe("render artifact routes", () => {
     expect((await found.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId: "../bad" }) })).status).toBe(404);
   });
 
-  function videoLibrary(bytes = Buffer.from("0123456789")) {
+  it("returns running progress before the terminal manifest", async () => {
+    const progress = new RenderProgressStore();
+    progress.start(renderId);
+    progress.update(renderId, "rendering_video");
+    const route = createRenderStatusRoute({
+      progress,
+      library: { async getRun() { throw new Error("must not read terminal storage"); } },
+    });
+    const response = await route.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ renderId, status: "running", stage: "rendering_video" });
+  });
+
+  it("returns safe 500 for status storage exceptions", async () => {
+    const diagnostics: unknown[] = [];
+    const route = createRenderStatusRoute({
+      diagnostic: (event) => diagnostics.push(event),
+      library: { async getRun() { throw new Error("corrupt /private/manifest secret"); } },
+    });
+    const response = await route.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: { code: "STORAGE_UNAVAILABLE" } });
+    expect(diagnostics).toEqual([{ stage: "media", code: "STORAGE_UNAVAILABLE" }]);
+  });
+
+  function videoLibrary(bytes = Buffer.from("0123456789"), options: { closeError?: Error; readError?: Error } = {}) {
     let closed = 0;
     let reads = 0;
     const stored = {
@@ -96,11 +145,12 @@ describe("render artifact routes", () => {
       handle: {
         async read(buffer: Buffer, offset: number, length: number, position: number) {
           reads += 1;
+          if (options.readError) throw options.readError;
           const chunk = bytes.subarray(position, position + length);
           chunk.copy(buffer, offset);
           return { bytesRead: chunk.length, buffer };
         },
-        async close() { closed += 1; },
+        async close() { closed += 1; if (options.closeError) throw options.closeError; },
       },
     } as unknown as StoredVideo;
     return {
@@ -131,6 +181,72 @@ describe("render artifact routes", () => {
     expect(partial.headers.get("content-range")).toBe("bytes 2-5/10");
     expect(await partial.text()).toBe("2345");
     expect(partialFile.closed()).toBe(1);
+  });
+
+  it("returns safe 500 for media library exceptions", async () => {
+    const diagnostics: unknown[] = [];
+    const route = createVideoRoute({
+      diagnostic: (event) => diagnostics.push(event),
+      library: { async readVideo() { throw new Error("unsafe /private/video secret"); } },
+    });
+    const response = await route.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: { code: "STORAGE_UNAVAILABLE" } });
+    expect(diagnostics).toEqual([{ stage: "media", code: "STORAGE_UNAVAILABLE" }]);
+  });
+
+  it("returns safe 500 for an invalid stored artifact size", async () => {
+    const file = videoLibrary(Buffer.alloc(0));
+    const diagnostics: unknown[] = [];
+    const response = await createVideoRoute({ ...file, diagnostic: (event) => diagnostics.push(event) }).GET(
+      new Request("http://localhost"), { params: Promise.resolve({ renderId }) },
+    );
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: { code: "STORAGE_UNAVAILABLE" } });
+    expect(file.closed()).toBe(1);
+    expect(diagnostics).toEqual([{ stage: "media", code: "STORAGE_UNAVAILABLE" }]);
+  });
+
+  it("returns safe 500 when pre-response close fails", async () => {
+    const file = videoLibrary(undefined, { closeError: new Error("close /private/secret") });
+    const diagnostics: unknown[] = [];
+    const route = createVideoRoute({ ...file, diagnostic: (event) => diagnostics.push(event) });
+    const response = await route.HEAD(new Request("http://localhost", { method: "HEAD" }), { params: Promise.resolve({ renderId }) });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: { code: "STORAGE_UNAVAILABLE" } });
+    expect(file.closed()).toBe(1);
+    expect(diagnostics).toEqual([{ stage: "media", code: "CLOSE_FAILED" }]);
+  });
+
+  it("diagnoses close failure after streaming starts and errors the stream", async () => {
+    const file = videoLibrary(undefined, { closeError: new Error("close /private/secret") });
+    const diagnostics: unknown[] = [];
+    const response = await createVideoRoute({ ...file, diagnostic: (event) => diagnostics.push(event) }).GET(
+      new Request("http://localhost"), { params: Promise.resolve({ renderId }) },
+    );
+    await expect(response.text()).rejects.toThrow();
+    expect(file.closed()).toBe(1);
+    expect(diagnostics).toEqual([{ stage: "media", code: "CLOSE_FAILED" }]);
+  });
+
+  it("closes and errors safely on read failure", async () => {
+    const file = videoLibrary(undefined, { readError: new Error("read /private/secret") });
+    const response = await createVideoRoute(file).GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
+    await expect(response.text()).rejects.toThrow();
+    expect(file.closed()).toBe(1);
+  });
+
+  it("completes cancellation and diagnoses a rejected shared close", async () => {
+    const file = videoLibrary(Buffer.alloc(200_000, 1), { closeError: new Error("close /private/secret") });
+    const diagnostics: unknown[] = [];
+    const response = await createVideoRoute({ ...file, diagnostic: (event) => diagnostics.push(event) }).GET(
+      new Request("http://localhost"), { params: Promise.resolve({ renderId }) },
+    );
+    const reader = response.body!.getReader();
+    await reader.read();
+    await expect(reader.cancel()).resolves.toBeUndefined();
+    expect(file.closed()).toBe(1);
+    expect(diagnostics).toEqual([{ stage: "media", code: "CLOSE_FAILED" }]);
   });
 
   it("closes the handle on invalid range, HEAD, and cancellation", async () => {

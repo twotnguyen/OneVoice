@@ -112,6 +112,20 @@ describe("LocalVideoLibrary", () => {
     expect(await readdir(path.join(root, renderId))).toEqual(["manifest.json"]);
   });
 
+  it("stores the strict image-resolution failure manifest", async () => {
+    const root = await temporaryRoot();
+    const library = new LocalVideoLibrary(root);
+    const manifest: VideoManifest = {
+      renderId,
+      status: "failed",
+      error: { stage: "resolving_asset", code: "IMAGE_RESOLUTION_FAILED" },
+    };
+
+    await library.save(renderId, manifest);
+
+    await expect(library.getRun(renderId)).resolves.toEqual(manifest);
+  });
+
   it("returns null for missing artifacts", async () => {
     const library = new LocalVideoLibrary(await temporaryRoot());
     await expect(library.getRun(renderId)).resolves.toBeNull();

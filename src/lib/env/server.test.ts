@@ -79,4 +79,11 @@ describe("readServerEnv", () => {
       ONEVOICE_ORGANIZATION_ID: "not-a-uuid",
     })).toThrow(/ONEVOICE_ORGANIZATION_ID/);
   });
+
+  it("accepts the explicitly configured canonical demo organization ID", () => {
+    expect(readServerEnv({
+      ...validEnvironment,
+      ONEVOICE_ORGANIZATION_ID: "a0000000-0000-0000-0000-000000000001",
+    }).runtime.organizationId).toBe("a0000000-0000-0000-0000-000000000001");
+  });
 });

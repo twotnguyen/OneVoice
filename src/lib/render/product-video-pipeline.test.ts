@@ -53,8 +53,12 @@ function harness(options: {
   product?: ProductSnapshot | null;
   contentError?: Error;
   imageError?: Error;
+  imageResult?: ResolvedAsset | null;
   renderError?: Error;
   storageError?: Error;
+  storageAlwaysRejects?: boolean;
+  assetCleanupError?: Error;
+  videoCleanupError?: Error;
 } = {}) {
   const events: string[] = [];
   const manifests: VideoManifest[] = [];
@@ -64,13 +68,20 @@ function harness(options: {
     mimeType: "image/png",
     bytes: 32,
     sha256: "b".repeat(64),
-    cleanup: async () => { events.push("asset:cleanup"); },
+    cleanup: async () => {
+      events.push("asset:cleanup");
+      if (options.assetCleanupError) throw options.assetCleanupError;
+    },
   };
   const video = {
     ...renderedVideo,
-    cleanup: async () => { events.push("video:cleanup"); },
+    cleanup: async () => {
+      events.push("video:cleanup");
+      if (options.videoCleanupError) throw options.videoCleanupError;
+    },
   };
   let renderRequest: VideoRenderRequest | undefined;
+  const diagnostics: unknown[] = [];
 
   const pipeline = new ProductVideoPipeline({
     catalog: {
@@ -88,7 +99,7 @@ function harness(options: {
       async resolve() {
         events.push("image");
         if (options.imageError) throw options.imageError;
-        return asset;
+        return options.imageResult === undefined ? asset : options.imageResult;
       },
     },
     compileStoryboard: compileProductStoryboard,
@@ -104,13 +115,16 @@ function harness(options: {
       async save(_id, manifest) {
         events.push(`save:${manifest.status}`);
         storageAttempts += 1;
-        if (options.storageError && storageAttempts === 1) throw options.storageError;
+        if (options.storageAlwaysRejects || (options.storageError && storageAttempts === 1)) {
+          throw options.storageError ?? new Error("always unavailable /private/secret");
+        }
         manifests.push(manifest);
       },
     },
+    diagnostic: (event) => { diagnostics.push(event); },
   });
 
-  return { pipeline, events, manifests, getRenderRequest: () => renderRequest };
+  return { pipeline, events, manifests, diagnostics, getRenderRequest: () => renderRequest };
 }
 
 describe("ProductVideoPipeline", () => {
@@ -160,7 +174,7 @@ describe("ProductVideoPipeline", () => {
   });
 
   it("treats image resolution failure as a text-only success", async () => {
-    const test = harness({ imageError: new Error("unavailable") });
+    const test = harness({ imageResult: null });
 
     const result = await test.pipeline.create({ renderId, productId, scope });
 
@@ -169,5 +183,69 @@ describe("ProductVideoPipeline", () => {
     expect(test.events).toEqual([
       "catalog", "content", "image", "render", "save:succeeded", "video:cleanup",
     ]);
+  });
+
+  it("maps a thrown image resolver failure without exposing its message", async () => {
+    const test = harness({ imageError: new Error("ffprobe /private/secret failed") });
+
+    const result = await test.pipeline.create({ renderId, productId, scope });
+
+    expect(result).toEqual({
+      renderId,
+      status: "failed",
+      content: { hook: content.hook, caption: content.caption, cta: content.cta },
+      error: { stage: "resolving_asset", code: "IMAGE_RESOLUTION_FAILED" },
+    });
+    expect(test.manifests).toEqual([result]);
+    expect(JSON.stringify(result)).not.toMatch(/ffprobe|private|secret/);
+  });
+
+  it("returns STORAGE_FAILED when even the failure manifest cannot be saved", async () => {
+    const test = harness({ product: null, storageAlwaysRejects: true });
+
+    const result = await test.pipeline.create({ renderId, productId, scope });
+
+    expect(result).toEqual({
+      renderId,
+      status: "failed",
+      error: { stage: "storing_artifact", code: "STORAGE_FAILED" },
+    });
+    expect(test.manifests).toEqual([]);
+    expect(test.diagnostics).toEqual([{ stage: "storing_artifact", code: "STORAGE_FAILED" }]);
+  });
+
+  it("emits every real stage through the pipeline callback", async () => {
+    const test = harness();
+    const stages: string[] = [];
+
+    await test.pipeline.create({ renderId, productId, scope, onStage: (stage) => stages.push(stage) });
+
+    expect(stages).toEqual([
+      "loading_product", "generating_content", "resolving_asset",
+      "rendering_video", "storing_artifact",
+    ]);
+  });
+
+  it("emits storing when persisting a terminal failure", async () => {
+    const test = harness({ contentError: new Error("provider unavailable") });
+    const stages: string[] = [];
+    await test.pipeline.create({ renderId, productId, scope, onStage: (stage) => stages.push(stage) });
+    expect(stages).toEqual(["loading_product", "generating_content", "storing_artifact"]);
+  });
+
+  it("reports rejected asset and video cleanup with code-only diagnostics", async () => {
+    const test = harness({
+      assetCleanupError: new Error("asset /private/secret"),
+      videoCleanupError: new Error("video /private/secret"),
+    });
+
+    const result = await test.pipeline.create({ renderId, productId, scope });
+
+    expect(result.status).toBe("succeeded");
+    expect(test.diagnostics).toEqual([
+      { stage: "rendering_video", code: "CLEANUP_FAILED" },
+      { stage: "resolving_asset", code: "CLEANUP_FAILED" },
+    ]);
+    expect(JSON.stringify(test.diagnostics)).not.toContain("private");
   });
 });

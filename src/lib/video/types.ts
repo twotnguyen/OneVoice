@@ -79,6 +79,10 @@ export type VideoManifestError =
       code: "AI_GENERATION_FAILED";
     }>
   | Readonly<{
+      stage: "resolving_asset";
+      code: "IMAGE_RESOLUTION_FAILED";
+    }>
+  | Readonly<{
       stage: "rendering_video";
       code: "VIDEO_RENDER_FAILED";
     }>
