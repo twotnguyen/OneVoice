@@ -24,15 +24,64 @@ const MAX_REDIRECTS = 5;
 const STDERR_LIMIT = 64 * 1024;
 const MAX_NORMALIZED_BYTES = 64 * 1024 * 1024;
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-const TRUSTED_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-  "base64",
-);
 const MIME_CODECS = {
   "image/jpeg": "mjpeg",
   "image/png": "png",
   "image/webp": "webp",
 } as const;
+const PROBE_ARGS = [
+  "-v",
+  "error",
+  "-select_streams",
+  "v:0",
+  "-show_entries",
+  "stream=codec_name,width,height",
+  "-of",
+  "json",
+  "source.bin",
+] as const;
+const NORMALIZATION_ARGS = [
+  "-nostdin",
+  "-hide_banner",
+  "-loglevel",
+  "error",
+  "-i",
+  "source.bin",
+  "-map_metadata",
+  "-1",
+  "-frames:v",
+  "1",
+  "-c:v",
+  "png",
+  "-pix_fmt",
+  "rgba",
+  "-f",
+  "image2pipe",
+  "pipe:1",
+] as const;
+const TRUSTED_IMAGES = [
+  {
+    mimeType: "image/jpeg",
+    bytes: Buffer.from(
+      "/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYxLjE5LjEwMQD/2wBDAAgEBAQEBAUFBQUFBQYGBgYGBgYGBgYGBgYHBwcICAgHBwcGBgcHCAgICAkJCQgICAgJCQoKCgwMCwsODg4RERT/xABMAAEBAAAAAAAAAAAAAAAAAAAABgEBAQAAAAAAAAAAAAAAAAAABgcQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAACAAIDASIAAhEAAxEA/9oADAMBAAIRAxEAPwCLAFF/f//Z",
+      "base64",
+    ),
+  },
+  {
+    mimeType: "image/png",
+    bytes: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAABAAAAAQBPJcTWAAAAEElEQVR4nGP4w8AARAwQCgAfjgPxzzTeXgAAAABJRU5ErkJggg==",
+      "base64",
+    ),
+  },
+  {
+    mimeType: "image/webp",
+    bytes: Buffer.from(
+      "UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoCAAIAAgA0JaACdLoB+AADsAD+8Oj3/yC5YXXI1/8gP+QH/ID/+PIAAAA=",
+      "base64",
+    ),
+  },
+] as const;
 
 type DnsAddress = Readonly<{ address: string; family: 4 | 6 }>;
 type RequestSeam = (url: URL, options: RequestOptions) => Promise<IncomingMessage>;
@@ -47,6 +96,7 @@ type ResolverOptions = Readonly<{
 }>;
 
 class RemoteContentError extends Error {}
+class MediaProcessNonzeroError extends RemoteContentError {}
 class ResolverConfigurationError extends Error {}
 class ResolverLocalError extends Error {}
 
@@ -329,37 +379,22 @@ async function normalizeImage(
   }
   const child = spawn(
     executable,
-    [
-      "-nostdin",
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-i",
-      "source.bin",
-      "-map_metadata",
-      "-1",
-      "-frames:v",
-      "1",
-      "-c:v",
-      "png",
-      "-pix_fmt",
-      "rgba",
-      "-f",
-      "image2pipe",
-      "pipe:1",
-    ],
+    NORMALIZATION_ARGS,
     { shell: false, cwd },
   );
   let timedOut = false;
-  let killedForSize = false;
-  let stderr = Buffer.alloc(0);
+  let outputExceeded = false;
+  let stderrBytes = 0;
   const timer = setTimeout(() => {
     timedOut = true;
     child.kill("SIGKILL");
   }, TIMEOUT_MS);
   child.stderr.on("data", (chunk: Buffer) => {
-    stderr = Buffer.concat([stderr, chunk]);
-    if (stderr.length > STDERR_LIMIT) stderr = stderr.subarray(stderr.length - STDERR_LIMIT);
+    stderrBytes += chunk.length;
+    if (stderrBytes > STDERR_LIMIT) {
+      outputExceeded = true;
+      child.kill("SIGKILL");
+    }
   });
   const completion = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
     (resolve, reject) => {
@@ -375,9 +410,9 @@ async function normalizeImage(
         const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value as Uint8Array);
         bytes += chunk.length;
         if (bytes > MAX_NORMALIZED_BYTES) {
-          killedForSize = true;
+          outputExceeded = true;
           child.kill("SIGKILL");
-          throw new RemoteContentError();
+          throw new ResolverConfigurationError();
         }
         try {
           await writeAll(outputHandle, chunk, writeChunk);
@@ -388,14 +423,20 @@ async function normalizeImage(
         }
       }
     } catch (error) {
-      if (error instanceof ResolverLocalError || error instanceof RemoteContentError) throw error;
+      if (
+        error instanceof ResolverLocalError ||
+        error instanceof ResolverConfigurationError ||
+        error instanceof RemoteContentError
+      ) {
+        throw error;
+      }
       throw new RemoteContentError();
     }
     const { code, signal } = await completion;
-    if (timedOut || (signal !== null && !killedForSize)) {
+    if (timedOut || signal !== null || outputExceeded) {
       throw new ResolverConfigurationError();
     }
-    if (code !== 0) throw new RemoteContentError();
+    if (code !== 0) throw new MediaProcessNonzeroError();
     try {
       await outputHandle.sync();
     } catch {
@@ -421,6 +462,29 @@ function validSignature(bytes: Buffer, mimeType: keyof typeof MIME_CODECS): bool
     bytes.subarray(0, 4).toString("ascii") === "RIFF" &&
     bytes.subarray(8, 12).toString("ascii") === "WEBP"
   );
+}
+
+async function probeImage(
+  executable: string,
+  cwd: string,
+): Promise<{ codecName: unknown; width: number; height: number }> {
+  const probe = await runMediaProcess(executable, PROBE_ARGS, cwd);
+  if (probe.timedOut || probe.signaled || probe.outputExceeded) {
+    throw new ResolverConfigurationError();
+  }
+  if (!probe.ok) throw new MediaProcessNonzeroError();
+  let parsed: { streams?: Array<{ codec_name?: unknown; width?: unknown; height?: unknown }> };
+  try {
+    parsed = JSON.parse(probe.stdout.toString("utf8")) as typeof parsed;
+  } catch {
+    throw new RemoteContentError();
+  }
+  const stream = parsed.streams?.[0];
+  return {
+    codecName: stream?.codec_name,
+    width: Number(stream?.width),
+    height: Number(stream?.height),
+  };
 }
 
 export class RemoteImageResolver {
@@ -549,36 +613,9 @@ export class RemoteImageResolver {
         throw new ResolverLocalError();
       });
       if (!validSignature(source, mimeType)) throw new RemoteContentError();
-      const probe = await runMediaProcess(
-        this.ffprobePath,
-        [
-          "-v",
-          "error",
-          "-select_streams",
-          "v:0",
-          "-show_entries",
-          "stream=codec_name,width,height",
-          "-of",
-          "json",
-          "source.bin",
-        ],
-        assetDirectory,
-      );
-      if (probe.timedOut || probe.signaled || probe.outputExceeded) {
-        throw new ResolverConfigurationError();
-      }
-      if (!probe.ok) throw new RemoteContentError();
-      let parsed: { streams?: Array<{ codec_name?: unknown; width?: unknown; height?: unknown }> };
-      try {
-        parsed = JSON.parse(probe.stdout.toString("utf8")) as typeof parsed;
-      } catch {
-        throw new RemoteContentError();
-      }
-      const stream = parsed.streams?.[0];
-      const width = Number(stream?.width);
-      const height = Number(stream?.height);
+      const { codecName, width, height } = await probeImage(this.ffprobePath, assetDirectory);
       if (
-        stream?.codec_name !== MIME_CODECS[mimeType] ||
+        codecName !== MIME_CODECS[mimeType] ||
         !Number.isInteger(width) ||
         !Number.isInteger(height) ||
         width <= 0 ||
@@ -618,67 +655,37 @@ export class RemoteImageResolver {
     let capabilityDirectory: string | null = null;
     try {
       capabilityDirectory = await mkdtemp(path.join(tmpdir(), "onevoice-media-capability-"));
-      await open(
-        path.join(capabilityDirectory, "trusted.png"),
-        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
-        0o600,
-      ).then(async (handle) => {
+      for (const { mimeType, bytes } of TRUSTED_IMAGES) {
+        const fixtureDirectory = path.join(capabilityDirectory, MIME_CODECS[mimeType]);
+        await mkdir(fixtureDirectory, { mode: 0o700 });
+        const sourceHandle = await open(
+          path.join(fixtureDirectory, "source.bin"),
+          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+          0o600,
+        );
         try {
-          await writeAll(handle, TRUSTED_PNG, (target, chunk) => target.write(chunk));
-          await handle.sync();
+          await writeAll(sourceHandle, bytes, (target, chunk) => target.write(chunk));
+          await sourceHandle.sync();
         } finally {
-          await handle.close();
+          await sourceHandle.close();
         }
-      });
-      const [probe, decoded] = await Promise.all([
-        runMediaProcess(
-          this.ffprobePath,
-          [
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=codec_name,width,height",
-            "-of",
-            "json",
-            "trusted.png",
-          ],
-          capabilityDirectory,
-        ),
-        runMediaProcess(
+        const probe = await probeImage(this.ffprobePath, fixtureDirectory);
+        if (
+          probe.codecName !== MIME_CODECS[mimeType] ||
+          probe.width !== 2 ||
+          probe.height !== 2
+        ) {
+          throw new ResolverConfigurationError();
+        }
+        await normalizeImage(
           this.ffmpegPath,
-          [
-            "-nostdin",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-i",
-            "trusted.png",
-            "-frames:v",
-            "1",
-            "-c:v",
-            "png",
-            "-f",
-            "image2pipe",
-            "pipe:1",
-          ],
-          capabilityDirectory,
-        ),
-      ]);
-      const metadata = JSON.parse(probe.stdout.toString("utf8")) as {
-        streams?: Array<{ codec_name?: unknown; width?: unknown; height?: unknown }>;
-      };
-      const stream = metadata.streams?.[0];
-      if (
-        !probe.ok ||
-        !decoded.ok ||
-        stream?.codec_name !== "png" ||
-        stream.width !== 1 ||
-        stream.height !== 1 ||
-        !validSignature(decoded.stdout, "image/png")
-      ) {
-        throw new ResolverConfigurationError();
+          fixtureDirectory,
+          (target, chunk) => target.write(chunk),
+        );
+        const normalized = await readFile(path.join(fixtureDirectory, "normalized.png"));
+        if (!validSignature(normalized, "image/png")) {
+          throw new ResolverConfigurationError();
+        }
       }
     } catch {
       throw new ResolverConfigurationError();
@@ -700,6 +707,11 @@ export class RemoteImageResolver {
       });
     }
     return this.capabilityValidation;
+  }
+
+  private async revalidateMediaCapabilities(): Promise<void> {
+    this.capabilityValidation = undefined;
+    await this.ensureMediaCapabilities();
   }
 
   async resolve(value: string): Promise<ResolvedAsset | null> {
@@ -745,6 +757,14 @@ export class RemoteImageResolver {
           contentType as keyof typeof MIME_CODECS,
         );
       } catch (error) {
+        if (error instanceof MediaProcessNonzeroError) {
+          try {
+            await this.revalidateMediaCapabilities();
+          } catch {
+            throw new Error("Image resolver configuration failed");
+          }
+          return null;
+        }
         if (error instanceof RemoteContentError) return null;
         if (error instanceof ResolverConfigurationError) {
           throw new Error("Image resolver configuration failed");

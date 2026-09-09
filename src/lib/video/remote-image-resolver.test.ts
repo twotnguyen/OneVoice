@@ -15,6 +15,7 @@ import { RemoteImageResolver } from "./remote-image-resolver";
 
 const roots: string[] = [];
 const publicAddress = { address: "93.184.216.34", family: 4 as const };
+const PNG_HEADER = [137, 80, 78, 71, 13, 10, 26, 10];
 
 async function temporaryRoot(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "onevoice-resolver-test-"));
@@ -66,6 +67,29 @@ async function imageFixture(
     fixturePath,
   ]);
   return readFile(fixturePath);
+}
+
+async function formatRejectingFfmpeg(
+  root: string,
+  rejectedCodec: "mjpeg" | "webp",
+): Promise<string> {
+  const executable = path.join(root, `ffmpeg-no-${rejectedCodec}`);
+  await writeFile(
+    executable,
+    `#!/bin/sh
+input=
+previous=
+for argument in "$@"; do
+  if [ "$previous" = "-i" ]; then input="$argument"; break; fi
+  previous="$argument"
+done
+codec=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=nw=1:nk=1 "$input") || exit 69
+if [ "$codec" = "${rejectedCodec}" ]; then exit 69; fi
+exec ffmpeg "$@"
+`,
+  );
+  await chmod(executable, 0o700);
+  return executable;
 }
 
 type RequestSeam = (url: URL, options: RequestOptions) => Promise<IncomingMessage>;
@@ -620,6 +644,155 @@ describe("RemoteImageResolver content boundary", () => {
 
     await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
       "Image resolver configuration failed",
+    );
+  });
+
+  it.each([
+    ["jpg", "image/jpeg", "mjpeg"],
+    ["webp", "image/webp", "webp"],
+  ] as const)(
+    "rejects a PNG-capable decoder without %s support before transport",
+    async (extension, mimeType, codec) => {
+      const root = await temporaryRoot();
+      const fixture = await imageFixture(root, extension);
+      const executable = await formatRejectingFfmpeg(root, codec);
+      let requestCalls = 0;
+      const resolver = new RemoteImageResolver({
+        ...resolverOptions(path.join(root, "assets"), async () => {
+          requestCalls += 1;
+          return fakeResponse(fixture, 200, { "content-type": mimeType });
+        }),
+        ffmpegPath: executable,
+      } as never);
+
+      await expect(resolver.resolve(`https://images.example.com/a.${extension}`)).rejects.toThrow(
+        "Image resolver configuration failed",
+      );
+      expect(requestCalls).toBe(0);
+    },
+  );
+
+  it("revalidates a cached decoder that later exits nonzero", async () => {
+    const root = await temporaryRoot();
+    const executable = path.join(root, "ffmpeg-wrapper");
+    await writeFile(executable, '#!/bin/sh\nexec ffmpeg "$@"\n');
+    await chmod(executable, 0o700);
+    const png = await imageFixture(root, "png");
+    let response = fakeResponse(new Uint8Array(), 404);
+    let requestCalls = 0;
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(path.join(root, "assets"), async () => {
+        requestCalls += 1;
+        return response;
+      }),
+      ffmpegPath: executable,
+    } as never);
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    await writeFile(executable, "#!/bin/sh\nexit 69\n");
+    response = fakeResponse(png, 200, { "content-type": "image/png" });
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
+      "Image resolver configuration failed",
+    );
+    expect(requestCalls).toBe(2);
+  });
+
+  it("revalidates a runtime ffprobe nonzero without replaying transport", async () => {
+    const root = await temporaryRoot();
+    const executable = path.join(root, "ffprobe-logger");
+    const logPath = path.join(root, "ffprobe.log");
+    await writeFile(
+      executable,
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(logPath)}\ncase "$PWD" in */asset-*) exit 69;; esac\nexec ffprobe "$@"\n`,
+    );
+    await chmod(executable, 0o700);
+    let requestCalls = 0;
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(path.join(root, "assets"), async () => {
+        requestCalls += 1;
+        return fakeResponse(Buffer.from(PNG_HEADER), 200, { "content-type": "image/png" });
+      }),
+      ffprobePath: executable,
+    } as never);
+
+    await expect(resolver.resolve("https://images.example.com/broken.png")).resolves.toBeNull();
+    expect(requestCalls).toBe(1);
+    expect((await readFile(logPath, "utf8")).trim().split("\n")).toHaveLength(7);
+  });
+
+  it("revalidates a runtime ffmpeg nonzero for malformed media, then returns null", async () => {
+    const root = await temporaryRoot();
+    const ffprobePath = path.join(root, "ffprobe-runtime-metadata");
+    await writeFile(
+      ffprobePath,
+      `#!/bin/sh\ncase "$PWD" in */asset-*) printf '%s\\n' '{"streams":[{"codec_name":"png","width":2,"height":2}]}' ; exit 0;; esac\nexec ffprobe "$@"\n`,
+    );
+    await chmod(ffprobePath, 0o700);
+    const ffmpegPath = path.join(root, "ffmpeg-logger");
+    const logPath = path.join(root, "ffmpeg.log");
+    await writeFile(
+      ffmpegPath,
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(logPath)}\nexec ffmpeg "$@"\n`,
+    );
+    await chmod(ffmpegPath, 0o700);
+    let requestCalls = 0;
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(path.join(root, "assets"), async () => {
+        requestCalls += 1;
+        return fakeResponse(Buffer.from(PNG_HEADER), 200, { "content-type": "image/png" });
+      }),
+      ffmpegPath,
+      ffprobePath,
+    } as never);
+
+    await expect(resolver.resolve("https://images.example.com/broken.png")).resolves.toBeNull();
+    expect(requestCalls).toBe(1);
+    expect((await readFile(logPath, "utf8")).trim().split("\n")).toHaveLength(7);
+  });
+
+  it("uses exact production normalization argv for every format and caches success", async () => {
+    const root = await temporaryRoot();
+    const executable = path.join(root, "ffmpeg-logger");
+    const logPath = path.join(root, "ffmpeg.log");
+    await writeFile(
+      executable,
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(logPath)}\nexec ffmpeg "$@"\n`,
+    );
+    await chmod(executable, 0o700);
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(
+        path.join(root, "assets"),
+        async () => fakeResponse(new Uint8Array(), 404),
+      ),
+      ffmpegPath: executable,
+    } as never);
+
+    await expect(resolver.resolve("https://images.example.com/one.png")).resolves.toBeNull();
+    await expect(resolver.resolve("https://images.example.com/two.png")).resolves.toBeNull();
+
+    const invocations = (await readFile(logPath, "utf8")).trim().split("\n");
+    expect(invocations).toEqual(
+      Array.from({ length: 3 }, () =>
+        [
+          "-nostdin",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-i",
+          "source.bin",
+          "-map_metadata",
+          "-1",
+          "-frames:v",
+          "1",
+          "-c:v",
+          "png",
+          "-pix_fmt",
+          "rgba",
+          "-f",
+          "image2pipe",
+          "pipe:1",
+        ].join(" "),
+      ),
     );
   });
 });
