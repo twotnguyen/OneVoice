@@ -157,3 +157,5 @@ Desktop.ini
 *.gguf
 *.pth
 *.pt
+
+references/
