@@ -294,6 +294,15 @@ export class LocalVideoLibrary {
     }
   }
 
+  async videoExists(renderId: string): Promise<boolean> {
+    const directory = await this.safeRenderDirectory(renderId);
+    if (!directory) return false;
+    const videoPath = path.join(directory, "video.mp4");
+    if (await pathIsMissing(videoPath)) return false;
+    const details = await lstat(videoPath);
+    return details.isFile() && !details.isSymbolicLink();
+  }
+
   async readVideo(renderId: string): Promise<StoredVideo | null> {
     const directory = await this.safeRenderDirectory(renderId);
     if (!directory) return null;

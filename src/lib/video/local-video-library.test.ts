@@ -137,6 +137,41 @@ describe("LocalVideoLibrary", () => {
     const library = new LocalVideoLibrary(await temporaryRoot());
     await expect(library.getRun(renderId)).resolves.toBeNull();
     await expect(library.readVideo(renderId)).resolves.toBeNull();
+    await expect(library.videoExists(renderId)).resolves.toBe(false);
+  });
+
+  it("reports video presence without opening the file", async () => {
+    const root = await temporaryRoot();
+    const library = new LocalVideoLibrary(root);
+    const failed: VideoManifest = {
+      renderId,
+      status: "failed",
+      error: { stage: "rendering_video", code: "VIDEO_RENDER_FAILED" },
+    };
+    await library.save(renderId, failed);
+    await expect(library.videoExists(renderId)).resolves.toBe(false);
+    await rm(path.join(root, renderId), { recursive: true, force: true });
+
+    const sourcePath = path.join(root, "source.mp4");
+    await writeFile(sourcePath, new Uint8Array([0, 1, 2, 3]));
+    const succeeded: VideoManifest = {
+      renderId,
+      status: "succeeded",
+      content: { hook: "hook hook", caption: "caption caption caption!", cta: "cta" },
+      artifact: {
+        bytes: 4,
+        sha256: "a".repeat(64),
+        durationMs: 12_000,
+        width: 1280,
+        height: 720,
+        codecName: "h264",
+        pixelFormat: "yuv420p",
+        formatName: "mp4",
+        rendererRevision: "test",
+      },
+    };
+    await library.save(renderId, succeeded, { path: sourcePath, bytes: 4, sha256: "a".repeat(64), durationMs: 12_000 });
+    await expect(library.videoExists(renderId)).resolves.toBe(true);
   });
 
   it("rejects a manifest whose render ID differs from its directory", async () => {
