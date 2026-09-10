@@ -99,17 +99,27 @@ export class CatalogRepository {
     const { data, error } = await this.client
       .from("product_content_context")
       .select(
-        "product_id, organization_id, name, sku, brand, current_price, stock_quantity, primary_image_url, specifications, collected_at"
+        "product_id, organization_id, name, sku, brand, current_price, stock_quantity, primary_image_url, specifications, collected_at, product_type, quality, in_stock"
       )
       .eq("product_id", productId)
       .eq("organization_id", scope.organizationId)
+      .eq("product_type", "laptop")
+      .eq("quality", "usable")
+      .eq("in_stock", true)
       .maybeSingle();
 
     if (error) {
       throw new Error("Failed to get product snapshot");
     }
 
-    if (!data?.name || !data.current_price || data.current_price <= 0) {
+    if (
+      !data?.name ||
+      !data.current_price ||
+      data.current_price <= 0 ||
+      data.product_type !== "laptop" ||
+      data.quality !== "usable" ||
+      data.in_stock !== true
+    ) {
       return null;
     }
 

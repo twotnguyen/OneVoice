@@ -196,6 +196,50 @@ describe("CatalogRepository", () => {
     ).resolves.toBeNull();
   });
 
+  it.each<[string, Partial<Database["public"]["Views"]["product_content_context"]["Row"]>]>([
+    ["a not-usable quality", { quality: "partial" }],
+    ["an out-of-stock row", { in_stock: false }],
+    ["a non-laptop product type", { product_type: "gpu" }],
+  ])("returns no snapshot for %s in the same organization", async (_case, overrides) => {
+    const contentContextRow: Database["public"]["Views"]["product_content_context"]["Row"] = {
+      active_promotions: null,
+      brand: "ASUS",
+      collected_at: "2026-08-31T00:00:00Z",
+      compare_at_price: null,
+      completeness_score: 1,
+      current_price: 30_000_000,
+      in_stock: true,
+      is_data_stale: false,
+      name: "Laptop ASUS",
+      normalized_attributes: null,
+      organization_id: "org-1",
+      primary_image_url: null,
+      product_id: "prod-1",
+      product_type: "laptop",
+      quality: "usable",
+      sku: "LAP-01",
+      specifications: [],
+      stock_quantity: 4,
+      ...overrides,
+    };
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: contentContextRow, error: null }),
+    };
+    const client = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient<Database>;
+    const repository = new CatalogRepository({ client });
+
+    await expect(
+      repository.getProductSnapshot({ organizationId: "org-1" }, "prod-1")
+    ).resolves.toBeNull();
+    expect(query.eq).toHaveBeenCalledWith("product_type", "laptop");
+    expect(query.eq).toHaveBeenCalledWith("quality", "usable");
+    expect(query.eq).toHaveBeenCalledWith("in_stock", true);
+  });
+
   it("throws a safe repository error when the snapshot query fails", async () => {
     const query = {
       select: vi.fn().mockReturnThis(),
