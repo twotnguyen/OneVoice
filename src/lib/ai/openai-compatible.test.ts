@@ -74,6 +74,28 @@ describe("OpenAICompatibleProvider", () => {
     });
   });
 
+  it("does not double the /responses segment when the base URL already includes it", async () => {
+    const urls: string[] = [];
+    const provider = new OpenAICompatibleProvider(
+      {
+        baseUrl: "https://opencode.ai/zen/v1/responses/",
+        apiKey: "secret-key",
+        model: "muse-spark-1.3-contributor-free",
+      },
+      async (input) => {
+        urls.push(String(input));
+        return new Response(JSON.stringify({ output_text: "ok" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    );
+
+    await provider.generateText({ prompt: "Write the campaign." });
+
+    expect(urls).toEqual(["https://opencode.ai/zen/v1/responses"]);
+  });
+
   it("uses top-level output_text when provided", async () => {
     const provider = new OpenAICompatibleProvider(
       {

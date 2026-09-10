@@ -53,18 +53,19 @@ function getResponseText(response: z.infer<typeof responseSchema>): string | und
 }
 
 export class OpenAICompatibleProvider implements AiProvider {
-  private readonly baseUrl: string;
+  private readonly responsesUrl: string;
 
   constructor(
     private readonly config: OpenAICompatibleConfig,
     private readonly fetchImplementation: typeof fetch = fetch,
   ) {
-    this.baseUrl = config.baseUrl.replace(/\/+$/, "");
+    const baseUrl = config.baseUrl.replace(/\/+$/, "");
+    this.responsesUrl = baseUrl.endsWith("/responses") ? baseUrl : `${baseUrl}/responses`;
   }
 
   async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
     const response = await this.fetchImplementation(
-      `${this.baseUrl}/responses`,
+      this.responsesUrl,
       {
         method: "POST",
         headers: {
