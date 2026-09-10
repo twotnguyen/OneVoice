@@ -39,6 +39,12 @@ describe("readServerEnv", () => {
         fontPath: undefined,
         scriptModel: undefined,
         scriptTimeoutMs: 180000,
+        renderer: "template",
+        ttsEndpoint: "http://localhost:8123",
+        ttsTimeoutMs: 60000,
+        musicGain: 0.35,
+        templatesRoot: "src/lib/video/template-pipeline/templates",
+        audioRoot: "assets/audio",
       },
     });
   });
@@ -64,6 +70,12 @@ describe("readServerEnv", () => {
       fontPath: undefined,
       scriptModel: undefined,
       scriptTimeoutMs: 180000,
+      renderer: "template",
+      ttsEndpoint: "http://localhost:8123",
+      ttsTimeoutMs: 60000,
+      musicGain: 0.35,
+      templatesRoot: "src/lib/video/template-pipeline/templates",
+      audioRoot: "assets/audio",
     });
   });
 

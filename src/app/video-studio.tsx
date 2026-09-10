@@ -25,6 +25,8 @@ const stageLabels: Record<RenderStage, string> = {
   loading_product: "Đang tải bản chụp sản phẩm",
   generating_content: "Đang tạo nội dung",
   resolving_asset: "Đang xử lý ảnh sản phẩm",
+  synthesizing_voice: "Đang tạo giọng đọc",
+  composing_scenes: "Đang dựng từng cảnh",
   rendering_video: "Đang dựng video",
   storing_artifact: "Đang lưu thành phẩm",
 };

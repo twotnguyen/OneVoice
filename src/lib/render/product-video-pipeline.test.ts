@@ -11,6 +11,7 @@ import type {
   VideoManifest,
   VideoRenderRequest,
 } from "@/lib/video/types";
+import type { TemplateRenderRequest } from "@/lib/video/template-video-renderer";
 import { ProductVideoPipeline } from "./product-video-pipeline";
 
 const renderId = "b0000000-0000-4000-8000-000000000001";
@@ -80,7 +81,7 @@ function harness(options: {
       if (options.videoCleanupError) throw options.videoCleanupError;
     },
   };
-  let renderRequest: VideoRenderRequest | undefined;
+  let renderRequest: VideoRenderRequest | TemplateRenderRequest | undefined;
   const diagnostics: unknown[] = [];
 
   const pipeline = new ProductVideoPipeline({
@@ -134,7 +135,8 @@ describe("ProductVideoPipeline", () => {
     const result = await test.pipeline.create({ renderId, productId, scope });
 
     expect(result.status).toBe("succeeded");
-    expect(test.getRenderRequest()?.storyboard.scenes).toHaveLength(3);
+    const request = test.getRenderRequest();
+    expect(request && "storyboard" in request ? request.storyboard.scenes : []).toHaveLength(3);
     expect(test.manifests).toEqual([result]);
     expect(JSON.stringify(result)).not.toContain("/private/");
     expect(test.events).toEqual([

@@ -7,7 +7,7 @@ import type { RenderProgressStore } from "@/lib/render/progress-store";
 import { RenderGate, sharedRenderGate } from "@/lib/render/render-gate";
 import type { RenderRun, RenderStage } from "@/lib/render/types";
 import { toRenderRunView } from "@/lib/render/types";
-import type { VideoManifest } from "@/lib/video/types";
+import type { VideoManifest, VideoManifestError } from "@/lib/video/types";
 
 type Dependencies = Readonly<{
   scope: OrganizationScope;
@@ -20,14 +20,20 @@ type Dependencies = Readonly<{
 }>;
 
 const commandSchema = z.object({ renderId: z.uuid(), productId: z.uuid() });
-const statusByCode = {
+const statusByCode: Record<VideoManifestError["code"], number> = {
   PRODUCT_NOT_FOUND: 404,
   AI_GENERATION_FAILED: 502,
+  SCRIPT_SCHEMA_INVALID: 502,
+  SCRIPT_TRUTH_VIOLATION: 502,
+  SCRIPT_DURATION_EXCEEDED: 502,
   IMAGE_RESOLUTION_FAILED: 500,
   CATALOG_FAILED: 500,
+  TTS_UNAVAILABLE: 503,
+  TTS_TIMEOUT: 503,
+  NARRATION_OVERRUNS_SCENE: 500,
   VIDEO_RENDER_FAILED: 500,
   STORAGE_FAILED: 500,
-} as const;
+};
 
 export function createRendersRoute(dependencies: Dependencies) {
   const gate = dependencies.gate ?? sharedRenderGate;

@@ -75,6 +75,7 @@ export async function concatVideos(clipPaths: string[], outPath: string): Promis
 /**
  * Mux an audio track onto a silent video. The video length wins (no -shortest),
  * so an outro visual hold past the end of narration is preserved as silent tail.
+ * `-movflags +faststart` matches the ffmpeg renderer so playback starts fast.
  */
 export async function muxAudioOntoVideo(
   videoPath: string,
@@ -90,6 +91,7 @@ export async function muxAudioOntoVideo(
     "-c:v", "copy",
     "-c:a", "aac",
     "-b:a", "192k",
+    "-movflags", "+faststart",
     outPath,
   ]);
 }

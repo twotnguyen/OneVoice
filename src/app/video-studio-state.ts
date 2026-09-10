@@ -77,7 +77,7 @@ export async function checkDownloadArtifact(
 export function parseRunningStage(value: unknown): RenderStage | null {
   if (typeof value !== "object" || value === null || !("status" in value) || !("stage" in value)) return null;
   if (value.status !== "running" || typeof value.stage !== "string") return null;
-  return (["loading_product", "generating_content", "resolving_asset", "rendering_video", "storing_artifact"] as const).includes(value.stage as RenderStage)
+  return (["loading_product", "generating_content", "resolving_asset", "synthesizing_voice", "composing_scenes", "rendering_video", "storing_artifact"] as const).includes(value.stage as RenderStage)
     ? value.stage as RenderStage
     : null;
 }

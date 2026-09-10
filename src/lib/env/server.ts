@@ -29,6 +29,12 @@ const serverEnvironmentSchema = z.object({
   ONEVOICE_FONT_PATH: z.string().optional().transform((value) => value?.trim() || undefined),
   ONEVOICE_SCRIPT_MODEL: z.string().optional().transform((value) => value?.trim() || undefined),
   ONEVOICE_SCRIPT_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
+  ONEVOICE_RENDERER: z.enum(["template", "ffmpeg"]).default("template"),
+  ONEVOICE_TTS_ENDPOINT: z.string().min(1).default("http://localhost:8123"),
+  ONEVOICE_TTS_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  ONEVOICE_MUSIC_GAIN: z.coerce.number().min(0).max(1).default(0.35),
+  ONEVOICE_TEMPLATES_ROOT: z.string().min(1).default("src/lib/video/template-pipeline/templates"),
+  ONEVOICE_AUDIO_ROOT: z.string().min(1).default("assets/audio"),
 });
 
 export type ServerEnv = {
@@ -53,6 +59,12 @@ export type ServerEnv = {
     fontPath?: string;
     scriptModel?: string;
     scriptTimeoutMs: number;
+    renderer: "template" | "ffmpeg";
+    ttsEndpoint: string;
+    ttsTimeoutMs: number;
+    musicGain: number;
+    templatesRoot: string;
+    audioRoot: string;
   };
 };
 
@@ -83,6 +95,12 @@ export function readServerEnv(
       fontPath: environment.ONEVOICE_FONT_PATH,
       scriptModel: environment.ONEVOICE_SCRIPT_MODEL,
       scriptTimeoutMs: environment.ONEVOICE_SCRIPT_TIMEOUT_MS,
+      renderer: environment.ONEVOICE_RENDERER,
+      ttsEndpoint: environment.ONEVOICE_TTS_ENDPOINT,
+      ttsTimeoutMs: environment.ONEVOICE_TTS_TIMEOUT_MS,
+      musicGain: environment.ONEVOICE_MUSIC_GAIN,
+      templatesRoot: environment.ONEVOICE_TEMPLATES_ROOT,
+      audioRoot: environment.ONEVOICE_AUDIO_ROOT,
     },
   };
 }

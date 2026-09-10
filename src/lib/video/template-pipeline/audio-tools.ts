@@ -165,6 +165,94 @@ export interface SfxMixSpec {
 }
 
 /**
+ * Pad (or trim, defensively) an audio clip to exactly `targetSec` seconds.
+ * The renderer only calls this when measured <= target (A3), so this is the
+ * silence tail that lets narration hold its scene's full durationMs.
+ */
+export async function padAudioToDuration(
+  inputPath: string,
+  targetSec: number,
+  outPath: string,
+  ffmpegPath = "ffmpeg",
+): Promise<void> {
+  if (!(targetSec > 0)) throw new Error("padAudioToDuration: targetSec must be positive");
+  const target = targetSec.toFixed(3);
+  await run(ffmpegPath, [
+    "-y", "-i", inputPath,
+    "-af", `apad=whole_dur=${target}`,
+    "-t", target,
+    "-ar", "44100", "-ac", "1",
+    "-c:a", "libmp3lame", "-b:a", "192k",
+    outPath,
+  ]);
+}
+
+/**
+ * Concatenate audio clips end to end with no inter-scene gap (the per-scene
+ * silence padding is the gap). Same normalisation as concatWithSilence.
+ */
+export async function concatAudio(
+  inputPaths: string[],
+  outPath: string,
+  ffmpegPath = "ffmpeg",
+): Promise<void> {
+  if (inputPaths.length === 0) throw new Error("concatAudio: empty inputPaths");
+  if (inputPaths.length === 1) {
+    await run(ffmpegPath, [
+      "-y", "-i", inputPaths[0],
+      "-ar", "44100", "-ac", "1",
+      "-c:a", "libmp3lame", "-b:a", "192k",
+      outPath,
+    ]);
+    return;
+  }
+  const ffArgs: string[] = ["-y"];
+  for (const p of inputPaths) ffArgs.push("-i", p);
+  const parts = inputPaths.map(
+    (_, i) => `[${i}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono[a${i}]`,
+  );
+  const labels = inputPaths.map((_, i) => `[a${i}]`).join("");
+  ffArgs.push(
+    "-filter_complex", `${parts.join(";")};${labels}concat=n=${inputPaths.length}:v=0:a=1[out]`,
+    "-map", "[out]",
+    "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100",
+    outPath,
+  );
+  await run(ffmpegPath, ffArgs);
+}
+
+/**
+ * Mix a looped music bed under a finished voice mix at `gain`, fading out
+ * over the last `fadeSec` seconds (default 1.5 s). Output duration equals the
+ * voice track (`duration=first`).
+ */
+export async function mixMusicBed(
+  voicePath: string,
+  musicPath: string,
+  gain: number,
+  totalSec: number,
+  outPath: string,
+  ffmpegPath = "ffmpeg",
+  fadeSec = 1.5,
+): Promise<void> {
+  if (!(totalSec > 0)) throw new Error("mixMusicBed: totalSec must be positive");
+  const total = totalSec.toFixed(3);
+  const fadeStart = Math.max(0, totalSec - fadeSec).toFixed(3);
+  await run(ffmpegPath, [
+    "-y", "-i", voicePath, "-i", musicPath,
+    "-filter_complex",
+    `[1:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono,` +
+      `aloop=loop=-1:size=2e9,atrim=0:${total},volume=${gain},` +
+      `afade=t=out:st=${fadeStart}:d=${fadeSec}[bed];` +
+      `[0:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono[voice];` +
+      `[voice][bed]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[out]`,
+    "-map", "[out]",
+    "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100",
+    outPath,
+  ]);
+}
+
+/**
  * Mix SFX layer onto an existing voice mp3.
  *
  * - Voice stays at full volume

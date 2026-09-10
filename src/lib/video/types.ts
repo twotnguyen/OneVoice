@@ -40,7 +40,7 @@ export type RenderedVideo = VideoProbe &
     path: string;
     bytes: number;
     sha256: string;
-    rendererRevision: "onevoice-ffmpeg-v1";
+    rendererRevision: "onevoice-ffmpeg-v1" | "onevoice-template-v1";
     timings?: Readonly<Record<string, number>>;
     cleanup: () => Promise<void>;
   }>;
@@ -75,7 +75,11 @@ export type VideoManifestError =
     }>
   | Readonly<{
       stage: "generating_content";
-      code: "AI_GENERATION_FAILED";
+      code: "AI_GENERATION_FAILED" | "SCRIPT_SCHEMA_INVALID" | "SCRIPT_TRUTH_VIOLATION" | "SCRIPT_DURATION_EXCEEDED";
+    }>
+  | Readonly<{
+      stage: "synthesizing_voice";
+      code: "TTS_UNAVAILABLE" | "TTS_TIMEOUT" | "NARRATION_OVERRUNS_SCENE";
     }>
   | Readonly<{
       stage: "resolving_asset";
