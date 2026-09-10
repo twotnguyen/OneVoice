@@ -22,6 +22,12 @@ import type { RenderedVideo, VideoManifest } from "./types";
 const roots: string[] = [];
 const renderId = "550e8400-e29b-41d4-a716-446655440000";
 
+async function collect(stream: AsyncIterable<Uint8Array>): Promise<Buffer> {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
 async function temporaryRoot(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "onevoice-library-test-"));
   roots.push(root);
@@ -91,8 +97,9 @@ describe("LocalVideoLibrary", () => {
     await expect(library.getRun(renderId)).resolves.toEqual(manifest);
     const stored = await library.readVideo(renderId);
     expect(stored?.size).toBe(4);
-    await expect(stored!.handle.readFile()).resolves.toEqual(Buffer.from([0, 1, 2, 3]));
-    await stored!.handle.close();
+    await expect(collect(stored!.stream(0, stored!.size - 1))).resolves.toEqual(Buffer.from([0, 1, 2, 3]));
+    await stored!.close();
+    await expect(stored!.close()).resolves.toBeUndefined();
     expect(await readFile(path.join(directory, "manifest.json"), "utf8")).not.toContain(sourcePath);
   });
 
@@ -274,7 +281,7 @@ describe("LocalVideoLibrary", () => {
     expect((error as Error).message).not.toContain("secret");
   });
 
-  it("returns an opened video handle that remains bound to the validated inode", async () => {
+  it("returns a stored video whose stream stays bound to the validated inode", async () => {
     const root = await temporaryRoot();
     const sourcePath = path.join(root, "source.mp4");
     await writeFile(sourcePath, Buffer.from([1, 2, 3, 4]));
@@ -318,8 +325,8 @@ describe("LocalVideoLibrary", () => {
     await rename(published, `${published}.old`);
     await writeFile(published, Buffer.from([9, 9, 9, 9]));
 
-    await expect(stored!.handle.readFile()).resolves.toEqual(Buffer.from([1, 2, 3, 4]));
-    await stored!.handle.close();
+    await expect(collect(stored!.stream(0, stored!.size - 1))).resolves.toEqual(Buffer.from([1, 2, 3, 4]));
+    await stored!.close();
   });
 
   it("copies a multi-chunk video without whole-file FileHandle buffering", async () => {

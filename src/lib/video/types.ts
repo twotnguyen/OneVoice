@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import type { FileHandle } from "node:fs/promises";
-
 export type VideoScene = Readonly<{
   kind: "hook" | "facts" | "cta";
   durationMs: 4_000;
@@ -105,7 +103,17 @@ export type VideoManifest =
       error: VideoManifestError;
     }>;
 
+/**
+ * The storage seam for a persisted render's video bytes. Deliberately free of any
+ * `node:fs` handle so a non-local store (object storage, a distribution-channel
+ * adapter) can implement it: it exposes only a byte count, a ranged byte stream, and
+ * an idempotent release. Whatever the store opened is owned by this object, not the
+ * HTTP route.
+ */
 export type StoredVideo = Readonly<{
-  handle: FileHandle;
   size: number;
+  /** Yields bytes `[start, end]` inclusive as chunks. Throws if the source ends early. */
+  stream(start: number, end: number): AsyncIterable<Uint8Array>;
+  /** Idempotent; safe to call from any response path including client disconnect. */
+  close(): Promise<void>;
 }>;
