@@ -78,7 +78,7 @@ Mở <http://localhost:3000> và thực hiện:
 pnpm video:verify -- renders/<uuid>/video.mp4
 ```
 
-Verifier chỉ thành công khi artifact là MP4 có major brand trong allow-list `isom`, `iso2`, `mp41`, `mp42`, `avc1`, video H.264, `yuv420p`, 1080×1920 và duration dương; QuickTime MOV, 3GP và ISO-BMFF khác bị từ chối. Input được resolve thành absolute local path trước khi gọi ffprobe và phải là regular file đọc được, không rỗng; URL/protocol và symlink bị từ chối. Verifier giới hạn output, dừng ffprobe sau 10 giây, và chỉ in metadata hoặc mã lỗi an toàn, không in path, nội dung file hay stderr của ffprobe. Mỗi render nằm tại:
+Verifier chỉ thành công khi artifact là MP4 có major brand trong allow-list `isom`, `iso2`, `mp41`, `mp42`, `avc1`, video H.264, `yuv420p`, 1080×1920 và thời lượng trong khoảng 11.5–12.5 giây (khớp cửa sổ của renderer); QuickTime MOV, 3GP và ISO-BMFF khác bị từ chối. Input được resolve thành absolute local path trước khi gọi ffprobe và phải là regular file đọc được, không rỗng; URL/protocol và symlink bị từ chối. Verifier giới hạn output, dừng ffprobe sau 10 giây, và chỉ in metadata hoặc mã lỗi an toàn, không in path, nội dung file hay stderr của ffprobe. Mỗi render nằm tại:
 
 ```text
 renders/<uuid>/video.mp4
@@ -136,7 +136,7 @@ Trước khi public/production, chuyển orchestration sang durable queue và wo
 | Luôn dùng video chỉ có chữ | Kiểm tra `ONEVOICE_IMAGE_HOSTS`, HTTPS URL, DNS và log mã lỗi ảnh an toàn. |
 | Render thất bại | Chạy `ffmpeg -version`, `ffprobe -version`; kiểm tra quyền ghi `ONEVOICE_MEDIA_ROOT` và font path. |
 | `FILE_UNREADABLE` | Input là URL/protocol, symlink, không phải regular file local đọc được, rỗng hoặc không tồn tại. |
-| `PROFILE_MISMATCH` | Artifact không đúng MP4 brand/H.264/`yuv420p`/1080×1920/duration, là MOV/3GP hoặc ffprobe từ chối media. |
+| `PROFILE_MISMATCH` | Artifact không đúng MP4 brand/H.264/`yuv420p`/1080×1920/thời lượng 11.5–12.5s, là MOV/3GP hoặc ffprobe từ chối media. |
 | `FFPROBE_UNAVAILABLE` | Kiểm tra `FFPROBE_PATH` và quyền chạy executable. |
 | `FFPROBE_TIMEOUT` | ffprobe vượt deadline 10 giây và đã bị terminate/reap. |
 | `FFPROBE_OUTPUT_LIMIT` / `FFPROBE_PARSE_FAILED` | ffprobe trả output quá giới hạn hoặc JSON sai; verifier không in raw output. |

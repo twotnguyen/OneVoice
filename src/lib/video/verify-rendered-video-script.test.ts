@@ -24,7 +24,7 @@ const conformingProbe = JSON.stringify({
   streams: [{ codec_name: "h264", pix_fmt: "yuv420p", width: 1080, height: 1920 }],
   format: {
     format_name: "mov,mp4,m4a,3gp,3g2,mj2",
-    duration: "1.000000",
+    duration: "12.000000",
     tags: { major_brand: "isom" },
   },
 });
@@ -61,6 +61,7 @@ async function temporaryRoot(): Promise<string> {
 async function createVideoFixture(
   videoPath: string,
   container: "mp4" | "mov" | "3gp" = "mp4",
+  durationSeconds = 12,
 ): Promise<void> {
   const result = await runProcess("ffmpeg", [
     "-nostdin",
@@ -70,7 +71,7 @@ async function createVideoFixture(
     "-f",
     "lavfi",
     "-i",
-    "color=c=blue:s=1080x1920:r=1:d=1",
+    `color=c=blue:s=1080x1920:r=1:d=${durationSeconds}`,
     "-c:v",
     "libx264",
     "-pix_fmt",
@@ -137,8 +138,18 @@ describe("rendered video verifier script", () => {
     expect(result.stdout).toContain("Codec: H.264");
     expect(result.stdout).toContain("Pixel format: yuv420p");
     expect(result.stdout).toContain("Dimensions: 1080x1920");
-    expect(result.stdout).toContain("Duration: 1.000 seconds");
+    expect(result.stdout).toContain("Duration: 12.000 seconds");
     expect(result.stdout).toContain(`File size: ${bytes} bytes`);
+  });
+
+  it("rejects an otherwise conforming MP4 whose duration is outside the render window", async () => {
+    const root = await temporaryRoot();
+    const videoPath = path.join(root, "short.mp4");
+    await createVideoFixture(videoPath, "mp4", 1);
+
+    const result = await runVerifier(["--", videoPath]);
+
+    expectSafeFailure(result, "PROFILE_MISMATCH", [videoPath]);
   });
 
   it.each([

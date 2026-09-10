@@ -162,7 +162,8 @@ async function main(): Promise<void> {
     width !== 1080 ||
     height !== 1920 ||
     duration === null ||
-    duration <= 0
+    duration < 11.5 ||
+    duration > 12.5
   ) {
     throw new VerificationFailure("PROFILE_MISMATCH");
   }
