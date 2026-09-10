@@ -523,6 +523,8 @@ export class RemoteImageResolver {
       if (
         url.protocol !== "https:" ||
         url.port !== "" ||
+        url.username !== "" ||
+        url.password !== "" ||
         !this.allowedHostnames.has(url.hostname.toLowerCase())
       ) {
         return null;

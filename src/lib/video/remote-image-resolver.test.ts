@@ -124,6 +124,7 @@ describe("RemoteImageResolver transport", () => {
     await expect(resolver.resolve("http://images.example.com/a.jpg")).resolves.toBeNull();
     await expect(resolver.resolve("https://images.example.com:444/a.jpg")).resolves.toBeNull();
     await expect(resolver.resolve("https://evil.example/a.jpg")).resolves.toBeNull();
+    await expect(resolver.resolve("https://user:pass@images.example.com/a.jpg")).resolves.toBeNull();
     expect({ lookupCalls, requestCalls }).toEqual({ lookupCalls: 0, requestCalls: 0 });
   });
 

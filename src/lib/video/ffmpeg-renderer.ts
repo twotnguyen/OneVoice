@@ -126,7 +126,7 @@ export async function probeVideo(
 }
 
 async function resolveFont(configuredPath?: string): Promise<string> {
-  const candidates = [configuredPath, process.env.ONEVOICE_FONT_PATH, ...FONT_CANDIDATES].filter(
+  const candidates = [configuredPath, ...FONT_CANDIDATES].filter(
     (candidate): candidate is string => Boolean(candidate),
   );
   for (const candidate of candidates) {
