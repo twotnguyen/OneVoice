@@ -14,6 +14,17 @@ function cleanText(value: string): string {
     .trim();
 }
 
+// Slice by Unicode code points rather than UTF-16 code units so a Vietnamese
+// combining sequence or an astral-plane emoji is never cut mid-surrogate — which
+// writeFile(..., "utf8") would otherwise emit as U+FFFD ("…").
+function sliceCodePoints(value: string, maxCodePoints: number): string {
+  return Array.from(value).slice(0, maxCodePoints).join("");
+}
+
+function codePointLength(value: string): number {
+  return Array.from(value).length;
+}
+
 function wrapText(
   value: string,
   maxLines: number,
@@ -23,10 +34,10 @@ function wrapText(
   const lines: string[] = [];
 
   while (words.length > 0 && lines.length < maxLines) {
-    let line = words.shift()!.slice(0, maxLineLength);
+    let line = sliceCodePoints(words.shift()!, maxLineLength);
     while (
       words.length > 0 &&
-      `${line} ${words[0]}`.length <= maxLineLength
+      codePointLength(`${line} ${words[0]}`) <= maxLineLength
     ) {
       line += ` ${words.shift()!}`;
     }
@@ -34,7 +45,7 @@ function wrapText(
   }
 
   if (words.length > 0 && lines.length > 0) {
-    lines[lines.length - 1] = `${lines.at(-1)!.slice(0, maxLineLength - 1)}…`;
+    lines[lines.length - 1] = `${sliceCodePoints(lines.at(-1)!, maxLineLength - 1)}…`;
   }
   return lines;
 }

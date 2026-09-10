@@ -334,6 +334,99 @@ describe("CatalogRepository", () => {
     expect(result.pageSize).toBe(10);
   });
 
+  it("cannot inject a second PostgREST filter through the search term", async () => {
+    const or = vi.fn().mockReturnThis();
+    const mockQueryBuilder: Record<string, unknown> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      or,
+      gte: vi.fn().mockReturnThis(),
+      lte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({ data: [], count: 0, error: null }),
+    };
+    const mockClient = {
+      from: vi.fn().mockReturnValue(mockQueryBuilder),
+    } as unknown as SupabaseClient<Database>;
+    const repo = new CatalogRepository({ client: mockClient });
+
+    await repo.listProducts({
+      search: "x,organization_id.neq.00000000-0000-0000-0000-000000000000),(price_vnd.gt.0",
+    });
+
+    expect(or).toHaveBeenCalledTimes(1);
+    const filter = or.mock.calls[0][0] as string;
+    // No parens/backslash survive, and there is exactly one comma — the single
+    // separator between the intended name and sku clauses.
+    expect(filter).not.toMatch(/[()\\]/);
+    const clauses = filter.split(",");
+    expect(clauses).toHaveLength(2);
+    expect(clauses[0].startsWith("name.ilike.%")).toBe(true);
+    expect(clauses[1].startsWith("sku.ilike.%")).toBe(true);
+  });
+
+  it("skips the search filter when the term is only PostgREST metacharacters", async () => {
+    const or = vi.fn().mockReturnThis();
+    const mockQueryBuilder: Record<string, unknown> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      or,
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({ data: [], count: 0, error: null }),
+    };
+    const mockClient = {
+      from: vi.fn().mockReturnValue(mockQueryBuilder),
+    } as unknown as SupabaseClient<Database>;
+    const repo = new CatalogRepository({ client: mockClient });
+
+    await repo.listProducts({ search: ' ,()%*" ' });
+
+    expect(or).not.toHaveBeenCalled();
+  });
+
+  it("strips a double quote from an inch-spec term so PostgREST does not 400", async () => {
+    const or = vi.fn().mockReturnThis();
+    const mockQueryBuilder: Record<string, unknown> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      or,
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({ data: [], count: 0, error: null }),
+    };
+    const mockClient = {
+      from: vi.fn().mockReturnValue(mockQueryBuilder),
+    } as unknown as SupabaseClient<Database>;
+    const repo = new CatalogRepository({ client: mockClient });
+
+    await repo.listProducts({ search: 'Zephyrus 14"' });
+
+    expect(or).toHaveBeenCalledWith(
+      "name.ilike.%Zephyrus 14%,sku.ilike.%Zephyrus 14%",
+    );
+    expect((or.mock.calls[0][0] as string)).not.toContain('"');
+  });
+
+  it("keeps a plain search term as a case-insensitive name/sku contains match", async () => {
+    const or = vi.fn().mockReturnThis();
+    const mockQueryBuilder: Record<string, unknown> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      or,
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({ data: [], count: 0, error: null }),
+    };
+    const mockClient = {
+      from: vi.fn().mockReturnValue(mockQueryBuilder),
+    } as unknown as SupabaseClient<Database>;
+    const repo = new CatalogRepository({ client: mockClient });
+
+    await repo.listProducts({ search: "  Zephyrus G14  " });
+
+    expect(or).toHaveBeenCalledWith(
+      "name.ilike.%Zephyrus G14%,sku.ilike.%Zephyrus G14%",
+    );
+  });
+
   it("fetches product detail with related entities", async () => {
     const mockClient = {
       from: vi.fn((table: string) => {

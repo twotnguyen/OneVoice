@@ -11,10 +11,38 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
 const DIRECTORY = constants.O_DIRECTORY ?? 0;
 const COPY_CHUNK_BYTES = 64 * 1024;
+const STREAM_CHUNK_BYTES = 64 * 1024;
 
 type LibraryOptions = Readonly<{
   openFile?: typeof open;
 }>;
+
+type OpenFileHandle = Awaited<ReturnType<typeof open>>;
+
+/**
+ * Wraps an already-validated, open file handle as a {@link StoredVideo}. The handle's
+ * lifetime is owned here: `stream` reads ranged chunks against it and `close` releases
+ * it exactly once, so the HTTP route never sees a `node:fs` handle.
+ */
+function createStoredVideo(handle: OpenFileHandle, size: number): StoredVideo {
+  let closePromise: Promise<void> | undefined;
+  return {
+    size,
+    async *stream(start: number, end: number): AsyncGenerator<Uint8Array> {
+      let position = start;
+      while (position <= end) {
+        const chunk = Buffer.allocUnsafe(Math.min(STREAM_CHUNK_BYTES, end - position + 1));
+        const { bytesRead } = await handle.read(chunk, 0, chunk.length, position);
+        if (bytesRead === 0) throw new Error("Video artifact ended unexpectedly");
+        position += bytesRead;
+        yield new Uint8Array(chunk.buffer, chunk.byteOffset, bytesRead);
+      }
+    },
+    close(): Promise<void> {
+      return (closePromise ??= handle.close());
+    },
+  };
+}
 
 const contentSchema = z
   .object({
@@ -277,7 +305,7 @@ export class LocalVideoLibrary {
     try {
       const openedDetails = await handle.stat();
       if (!openedDetails.isFile()) throw new Error("Unsafe video file");
-      return { handle, size: openedDetails.size };
+      return createStoredVideo(handle, openedDetails.size);
     } catch (error) {
       await handle.close();
       throw error;

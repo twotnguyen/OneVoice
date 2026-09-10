@@ -41,10 +41,11 @@ async function mediaResponse(
     return Response.json({ error: { code: "STORAGE_UNAVAILABLE" } }, { status: 500 });
   }
   if (!stored) return Response.json({ error: { code: "NOT_FOUND" } }, { status: 404 });
+  const media = stored;
 
   const diagnostic = dependencies.diagnostic ?? defaultDiagnosticSink;
   let closePromise: Promise<void> | undefined;
-  const close = () => closePromise ??= Promise.resolve().then(() => stored.handle.close());
+  const close = () => (closePromise ??= media.close());
   const closeBeforeResponse = async (): Promise<boolean> => {
     try {
       await close();
@@ -54,18 +55,18 @@ async function mediaResponse(
       return false;
     }
   };
-  if (!Number.isSafeInteger(stored.size) || stored.size <= 0) {
+  if (!Number.isSafeInteger(media.size) || media.size <= 0) {
     await closeBeforeResponse();
     diagnostic({ stage: "media", code: "STORAGE_UNAVAILABLE" });
     return Response.json({ error: { code: "STORAGE_UNAVAILABLE" } }, { status: 500 });
   }
   const rangeHeader = request.headers.get("range");
-  const range = rangeHeader ? parseByteRange(rangeHeader, stored.size) : { start: 0, end: stored.size - 1 };
+  const range = rangeHeader ? parseByteRange(rangeHeader, media.size) : { start: 0, end: media.size - 1 };
   if (!range) {
     if (!(await closeBeforeResponse())) return Response.json({ error: { code: "STORAGE_UNAVAILABLE" } }, { status: 500 });
     return new Response(null, {
       status: 416,
-      headers: { ...noBodyHeaders, "Content-Range": `bytes */${stored.size}` },
+      headers: { ...noBodyHeaders, "Content-Range": `bytes */${media.size}` },
     });
   }
 
@@ -73,7 +74,7 @@ async function mediaResponse(
   const headers: Record<string, string> = {
     ...commonHeaders,
     "Content-Length": String(length),
-    ...(rangeHeader ? { "Content-Range": `bytes ${range.start}-${range.end}/${stored.size}` } : {}),
+    ...(rangeHeader ? { "Content-Range": `bytes ${range.start}-${range.end}/${media.size}` } : {}),
     ...(attachment
       ? { "Content-Disposition": `attachment; filename="onevoice-${parsedId.data}.mp4"` }
       : {}),
@@ -83,34 +84,30 @@ async function mediaResponse(
     return new Response(null, { status: rangeHeader ? 206 : 200, headers });
   }
 
-  let position = range.start;
+  const iterator = media.stream(range.start, range.end)[Symbol.asyncIterator]();
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
-      if (position > range.end) {
-        if (await closeBeforeResponse()) controller.close();
-        else controller.error(new Error("Video stream unavailable"));
-        return;
-      }
-      const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, range.end - position + 1));
       try {
-        const { bytesRead } = await stored.handle.read(buffer, 0, buffer.length, position);
-        if (bytesRead === 0) {
-          await closeBeforeResponse();
-          controller.error(new Error("Video artifact ended unexpectedly"));
-          return;
-        }
-        position += bytesRead;
-        controller.enqueue(new Uint8Array(buffer.buffer, buffer.byteOffset, bytesRead));
-        if (position > range.end) {
+        const { value, done } = await iterator.next();
+        if (done) {
           if (await closeBeforeResponse()) controller.close();
           else controller.error(new Error("Video stream unavailable"));
+          return;
         }
+        controller.enqueue(value);
       } catch {
         await closeBeforeResponse();
         controller.error(new Error("Video stream unavailable"));
       }
     },
-    async cancel() { await closeBeforeResponse(); },
+    async cancel() {
+      try {
+        await iterator.return?.();
+      } catch {
+        // Best-effort finalisation of the range iterator; the shared close is authoritative.
+      }
+      await closeBeforeResponse();
+    },
   });
   return new Response(body, { status: rangeHeader ? 206 : 200, headers });
 }

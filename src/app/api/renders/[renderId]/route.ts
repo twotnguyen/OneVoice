@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { VideoManifest } from "@/lib/video/types";
 import { defaultDiagnosticSink, type DiagnosticSink } from "@/lib/render/diagnostics";
+import { toRenderRunView } from "@/lib/render/types";
 import type { RenderProgressStore } from "@/lib/render/progress-store";
 
 type Context = { params: Promise<{ renderId: string }> };
@@ -23,7 +24,7 @@ export function createRenderStatusRoute(dependencies: Dependencies) {
       try {
         const run = await dependencies.library.getRun(parsed.data);
         return run
-          ? Response.json(run)
+          ? Response.json(toRenderRunView(run))
           : Response.json({ error: { code: "NOT_FOUND" } }, { status: 404 });
       } catch {
         (dependencies.diagnostic ?? defaultDiagnosticSink)({ stage: "media", code: "STORAGE_UNAVAILABLE" });

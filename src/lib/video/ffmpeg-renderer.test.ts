@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -13,6 +23,7 @@ import {
   buildImageOverlayEnableExpression,
   FfmpegVideoRenderer,
   probeVideo,
+  sweepStaleIntermediates,
 } from "./ffmpeg-renderer";
 import { compileProductStoryboard } from "./storyboard";
 
@@ -36,6 +47,100 @@ afterEach(async () => {
 });
 
 describe("FfmpegVideoRenderer", () => {
+  it("keeps ffmpeg/ffprobe stderr out of the thrown Error message", async () => {
+    const missing = path.join(tmpdir(), "onevoice-absent-9f3c2a17.mp4");
+    let caught: unknown;
+    try {
+      await probeVideo(missing);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toMatch(/^Media process exited with code \d+$/);
+    expect((caught as Error).message).not.toContain(missing);
+    expect((caught as Error).message).not.toContain(tmpdir());
+    // stderr is retained for debugging but non-enumerable, so it cannot leak
+    // through JSON serialization of the error.
+    const stderr = (caught as Error & { stderr?: string }).stderr;
+    expect(typeof stderr).toBe("string");
+    expect(JSON.stringify(caught)).not.toContain(tmpdir());
+  });
+
+  it("sweeps stale intermediate artifacts without touching render directories", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "onevoice-sweep-test-"));
+    roots.push(root);
+    const stale = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+    await mkdir(path.join(root, ".output"), { recursive: true });
+    await mkdir(path.join(root, ".images"), { recursive: true });
+
+    const staleOutput = path.join(root, ".output", "11111111-1111-4111-8111-111111111111.mp4");
+    await writeFile(staleOutput, "stale");
+    await utimes(staleOutput, stale, stale);
+
+    const staleWork = path.join(root, ".output", ".work-abc123");
+    await mkdir(staleWork);
+    await writeFile(path.join(staleWork, "scene-0.txt"), "x");
+    await utimes(staleWork, stale, stale);
+
+    const staleAsset = path.join(root, ".images", "asset-def456");
+    await mkdir(staleAsset);
+    await writeFile(path.join(staleAsset, "frame.png"), "x");
+    await utimes(staleAsset, stale, stale);
+
+    const staleStage = path.join(root, ".stage-ghi789");
+    await mkdir(staleStage);
+    await utimes(staleStage, stale, stale);
+
+    const freshOutput = path.join(root, ".output", "22222222-2222-4222-8222-222222222222.mp4");
+    await writeFile(freshOutput, "fresh");
+
+    const renderDir = path.join(root, "33333333-3333-4333-8333-333333333333");
+    await mkdir(renderDir);
+    await writeFile(path.join(renderDir, "video.mp4"), "keep");
+    await writeFile(path.join(renderDir, "manifest.json"), "{}");
+    // Even an hours-old render directory must never be swept.
+    await utimes(renderDir, stale, stale);
+
+    const removed = await sweepStaleIntermediates(root);
+
+    expect(removed).toBe(4);
+    await expect(stat(staleOutput)).rejects.toThrow();
+    await expect(stat(staleWork)).rejects.toThrow();
+    await expect(stat(staleAsset)).rejects.toThrow();
+    await expect(stat(staleStage)).rejects.toThrow();
+    await expect(stat(freshOutput)).resolves.toBeDefined();
+    await expect(stat(path.join(renderDir, "video.mp4"))).resolves.toBeDefined();
+    await expect(stat(path.join(renderDir, "manifest.json"))).resolves.toBeDefined();
+    // The container directories themselves survive; only their entries are swept.
+    await expect(stat(path.join(root, ".output"))).resolves.toBeDefined();
+    await expect(stat(path.join(root, ".images"))).resolves.toBeDefined();
+  });
+
+  it("treats a missing media root or intermediate directory as a no-op", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "onevoice-sweep-empty-"));
+    roots.push(root);
+
+    await expect(sweepStaleIntermediates(root)).resolves.toBe(0);
+    await expect(
+      sweepStaleIntermediates(path.join(root, "not-created")),
+    ).resolves.toBe(0);
+  });
+
+  it("keeps fresh intermediates and only sweeps entries past the cutoff", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "onevoice-sweep-age-"));
+    roots.push(root);
+    await mkdir(path.join(root, ".output"), { recursive: true });
+    const fresh = path.join(root, ".output", "44444444-4444-4444-8444-444444444444.mp4");
+    await writeFile(fresh, "fresh");
+
+    const removed = await sweepStaleIntermediates(root, 60 * 60 * 1000);
+
+    expect(removed).toBe(0);
+    await expect(stat(fresh)).resolves.toBeDefined();
+  });
+
   it("uses disjoint scene windows at the four- and eight-second boundaries", () => {
     expect(buildSceneEnableExpression(0)).toBe("gte(t,0)*lt(t,4)");
     expect(buildSceneEnableExpression(1)).toBe("gte(t,4)*lt(t,8)");

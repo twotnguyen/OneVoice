@@ -23,6 +23,11 @@ const TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 5;
 const STDERR_LIMIT = 64 * 1024;
 const MAX_NORMALIZED_BYTES = 64 * 1024 * 1024;
+// A corrupt-but-correctly-typed remote image makes ffprobe/ffmpeg exit non-zero. That is bad
+// input, not a broken toolchain, so it must not trigger a full capability revalidation on every
+// occurrence. Revalidate only once the cached decoder has failed this many times in a row with
+// no success in between: a real toolchain regression trips it quickly, a run of bad images does not.
+const MEDIA_PROCESS_REVALIDATION_THRESHOLD = 3;
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const MIME_CODECS = {
   "image/jpeg": "mjpeg",
@@ -404,6 +409,8 @@ async function normalizeImage(
     },
   );
 
+  let primaryError: unknown;
+  let hasPrimaryError = false;
   try {
     let bytes = 0;
     try {
@@ -446,12 +453,24 @@ async function normalizeImage(
     } catch {
       throw new ResolverLocalError();
     }
+  } catch (error) {
+    primaryError = error;
+    hasPrimaryError = true;
   } finally {
     clearTimeout(timer);
-    await outputHandle.close().catch(() => {
-      throw new ResolverLocalError();
-    });
+    try {
+      await outputHandle.close();
+    } catch (closeError) {
+      // A failing close must not replace the real reason normalization failed: resolve() maps
+      // the primary error to a specific outcome. Surface the close failure only when nothing
+      // else failed first.
+      if (!hasPrimaryError) {
+        primaryError = Object.assign(new ResolverLocalError(), { cause: closeError });
+        hasPrimaryError = true;
+      }
+    }
   }
+  if (hasPrimaryError) throw primaryError;
 }
 
 function validSignature(bytes: Buffer, mimeType: keyof typeof MIME_CODECS): boolean {
@@ -503,6 +522,7 @@ export class RemoteImageResolver {
     chunk: Buffer,
   ) => Promise<{ bytesWritten: number }>;
   private capabilityValidation?: Promise<void>;
+  private consecutiveMediaProcessFailures = 0;
 
   constructor(options: ResolverOptions) {
     this.allowedHostnames = new Set(
@@ -659,6 +679,8 @@ export class RemoteImageResolver {
 
   private async validateMediaCapabilities(): Promise<void> {
     let capabilityDirectory: string | null = null;
+    let primaryError: unknown;
+    let hasPrimaryError = false;
     try {
       capabilityDirectory = await mkdtemp(path.join(tmpdir(), "onevoice-media-capability-"));
       for (const { mimeType, bytes } of TRUSTED_IMAGES) {
@@ -696,15 +718,25 @@ export class RemoteImageResolver {
           throw new ResolverConfigurationError();
         }
       }
-    } catch {
-      throw new ResolverConfigurationError();
+    } catch (error) {
+      primaryError = Object.assign(new ResolverConfigurationError(), { cause: error });
+      hasPrimaryError = true;
     } finally {
       if (capabilityDirectory) {
-        await rm(capabilityDirectory, { recursive: true, force: true }).catch(() => {
-          throw new ResolverConfigurationError();
-        });
+        try {
+          await rm(capabilityDirectory, { recursive: true, force: true });
+        } catch (cleanupError) {
+          // Don't let a failed temp-dir cleanup replace the real capability failure.
+          if (!hasPrimaryError) {
+            primaryError = Object.assign(new ResolverConfigurationError(), {
+              cause: cleanupError,
+            });
+            hasPrimaryError = true;
+          }
+        }
       }
     }
+    if (hasPrimaryError) throw primaryError;
   }
 
   private ensureMediaCapabilities(): Promise<void> {
@@ -761,16 +793,25 @@ export class RemoteImageResolver {
         return null;
       }
       try {
-        return await this.downloadAndNormalize(
+        const asset = await this.downloadAndNormalize(
           response,
           contentType as keyof typeof MIME_CODECS,
         );
+        this.consecutiveMediaProcessFailures = 0;
+        return asset;
       } catch (error) {
         if (error instanceof MediaProcessNonzeroError) {
-          try {
-            await this.revalidateMediaCapabilities();
-          } catch {
-            throw new Error("Image resolver configuration failed");
+          // Corrupt remote content, not a broken toolchain: fall back to a text-only video and
+          // only pay for a capability revalidation once failures accumulate with no success
+          // in between.
+          this.consecutiveMediaProcessFailures += 1;
+          if (this.consecutiveMediaProcessFailures >= MEDIA_PROCESS_REVALIDATION_THRESHOLD) {
+            this.consecutiveMediaProcessFailures = 0;
+            try {
+              await this.revalidateMediaCapabilities();
+            } catch {
+              throw new Error("Image resolver configuration failed");
+            }
           }
           return null;
         }
