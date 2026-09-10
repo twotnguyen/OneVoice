@@ -2,3 +2,17 @@ OneVoice
 Copyright 2026 OneVoice contributors
 
 This product includes software developed by the OneVoice contributors.
+
+Video template pipeline (src/lib/video/template-pipeline/) is adapted from
+`aicoding-template-video` by AI Coding / Ho Quang Hai, MIT-licensed
+(upstream commit 15c0103bd127e9a2ed963e81cdc33b04b17482cc; verbatim copy at
+src/lib/video/template-pipeline/LICENSE). Changes: injected paths, shell:false
+hyperframes spawn, local webfonts, OneVoice rebranding — see the module README.
+
+Audio assets (see assets/audio/NOTICE.md for per-file attribution):
+- "Upbeat Forever" by Kevin MacLeod, CC BY 3.0
+  (https://creativecommons.org/licenses/by/3.0).
+- "Inspiring Advertising - Upbeat Summer Corporate" by Rafael Krux
+  (filmmusic.io), CC BY 4.0 (https://creativecommons.org/licenses/by/4.0).
+- Ten SFX cues synthesized in-repo with ffmpeg, dedicated to the public
+  domain (CC0) by the OneVoice contributors.

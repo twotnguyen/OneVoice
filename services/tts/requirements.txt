@@ -1,0 +1,3 @@
+vieneu==3.6.4
+fastapi
+uvicorn[standard]

@@ -30,7 +30,9 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "2.116.0",
+    "hyperframes": "0.6.94",
     "next": "16.3.4",
+    "p-limit": "^7.3.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "4.5.4"

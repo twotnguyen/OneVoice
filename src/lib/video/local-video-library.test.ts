@@ -170,7 +170,23 @@ describe("LocalVideoLibrary", () => {
         rendererRevision: "test",
       },
     };
-    await library.save(renderId, succeeded, { path: sourcePath, bytes: 4, sha256: "a".repeat(64), durationMs: 12_000 });
+    await library.save(
+      renderId,
+      succeeded,
+      {
+        path: sourcePath,
+        bytes: 4,
+        sha256: "a".repeat(64),
+        durationMs: 12_000,
+        width: 1280,
+        height: 720,
+        codecName: "h264",
+        pixelFormat: "yuv420p",
+        formatName: "mp4",
+        rendererRevision: "onevoice-ffmpeg-v1",
+        cleanup: async () => undefined,
+      },
+    );
     await expect(library.videoExists(renderId)).resolves.toBe(true);
   });
 

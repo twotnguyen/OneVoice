@@ -25,6 +25,8 @@
 /playwright-report/
 /blob-report/
 *.tsbuildinfo
+__pycache__/
+*.py[cod]
 
 # Generated media can be recreated by the content/video pipeline
 /renders/

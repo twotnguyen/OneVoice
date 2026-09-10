@@ -35,6 +35,7 @@ describe("readServerEnv", () => {
         imageHosts: ["product.hstatic.net"],
         ffmpegPath: "ffmpeg",
         ffprobePath: "ffprobe",
+        hyperframesPath: "hyperframes",
         fontPath: undefined,
       },
     });
@@ -57,6 +58,7 @@ describe("readServerEnv", () => {
       imageHosts: ["product.hstatic.net"],
       ffmpegPath: "ffmpeg",
       ffprobePath: "ffprobe",
+      hyperframesPath: "hyperframes",
       fontPath: undefined,
     });
   });

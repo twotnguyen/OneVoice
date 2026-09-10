@@ -25,6 +25,7 @@ const serverEnvironmentSchema = z.object({
   }),
   FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
   FFPROBE_PATH: z.string().min(1).default("ffprobe"),
+  ONEVOICE_HYPERFRAMES_PATH: z.string().min(1).default("hyperframes"),
   ONEVOICE_FONT_PATH: z.string().optional().transform((value) => value?.trim() || undefined),
 });
 
@@ -46,6 +47,7 @@ export type ServerEnv = {
     imageHosts: string[];
     ffmpegPath: string;
     ffprobePath: string;
+    hyperframesPath: string;
     fontPath?: string;
   };
 };
@@ -73,6 +75,7 @@ export function readServerEnv(
       imageHosts: environment.ONEVOICE_IMAGE_HOSTS,
       ffmpegPath: environment.FFMPEG_PATH,
       ffprobePath: environment.FFPROBE_PATH,
+      hyperframesPath: environment.ONEVOICE_HYPERFRAMES_PATH,
       fontPath: environment.ONEVOICE_FONT_PATH,
     },
   };

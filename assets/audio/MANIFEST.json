@@ -1,0 +1,91 @@
+{
+  "music": [
+    {
+      "file": "music/inspiring-advertising.mp3",
+      "licence": "CC-BY-4.0",
+      "loudnessLufs": -23.25,
+      "name": "inspiring-advertising",
+      "source": "https://commons.wikimedia.org/wiki/File:Rafael_Krux_-_Inspiring_Advertising_-_Upbeat_Summer_Corporate_(cc-by)_(filmmusic).mp3"
+    },
+    {
+      "file": "music/upbeat-forever.mp3",
+      "licence": "CC-BY-3.0",
+      "loudnessLufs": -23.25,
+      "name": "upbeat-forever",
+      "source": "https://commons.wikimedia.org/wiki/File:Upbeat_Forever_(ISRC_USUAN1500063).mp3"
+    }
+  ],
+  "sfx": [
+    {
+      "category": "accents",
+      "file": "sfx/accents/chime-success.mp3",
+      "licence": "CC0",
+      "name": "chime-success",
+      "source": "synthesized in-repo with ffmpeg lavfi (no third-party source)"
+    },
+    {
+      "category": "accents",
+      "file": "sfx/accents/ding.mp3",
+      "licence": "CC0",
+      "name": "ding",
+      "source": "synthesized in-repo with ffmpeg lavfi (no third-party source)"
+    },
+    {
+      "category": "accents",
+      "file": "sfx/accents/sparkle.mp3",
+      "licence": "CC0",
+      "name": "sparkle",
+      "source": "synthesized in-repo with ffmpeg lavfi (no third-party source)"
+    },
+    {
+      "category": "accents",
+      "file": "sfx/accents/thud.mp3",
+      "licence": "CC0",
+      "name": "thud",
+      "source": "synthesized in-repo with ffmpeg lavfi (no third-party source)"
+    },
+    {
+      "category": "transitions",
+      "file": "sfx/transitions/riser.mp3",
+      "licence": "CC0",
+      "name": "riser",
+      "source": "synthesized in-repo with ffmpeg lavfi (no third-party source)"
+    },
+    {
+      "category": "transitions",
+      "file": "sfx/transitions/swoosh.mp3",
+      "licence": "CC0",
+      "name": "swoosh",
+      "source": "synthesized in-repo with ffmpeg lavfi (no third-party source)"
+    },
+    {
+      "category": "transitions",
+      "file": "sfx/transitions/transition-down.mp3",
+      "licence": "CC0",
+      "name": "transition-down",
+      "source": "synthesized in-repo with ffmpeg lavfi (no third-party source)"
+    },
+    {
+      "category": "transitions",
+      "file": "sfx/transitions/whoosh.mp3",
+      "licence": "CC0",
+      "name": "whoosh",
+      "source": "synthesized in-repo with ffmpeg lavfi (no third-party source)"
+    },
+    {
+      "category": "ui",
+      "file": "sfx/ui/click.mp3",
+      "licence": "CC0",
+      "name": "click",
+      "source": "synthesized in-repo with ffmpeg lavfi (no third-party source)"
+    },
+    {
+      "category": "ui",
+      "file": "sfx/ui/pop.mp3",
+      "licence": "CC0",
+      "name": "pop",
+      "source": "synthesized in-repo with ffmpeg lavfi (no third-party source)"
+    }
+  ],
+  "version": 1
+}
