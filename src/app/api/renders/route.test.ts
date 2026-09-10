@@ -4,9 +4,12 @@ import { describe, expect, it } from "vitest";
 
 import type { StoredVideo, VideoManifest } from "@/lib/video/types";
 import { RenderProgressStore } from "@/lib/render/progress-store";
+import { MAX_CONCURRENT_RENDERS, RenderGate } from "@/lib/render/render-gate";
 import { createRenderStatusRoute } from "./[renderId]/route";
 import { createDownloadRoute, createVideoRoute } from "@/lib/video/media-response";
 import { createRendersRoute } from "./route";
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const renderId = "b0000000-0000-4000-8000-000000000001";
 const productId = "b0000000-0000-4000-8000-000000000002";
@@ -46,14 +49,19 @@ describe("POST /api/renders", () => {
     const response = await route.POST(renderRequest({ renderId, productId, organizationId: "attacker" }));
 
     expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({
-      ...success,
+    const payload = await response.json();
+    expect(payload).toEqual({
+      renderId,
+      status: "succeeded",
+      content: success.content,
       urls: {
         status: `/api/renders/${renderId}`,
         video: `/api/renders/${renderId}/video`,
         download: `/api/renders/${renderId}/download`,
       },
     });
+    // The wire view drops the persistence-only artifact block.
+    expect(payload).not.toHaveProperty("artifact");
   });
 
   it("rejects malformed identifiers", async () => {
@@ -77,6 +85,74 @@ describe("POST /api/renders", () => {
     const response = await route.POST(renderRequest({ renderId, productId }));
     expect(response.status).toBe(status);
     expect(await response.json()).toEqual({ error: { code, stage } });
+  });
+
+  it("rejects a replayed renderId with 409 and never runs the pipeline", async () => {
+    let created = 0;
+    const route = createRendersRoute({
+      scope,
+      library: { async getRun() { return success; } },
+      pipeline: { async create() { created += 1; return success; } },
+    });
+
+    const response = await route.POST(renderRequest({ renderId, productId }));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: { code: "RENDER_ID_IN_USE" } });
+    expect(created).toBe(0);
+  });
+
+  it("rejects a concurrent POST for the same renderId with a single 409", async () => {
+    const gate = new RenderGate();
+    let releaseFirst!: () => void;
+    const firstPending = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let created = 0;
+    const route = createRendersRoute({
+      scope,
+      gate,
+      pipeline: { async create() { created += 1; await firstPending; return success; } },
+    });
+
+    const first = route.POST(renderRequest({ renderId, productId }));
+    const second = await route.POST(renderRequest({ renderId, productId }));
+
+    expect(second.status).toBe(409);
+    expect(await second.json()).toEqual({ error: { code: "RENDER_ID_IN_USE" } });
+
+    releaseFirst();
+    expect((await first).status).toBe(201);
+    expect(created).toBe(1);
+  });
+
+  it("serialises pipeline execution past the concurrency limit", async () => {
+    const gate = new RenderGate();
+    let started = 0;
+    const releases: Array<() => void> = [];
+    const route = createRendersRoute({
+      scope,
+      gate,
+      pipeline: {
+        async create() {
+          started += 1;
+          await new Promise<void>((resolve) => releases.push(resolve));
+          return success;
+        },
+      },
+    });
+    const ids = [1, 2, 3].map((n) => `b0000000-0000-4000-8000-00000000010${n}`);
+
+    const inFlight = ids.map((id) => route.POST(renderRequest({ renderId: id, productId })));
+    await tick();
+    await tick();
+    expect(started).toBe(MAX_CONCURRENT_RENDERS);
+
+    releases[0]();
+    await tick();
+    await tick();
+    expect(started).toBe(3);
+
+    releases.forEach((release) => release());
+    expect((await Promise.all(inFlight)).map((response) => response.status)).toEqual([201, 201, 201]);
   });
 
   it("registers actual pipeline stages and always clears progress", async () => {
@@ -106,7 +182,11 @@ describe("render artifact routes", () => {
   it("returns a saved safe manifest and 404 for a missing run", async () => {
     const found = createRenderStatusRoute({ library: { async getRun() { return success; } } });
     const missing = createRenderStatusRoute({ library: { async getRun() { return null; } } });
-    expect((await found.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) })).status).toBe(200);
+    const foundResponse = await found.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
+    expect(foundResponse.status).toBe(200);
+    const foundPayload = await foundResponse.json();
+    expect(foundPayload).toEqual({ renderId, status: "succeeded", content: success.content });
+    expect(foundPayload).not.toHaveProperty("artifact");
     expect((await missing.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) })).status).toBe(404);
     expect((await found.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId: "../bad" }) })).status).toBe(404);
   });
@@ -139,19 +219,27 @@ describe("render artifact routes", () => {
   function videoLibrary(bytes = Buffer.from("0123456789"), options: { closeError?: Error; readError?: Error } = {}) {
     let closed = 0;
     let reads = 0;
-    const stored = {
+    let closePromise: Promise<void> | undefined;
+    const stored: StoredVideo = {
       size: bytes.length,
-      handle: {
-        async read(buffer: Buffer, offset: number, length: number, position: number) {
+      async *stream(start: number, end: number) {
+        let position = start;
+        while (position <= end) {
           reads += 1;
           if (options.readError) throw options.readError;
-          const chunk = bytes.subarray(position, position + length);
-          chunk.copy(buffer, offset);
-          return { bytesRead: chunk.length, buffer };
-        },
-        async close() { closed += 1; if (options.closeError) throw options.closeError; },
+          const chunk = bytes.subarray(position, Math.min(position + 64 * 1024, end + 1));
+          if (chunk.length === 0) throw new Error("Video artifact ended unexpectedly");
+          position += chunk.length;
+          yield new Uint8Array(chunk);
+        }
       },
-    } as unknown as StoredVideo;
+      close() {
+        return (closePromise ??= (async () => {
+          closed += 1;
+          if (options.closeError) throw options.closeError;
+        })());
+      },
+    };
     return {
       library: { async readVideo() { return stored; } },
       closed: () => closed,

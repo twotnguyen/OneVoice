@@ -2,6 +2,10 @@
 
 import type { RenderStage } from "@/lib/render/types";
 
+// Structural mirror of the succeeded `RenderRunView` in @/lib/render/types.ts, plus the
+// `urls` block the route appends. Keep this in sync with `toRenderRunView` there: the
+// server owns the shape, the client only re-declares it because it cannot import the
+// projection at runtime.
 export type RenderResponse = Readonly<{
   renderId: string;
   status: "succeeded";
