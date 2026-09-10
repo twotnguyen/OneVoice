@@ -44,23 +44,9 @@ export function VideoStudio() {
   const operationController = useRef(new StudioOperationController());
   const { selectedId, desk } = studio;
 
-  const loadProducts = useCallback(async () => {
-    setCatalogState("loading");
-    try {
-      const response = await fetch("/api/products?page=1&pageSize=18");
-      if (!response.ok) throw new Error("catalog unavailable");
-      const payload = await response.json() as ProductsResponse;
-      setProducts(payload.items);
-      setCatalogState(payload.items.length > 0 ? "ready" : "empty");
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") setCatalogState("error");
-    }
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetch("/api/products?page=1&pageSize=18", { signal: controller.signal })
-      .then(async (response) => {
+  const loadProducts = useCallback((signal?: AbortSignal) => {
+    return fetch("/api/products?page=1&pageSize=18", signal ? { signal } : undefined)
+      .then((response) => {
         if (!response.ok) throw new Error("catalog unavailable");
         return response.json() as Promise<ProductsResponse>;
       })
@@ -71,8 +57,18 @@ export function VideoStudio() {
       .catch((error: Error) => {
         if (error.name !== "AbortError") setCatalogState("error");
       });
-    return () => controller.abort();
   }, []);
+
+  const reloadProducts = useCallback(() => {
+    setCatalogState("loading");
+    void loadProducts();
+  }, [loadProducts]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadProducts(controller.signal);
+    return () => controller.abort();
+  }, [loadProducts]);
 
   useEffect(() => {
     const operations = operationController.current;
@@ -171,7 +167,7 @@ export function VideoStudio() {
         <section className="desk-panel catalog-panel" aria-labelledby="catalog-title">
           <div className="panel-heading"><div><p className="panel-index">01</p><h2 id="catalog-title">Sản phẩm</h2></div>{catalogState === "ready" && <span>{products.length} lựa chọn</span>}</div>
           {catalogState === "loading" && <p className="state-note" role="status">Đang đọc danh mục sản phẩm…</p>}
-          {catalogState === "error" && <div className="state-note state-note--error" role="alert"><p>Không thể tải danh mục.</p><button className="text-action" type="button" onClick={() => void loadProducts()}>Tải lại</button></div>}
+          {catalogState === "error" && <div className="state-note state-note--error" role="alert"><p>Không thể tải danh mục.</p><button className="text-action" type="button" onClick={reloadProducts}>Tải lại</button></div>}
           {catalogState === "empty" && <p className="state-note">Chưa có laptop đủ dữ liệu để sản xuất.</p>}
           {catalogState === "ready" && <div className="product-list" aria-label="Danh sách sản phẩm">
             {products.map((product) => {
