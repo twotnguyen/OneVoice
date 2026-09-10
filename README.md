@@ -62,9 +62,9 @@ Local Supabase dành cho phát triển; không được expose trực tiếp ra 
 
 ```env
 AI_PROVIDER=openai-compatible
-AI_BASE_URL=https://api.your-provider.example/v1
+AI_BASE_URL=https://opencode.ai/zen/v1
 AI_API_KEY=replace_me
-AI_MODEL=replace_me
+AI_MODEL=muse-spark-1.3-contributor-free
 ```
 
 `AI_BASE_URL` phải cung cấp endpoint tương thích `POST /responses`. Key chỉ được gửi từ server qua `OpenAICompatibleProvider`; frontend không gọi provider trực tiếp.
