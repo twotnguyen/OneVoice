@@ -114,17 +114,55 @@ describe("generateProductContent", () => {
 
   it.each([
     ["hook", 7],
-    ["hook", 91],
     ["caption", 19],
-    ["caption", 281],
     ["cta", 2],
-    ["cta", 61],
-  ] as const)("rejects %s at %i characters", async (field, length) => {
+  ] as const)("rejects %s below %i characters", async (field, length) => {
     const response = JSON.stringify({ ...validContent, [field]: "x".repeat(length) });
 
     await expect(
       generateProductContent(providerReturning(response), snapshot),
     ).rejects.toThrow();
+  });
+
+  it.each([
+    ["hook", " ".repeat(12)],
+    ["caption", " ".repeat(40)],
+    ["cta", " ".repeat(6)],
+  ] as const)("rejects a whitespace-only %s", async (field, value) => {
+    const response = JSON.stringify({ ...validContent, [field]: value });
+
+    await expect(
+      generateProductContent(providerReturning(response), snapshot),
+    ).rejects.toThrow();
+  });
+
+  it.each([
+    ["hook", 90],
+    ["caption", 280],
+    ["cta", 60],
+  ] as const)("clamps an over-long %s to %i characters instead of rejecting", async (field, max) => {
+    const words = `${"chi tiết ".repeat(60)}kết thúc`;
+    const response = JSON.stringify({ ...validContent, [field]: words });
+
+    const content = await generateProductContent(providerReturning(response), snapshot);
+
+    expect(content[field].length).toBeLessThanOrEqual(max);
+    expect(content[field].length).toBeGreaterThan(max - 12);
+    expect(content[field].endsWith("…")).toBe(true);
+  });
+
+  it("gives the provider generous headroom beyond its 30s default", async () => {
+    let timeoutMs: number | undefined;
+    const provider: AiProvider = {
+      async generateText(input): Promise<GenerateTextResult> {
+        timeoutMs = input.timeoutMs;
+        return { text: JSON.stringify(validContent), model: "muse-test" };
+      },
+    };
+
+    await generateProductContent(provider, snapshot);
+
+    expect(timeoutMs).toBeGreaterThanOrEqual(90_000);
   });
 
   it("uses only bounded product facts and identifies the snapshot date", async () => {
