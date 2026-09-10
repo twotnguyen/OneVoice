@@ -673,32 +673,36 @@ describe("RemoteImageResolver content boundary", () => {
     },
   );
 
-  it("revalidates a cached decoder that later exits nonzero", async () => {
+  it("revalidates a cached decoder only after repeated nonzero exits", async () => {
     const root = await temporaryRoot();
     const executable = path.join(root, "ffmpeg-wrapper");
     await writeFile(executable, '#!/bin/sh\nexec ffmpeg "$@"\n');
     await chmod(executable, 0o700);
     const png = await imageFixture(root, "png");
-    let response = fakeResponse(new Uint8Array(), 404);
+    let primed = false;
     let requestCalls = 0;
     const resolver = new RemoteImageResolver({
       ...resolverOptions(path.join(root, "assets"), async () => {
         requestCalls += 1;
-        return response;
+        return primed
+          ? fakeResponse(png, 200, { "content-type": "image/png" })
+          : fakeResponse(new Uint8Array(), 404);
       }),
       ffmpegPath: executable,
     } as never);
     await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
     await writeFile(executable, "#!/bin/sh\nexit 69\n");
-    response = fakeResponse(png, 200, { "content-type": "image/png" });
+    primed = true;
 
-    await expect(resolver.resolve("https://images.example.com/a.png")).rejects.toThrow(
+    await expect(resolver.resolve("https://images.example.com/b.png")).resolves.toBeNull();
+    await expect(resolver.resolve("https://images.example.com/c.png")).resolves.toBeNull();
+    await expect(resolver.resolve("https://images.example.com/d.png")).rejects.toThrow(
       "Image resolver configuration failed",
     );
-    expect(requestCalls).toBe(2);
+    expect(requestCalls).toBe(4);
   });
 
-  it("revalidates a runtime ffprobe nonzero without replaying transport", async () => {
+  it("revalidates a runtime ffprobe nonzero only after repeated failures, without replaying transport", async () => {
     const root = await temporaryRoot();
     const executable = path.join(root, "ffprobe-logger");
     const logPath = path.join(root, "ffprobe.log");
@@ -717,11 +721,15 @@ describe("RemoteImageResolver content boundary", () => {
     } as never);
 
     await expect(resolver.resolve("https://images.example.com/broken.png")).resolves.toBeNull();
-    expect(requestCalls).toBe(1);
-    expect((await readFile(logPath, "utf8")).trim().split("\n")).toHaveLength(7);
+    await expect(resolver.resolve("https://images.example.com/broken.png")).resolves.toBeNull();
+    await expect(resolver.resolve("https://images.example.com/broken.png")).resolves.toBeNull();
+    expect(requestCalls).toBe(3);
+    // 3 capability probes on the first resolve + 1 runtime probe per resolve + 3 revalidation
+    // probes when the third consecutive failure trips the threshold.
+    expect((await readFile(logPath, "utf8")).trim().split("\n")).toHaveLength(9);
   });
 
-  it("revalidates a runtime ffmpeg nonzero for malformed media, then returns null", async () => {
+  it("revalidates a runtime ffmpeg nonzero for malformed media only after repeated failures", async () => {
     const root = await temporaryRoot();
     const ffprobePath = path.join(root, "ffprobe-runtime-metadata");
     await writeFile(
@@ -747,8 +755,126 @@ describe("RemoteImageResolver content boundary", () => {
     } as never);
 
     await expect(resolver.resolve("https://images.example.com/broken.png")).resolves.toBeNull();
-    expect(requestCalls).toBe(1);
-    expect((await readFile(logPath, "utf8")).trim().split("\n")).toHaveLength(7);
+    await expect(resolver.resolve("https://images.example.com/broken.png")).resolves.toBeNull();
+    await expect(resolver.resolve("https://images.example.com/broken.png")).resolves.toBeNull();
+    expect(requestCalls).toBe(3);
+    // 3 capability normalizations on the first resolve + 1 runtime normalization per resolve
+    // + 3 revalidation normalizations when the third consecutive failure trips the threshold.
+    expect((await readFile(logPath, "utf8")).trim().split("\n")).toHaveLength(9);
+  });
+
+  it("does not revalidate for one or two malformed images and resets after revalidating", async () => {
+    const root = await temporaryRoot();
+    const ffprobePath = path.join(root, "ffprobe-runtime-metadata");
+    await writeFile(
+      ffprobePath,
+      `#!/bin/sh\ncase "$PWD" in */asset-*) printf '%s\\n' '{"streams":[{"codec_name":"png","width":2,"height":2}]}' ; exit 0;; esac\nexec ffprobe "$@"\n`,
+    );
+    await chmod(ffprobePath, 0o700);
+    const ffmpegPath = path.join(root, "ffmpeg-logger");
+    const logPath = path.join(root, "ffmpeg.log");
+    await writeFile(
+      ffmpegPath,
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(logPath)}\nexec ffmpeg "$@"\n`,
+    );
+    await chmod(ffmpegPath, 0o700);
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(path.join(root, "assets"), async () =>
+        fakeResponse(Buffer.from(PNG_HEADER), 200, { "content-type": "image/png" }),
+      ),
+      ffmpegPath,
+      ffprobePath,
+    } as never);
+    const lines = async () => (await readFile(logPath, "utf8")).trim().split("\n").length;
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    expect(await lines()).toBe(4); // 3 capability + 1 runtime, no revalidation
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    expect(await lines()).toBe(5); // second failure still does not revalidate
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    expect(await lines()).toBe(9); // third failure: 1 runtime + exactly one 3-fixture revalidation
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    expect(await lines()).toBe(10); // counter reset, back to a single runtime normalization
+  });
+
+  it("resets the consecutive-failure counter after a successful resolve", async () => {
+    const root = await temporaryRoot();
+    const ffprobePath = path.join(root, "ffprobe-logger");
+    const probeLog = path.join(root, "ffprobe.log");
+    await writeFile(
+      ffprobePath,
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(probeLog)}\nexec ffprobe "$@"\n`,
+    );
+    await chmod(ffprobePath, 0o700);
+    const png = await imageFixture(root, "png");
+    let mode: "bad" | "good" = "bad";
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(path.join(root, "assets"), async () =>
+        mode === "good"
+          ? fakeResponse(png, 200, { "content-type": "image/png" })
+          : fakeResponse(Buffer.from(PNG_HEADER), 200, { "content-type": "image/png" }),
+      ),
+      ffprobePath,
+    } as never);
+    const probeLines = async () => (await readFile(probeLog, "utf8")).trim().split("\n").length;
+
+    // Two malformed images: real ffprobe exits nonzero on the truncated signature.
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    // A genuine success clears the run of failures.
+    mode = "good";
+    const asset = await resolver.resolve("https://images.example.com/a.png");
+    expect(asset?.mimeType).toBe("image/png");
+    await asset!.cleanup();
+    mode = "bad";
+    const afterSuccess = await probeLines();
+    // Two more failures: without the reset this would be failures #3 and #4 and trigger a
+    // revalidation burst (+3 probes). With the reset it is one probe apiece.
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    expect(await probeLines()).toBe(afterSuccess + 2);
+  });
+
+  it("keeps the malformed-image fallback when the normalized-output handle fails to close", async () => {
+    const root = await temporaryRoot();
+    const ffprobePath = path.join(root, "ffprobe-meta");
+    await writeFile(
+      ffprobePath,
+      `#!/bin/sh\ncase "$PWD" in */asset-*) printf '%s\\n' '{"streams":[{"codec_name":"png","width":2,"height":2}]}' ; exit 0;; esac\nexec ffprobe "$@"\n`,
+    );
+    await chmod(ffprobePath, 0o700);
+    const ffmpegPath = path.join(root, "ffmpeg-emit-then-fail");
+    await writeFile(
+      ffmpegPath,
+      `#!/bin/sh\ncase "$PWD" in */asset-*) printf 'x'; exit 69;; esac\nexec ffmpeg "$@"\n`,
+    );
+    await chmod(ffmpegPath, 0o700);
+    let sourceHandle: object | undefined;
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(path.join(root, "assets"), async () =>
+        fakeResponse(Buffer.from(PNG_HEADER), 200, { "content-type": "image/png" }),
+      ),
+      ffmpegPath,
+      ffprobePath,
+      writeChunk: async (handle: FileHandle, chunk: Buffer) => {
+        sourceHandle ??= handle;
+        if (handle === sourceHandle) return handle.write(chunk);
+        // Sabotage the normalized-output handle so finally's close() rejects while the real
+        // failure (ffmpeg nonzero -> MediaProcessNonzeroError) is already pending. Still close
+        // the underlying fd so no handle leaks into GC.
+        const realClose = handle.close.bind(handle);
+        Object.assign(handle, {
+          close: async () => {
+            await realClose();
+            throw new Error("simulated close failure");
+          },
+        });
+        return handle.write(chunk);
+      },
+    } as never);
+
+    // The caller must still see the media fallback (null), not the masked cleanup error.
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
   });
 
   it("uses exact production normalization argv for every format and caches success", async () => {
