@@ -43,6 +43,21 @@ describe("GET /api/products", () => {
     expect(calls).toEqual([[scope, { page: 2, pageSize: 18 }]]);
   });
 
+  it("maps a catalog failure to a safe 500 without leaking the thrown message", async () => {
+    const secret = "postgres://user:pw@host";
+    const route = createProductsRoute({
+      scope,
+      catalog: { async listStudioProducts() { throw new Error(secret); } },
+    });
+
+    const response = await route.GET(new Request("http://localhost/api/products"));
+    const body = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(JSON.parse(body)).toEqual({ error: { code: "CATALOG_UNAVAILABLE" } });
+    expect(body).not.toContain(secret);
+  });
+
   it("rejects pagination outside the public bounds", async () => {
     const route = createProductsRoute({
       scope,
