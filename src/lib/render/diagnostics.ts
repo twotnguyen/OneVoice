@@ -9,7 +9,8 @@ export type SafeDiagnostic = Readonly<{
     | "STORAGE_FAILED"
     | "STORAGE_UNAVAILABLE"
     | "CLOSE_FAILED"
-    | "IMAGE_MEDIA_PROCESS_FAILED";
+    | "IMAGE_MEDIA_PROCESS_FAILED"
+    | "RENDER_EVENT_WRITE_FAILED";
 }>;
 
 export type DiagnosticSink = (diagnostic: SafeDiagnostic) => void;

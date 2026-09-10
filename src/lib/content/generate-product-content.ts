@@ -121,5 +121,6 @@ export async function generateProductContent(
     cta: clampField(content.cta, CTA_MAX_LENGTH),
     model: result.model,
     ...(result.responseId ? { responseId: result.responseId } : {}),
+    ...(result.usage ? { usage: result.usage } : {}),
   };
 }

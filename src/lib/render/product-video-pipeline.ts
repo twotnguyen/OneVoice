@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import type { GenerateTextResult } from "@/lib/ai/provider";
 import type { OrganizationScope, ProductSnapshot } from "@/lib/catalog/types";
 import type { GeneratedProductContent } from "@/lib/content/types";
 import type {
@@ -14,6 +15,34 @@ import type { RenderRun } from "./types";
 import { defaultDiagnosticSink, type DiagnosticSink } from "./diagnostics";
 import type { RenderStage } from "./types";
 
+export type RenderEventInput = Readonly<{
+  renderId: string;
+  productId: string;
+  status: "succeeded" | "failed";
+  errorStage?: string;
+  errorCode?: string;
+  model?: string;
+  usage?: GenerateTextResult["usage"];
+  timings: Readonly<Record<string, number>>;
+  totalDurationMs: number;
+  videoBytes?: number;
+  videoDurationMs?: number;
+  createdAt: string;
+}>;
+
+export type RenderEventStore = Readonly<{
+  record(input: RenderEventInput, opts: { signal: AbortSignal }): Promise<void>;
+}>;
+
+type TerminateCtx = {
+  startedAt: number;
+  wallClockStart: number;
+  timings: Record<string, number>;
+  usage: GenerateTextResult["usage"] | undefined;
+  model: string | undefined;
+  renderEventTimeoutMs: number;
+};
+
 type Dependencies = Readonly<{
   catalog: {
     getProductSnapshot(scope: OrganizationScope, productId: string): Promise<ProductSnapshot | null>;
@@ -26,6 +55,8 @@ type Dependencies = Readonly<{
     save(renderId: string, manifest: VideoManifest, video?: RenderedVideo): Promise<void>;
   };
   diagnostic?: DiagnosticSink;
+  recordEvent?: RenderEventStore;
+  renderEventTimeoutMs?: number;
 }>;
 
 type CreateCommand = Readonly<{
@@ -35,15 +66,25 @@ type CreateCommand = Readonly<{
   onStage?: (stage: RenderStage) => void;
 }>;
 
+const DEFAULT_RENDER_EVENT_TIMEOUT_MS = 3000;
+
+const noopRenderEventStore: RenderEventStore = {
+  async record(): Promise<void> {},
+};
+
 function publicContent(content: GeneratedProductContent) {
   return { hook: content.hook, caption: content.caption, cta: content.cta };
 }
 
 export class ProductVideoPipeline {
   private readonly diagnostic: DiagnosticSink;
+  private readonly recordEvent: RenderEventStore;
+  private readonly renderEventTimeoutMs: number;
 
   constructor(private readonly dependencies: Dependencies) {
     this.diagnostic = dependencies.diagnostic ?? defaultDiagnosticSink;
+    this.recordEvent = dependencies.recordEvent ?? noopRenderEventStore;
+    this.renderEventTimeoutMs = dependencies.renderEventTimeoutMs ?? DEFAULT_RENDER_EVENT_TIMEOUT_MS;
   }
 
   private async fail(
@@ -77,61 +118,130 @@ export class ProductVideoPipeline {
     command.onStage?.(stage);
   }
 
+  // Total: never throws, emits no stage. Every create() return site routes through here.
+  private async terminate(run: RenderRun, command: CreateCommand, ctx: TerminateCtx): Promise<RenderRun> {
+    try {
+      const totalDurationMs = Math.round(performance.now() - ctx.startedAt);
+      const row: RenderEventInput = {
+        renderId: run.renderId,
+        productId: command.productId,
+        status: run.status,
+        ...(run.status === "failed" ? { errorStage: run.error.stage, errorCode: run.error.code } : {}),
+        ...(ctx.model ? { model: ctx.model } : {}),
+        ...(ctx.usage ? { usage: ctx.usage } : {}),
+        timings: { ...ctx.timings },
+        totalDurationMs,
+        ...(run.status === "succeeded"
+          ? { videoBytes: run.artifact.bytes, videoDurationMs: run.artifact.durationMs }
+          : {}),
+        createdAt: new Date(ctx.wallClockStart).toISOString(),
+      };
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          this.recordEvent.record(row, { signal: AbortSignal.timeout(ctx.renderEventTimeoutMs) }),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error("RENDER_EVENT_TIMEOUT")), ctx.renderEventTimeoutMs);
+          }),
+        ]);
+      } catch {
+        this.diagnostic({ stage: "storing_artifact", code: "RENDER_EVENT_WRITE_FAILED" });
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch {
+      // Swallowed: terminate() returns run unconditionally.
+    }
+    return run;
+  }
+
   async create(command: CreateCommand): Promise<RenderRun> {
+    const startedAt = performance.now();
+    const wallClockStart = Date.now();
+    const timings: Record<string, number> = {};
+    const ctx: TerminateCtx = {
+      startedAt,
+      wallClockStart,
+      timings,
+      usage: undefined,
+      model: undefined,
+      renderEventTimeoutMs: this.renderEventTimeoutMs,
+    };
+
     this.stage(command, "loading_product");
     let snapshot: ProductSnapshot | null;
-    try {
-      snapshot = await this.dependencies.catalog.getProductSnapshot(command.scope, command.productId);
-    } catch {
-      return this.fail(command, {
-        stage: "loading_product",
-        code: "CATALOG_FAILED",
-      });
+    {
+      const t = performance.now();
+      try {
+        snapshot = await this.dependencies.catalog.getProductSnapshot(command.scope, command.productId);
+      } catch {
+        timings.loading_product_ms = Math.round(performance.now() - t);
+        return await this.terminate(await this.fail(command, {
+          stage: "loading_product",
+          code: "CATALOG_FAILED",
+        }), command, ctx);
+      }
+      timings.loading_product_ms = Math.round(performance.now() - t);
     }
     if (!snapshot) {
-      return this.fail(command, {
+      return await this.terminate(await this.fail(command, {
         stage: "loading_product",
         code: "PRODUCT_NOT_FOUND",
-      });
+      }), command, ctx);
     }
 
     let content: GeneratedProductContent;
     this.stage(command, "generating_content");
-    try {
-      content = await this.dependencies.generateContent(snapshot);
-    } catch {
-      return this.fail(command, {
-        stage: "generating_content",
-        code: "AI_GENERATION_FAILED",
-      });
+    {
+      const t = performance.now();
+      try {
+        content = await this.dependencies.generateContent(snapshot);
+      } catch {
+        timings.generating_content_ms = Math.round(performance.now() - t);
+        return await this.terminate(await this.fail(command, {
+          stage: "generating_content",
+          code: "AI_GENERATION_FAILED",
+        }), command, ctx);
+      }
+      timings.generating_content_ms = Math.round(performance.now() - t);
     }
+    ctx.usage = content.usage;
+    ctx.model = content.model;
 
     let asset: ResolvedAsset | null = null;
     let video: RenderedVideo | null = null;
     try {
       this.stage(command, "resolving_asset");
       if (snapshot.primaryImageUrl) {
+        const t = performance.now();
         try {
           asset = await this.dependencies.imageResolver.resolve(snapshot.primaryImageUrl);
         } catch {
-          return await this.fail(command, {
+          timings.resolving_asset_ms = Math.round(performance.now() - t);
+          return await this.terminate(await this.fail(command, {
             stage: "resolving_asset",
             code: "IMAGE_RESOLUTION_FAILED",
-          }, content);
+          }, content), command, ctx);
         }
+        timings.resolving_asset_ms = Math.round(performance.now() - t);
       }
 
       this.stage(command, "rendering_video");
-      try {
-        video = await this.dependencies.renderer.render({
-          storyboard: this.dependencies.compileStoryboard(snapshot, content),
-          ...(asset ? { imagePath: asset.path } : {}),
-        });
-      } catch {
-        return await this.fail(command, {
-          stage: "rendering_video",
-          code: "VIDEO_RENDER_FAILED",
-        }, content);
+      {
+        const t = performance.now();
+        try {
+          video = await this.dependencies.renderer.render({
+            storyboard: this.dependencies.compileStoryboard(snapshot, content),
+            ...(asset ? { imagePath: asset.path } : {}),
+          });
+        } catch {
+          timings.rendering_video_ms = Math.round(performance.now() - t);
+          return await this.terminate(await this.fail(command, {
+            stage: "rendering_video",
+            code: "VIDEO_RENDER_FAILED",
+          }, content), command, ctx);
+        }
+        timings.rendering_video_ms = Math.round(performance.now() - t);
       }
 
       const run: RenderRun = {
@@ -150,16 +260,25 @@ export class ProductVideoPipeline {
           rendererRevision: video.rendererRevision,
         },
       };
-      try {
-        this.stage(command, "storing_artifact");
-        await this.dependencies.library.save(command.renderId, run, video);
-        return run;
-      } catch {
-        return await this.fail(command, {
-          stage: "storing_artifact",
-          code: "STORAGE_FAILED",
-        }, content);
+      this.stage(command, "storing_artifact");
+      {
+        const t = performance.now();
+        try {
+          await this.dependencies.library.save(command.renderId, run, video);
+        } catch {
+          timings.storing_artifact_ms = Math.round(performance.now() - t);
+          return await this.terminate(
+            await this.fail(command, {
+              stage: "storing_artifact",
+              code: "STORAGE_FAILED",
+            }, content),
+            command,
+            ctx,
+          );
+        }
+        timings.storing_artifact_ms = Math.round(performance.now() - t);
       }
+      return await this.terminate(run, command, ctx);
     } finally {
       const videoCleanup = video?.cleanup;
       const assetCleanup = asset?.cleanup;

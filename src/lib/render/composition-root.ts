@@ -13,6 +13,7 @@ import { FfmpegVideoRenderer, sweepStaleIntermediates } from "@/lib/video/ffmpeg
 import { LocalVideoLibrary } from "@/lib/video/local-video-library";
 import { RemoteImageResolver } from "@/lib/video/remote-image-resolver";
 import { compileProductStoryboard } from "@/lib/video/storyboard";
+import { SupabaseRenderEventStore } from "@/lib/stats/render-event-store";
 import { ProductVideoPipeline } from "./product-video-pipeline";
 import { RenderProgressStore } from "./progress-store";
 import { resolveExecutablePath } from "./runtime-paths";
@@ -51,6 +52,10 @@ function compose() {
   // Runs once when the composition is first built; failures are swallowed.
   void sweepStaleIntermediates(mediaRoot).catch(() => {});
   const progress = new RenderProgressStore();
+  const renderEventStore = new SupabaseRenderEventStore(
+    createSupabaseServerClient(),
+    scope.organizationId,
+  );
   const pipeline = new ProductVideoPipeline({
     catalog,
     generateContent: (snapshot) => generateProductContent(provider, snapshot),
@@ -58,6 +63,7 @@ function compose() {
     compileStoryboard: compileProductStoryboard,
     renderer,
     library,
+    recordEvent: renderEventStore,
   });
   return { catalog, library, pipeline, progress, scope };
 }

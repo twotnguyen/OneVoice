@@ -290,4 +290,26 @@ describe("generateProductContent", () => {
     );
     expect(provider.calls).toBe(0);
   });
+
+  it("omits usage when the provider returns none", async () => {
+    const content = await generateProductContent(
+      providerReturning(JSON.stringify(validContent)),
+      snapshot,
+    );
+
+    expect(content).not.toHaveProperty("usage");
+  });
+
+  it("returns usage when the provider returns it", async () => {
+    const usage = { inputTokens: 120, outputTokens: 45, totalTokens: 165 };
+    const provider: AiProvider = {
+      async generateText(): Promise<GenerateTextResult> {
+        return { text: JSON.stringify(validContent), model: "muse-test", usage };
+      },
+    };
+
+    const content = await generateProductContent(provider, snapshot);
+
+    expect(content.usage).toEqual(usage);
+  });
 });
