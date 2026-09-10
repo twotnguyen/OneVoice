@@ -21,21 +21,60 @@ ffprobe -version
 
 ## Chạy local
 
+### 1. Chuẩn bị
+
 ```bash
-cp .env.example .env
+node --version   # >= 24
+pnpm --version   # 11.24.0
+ffmpeg -version  # >= 7
+ffprobe -version # >= 7
+
+cp .env.example .env   # rồi điền Supabase + AI provider, xem hai mục cấu hình bên dưới
 pnpm install --frozen-lockfile
+```
+
+### 2. Kiểm tra kết nối thật (khuyến nghị chạy trước)
+
+```bash
+pnpm data:verify   # Supabase: phải in "ALL VERIFICATION CHECKS PASSED" (4109 sản phẩm / 1455 content-ready)
+pnpm ai:verify     # AI provider: phải in "AI PROVIDER VERIFICATION PASSED" (HTTP 200, output khác rỗng)
+```
+
+Nếu một trong hai lệnh này fail thì luồng tạo video cũng sẽ fail — sửa `.env` trước khi chạy tiếp.
+
+### 3. Khởi động ứng dụng
+
+```bash
 pnpm dev
 ```
 
-Mở <http://localhost:3000>. Chọn sản phẩm, bấm **Tạo video 12 giây**, chờ video xuất hiện rồi phát hoặc tải MP4 trong giao diện. Liveness endpoint ở <http://localhost:3000/api/health> và không gọi dịch vụ ngoài.
+Mở <http://localhost:3000> ("Bàn sản xuất video") và làm theo ba bước trong giao diện:
 
-Artifact được ghi vào `renders/<uuid>/video.mp4` và `renders/<uuid>/manifest.json`. Kiểm tra video đã tạo:
+1. **Cột 01 – Sản phẩm:** danh sách laptop lấy từ Supabase (`GET /api/products`). Bấm chọn một sản phẩm.
+2. **Cột 02 – Kịch bản:** bấm **Tạo video 12 giây**. Các nhãn trạng thái thật sẽ chạy lần lượt: *Đang tải bản chụp sản phẩm → Đang tạo nội dung → Đang xử lý ảnh sản phẩm → Đang dựng video → Đang lưu thành phẩm* (thường 20–40 giây, tùy độ trễ của model AI). Xong sẽ hiện `hook` / `caption` / `cta` do AI viết.
+3. **Cột 03 – Thành phẩm:** video phát ngay trong trang; bấm **Tải video** để lưu MP4.
+
+Liveness endpoint: <http://localhost:3000/api/health> (không gọi dịch vụ ngoài).
+
+### 4. Kiểm tra artifact
+
+Mỗi lần dựng ghi vào `renders/<uuid>/video.mp4` và `renders/<uuid>/manifest.json` (thư mục `renders/` được git-ignore). Xác minh một video:
 
 ```bash
 pnpm video:verify -- renders/<uuid>/video.mp4
 ```
 
-Verifier tải `FFPROBE_PATH` từ `.env`, chỉ đọc regular file local không rỗng (không theo symlink hoặc URL/protocol), và chỉ chấp nhận MP4 có major brand `isom`, `iso2`, `mp41`, `mp42` hoặc `avc1`.
+Phải in `RENDERED VIDEO VERIFICATION PASSED` với: MP4 / H.264 / yuv420p / 1080×1920 / thời lượng **11.5–12.5 giây**. Verifier đọc `FFPROBE_PATH` từ `.env`, chỉ nhận regular file local không rỗng (không theo symlink hoặc URL/protocol) và chỉ chấp nhận MP4 có major brand `isom`, `iso2`, `mp41`, `mp42` hoặc `avc1`.
+
+### Xử lý sự cố nhanh
+
+| Triệu chứng | Nguyên nhân thường gặp | Cách xử lý |
+|---|---|---|
+| `pnpm ai:verify` báo HTTP 404 | `AI_BASE_URL` sai đường dẫn | Dùng `https://opencode.ai/zen/v1` **hoặc** `.../v1/responses` — adapter tự thêm `/responses` nếu thiếu, không nhân đôi. |
+| Tạo video fail ở bước "Đang tạo nội dung", thử lại lúc được lúc không | Model contributor-free suy luận lâu (15–35 giây) | Đây là bình thường; call nội dung có timeout 120 giây. Nếu vẫn fail liên tục, kiểm tra `pnpm ai:verify`. |
+| Video ra chỉ có chữ, không có ảnh sản phẩm | Ảnh remote lỗi status/type/byte/decode, hoặc host không nằm trong `ONEVOICE_IMAGE_HOSTS` | Có chủ đích: pipeline fallback sang video chỉ có chữ thay vì fail. Thêm host vào `ONEVOICE_IMAGE_HOSTS` nếu cần. |
+| `FFmpeg`/`ffprobe` not found | Chưa cài hoặc không trong `PATH` | Cài FFmpeg 7+, hoặc đặt `FFMPEG_PATH` / `FFPROBE_PATH` tuyệt đối trong `.env`. |
+| Cột "Sản phẩm" trống hoặc lỗi | `pnpm data:verify` fail | Sửa `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY`. |
 
 ## Cấu hình Supabase
 
@@ -109,7 +148,7 @@ Compose chỉ chạy web app, bind mặc định tại `127.0.0.1:3000`; không 
 
 ## Giới hạn bản local
 
-Render hiện chạy đồng bộ trong web process và chỉ phù hợp cho phát triển/demo local, không expose trực tiếp ra Internet. AI có timeout 30 giây, tải/chuẩn hóa ảnh 10 giây và FFmpeg 45 giây. Status/type/byte/decode không hợp lệ từ ảnh remote có thể chuyển sang video chỉ có chữ. Lỗi local về temporary directory/filesystem/tool capability, timeout, signal hoặc giới hạn stderr dừng luồng an toàn với `IMAGE_RESOLUTION_FAILED`; chúng không bị che bằng fallback. Khi chuyển sang production, tác vụ render phải được đưa sang durable queue/worker thay vì giữ request web mở.
+Render hiện chạy đồng bộ trong web process và chỉ phù hợp cho phát triển/demo local, không expose trực tiếp ra Internet. Call tạo nội dung AI có timeout 120 giây (mặc định provider là 30 giây), tải/chuẩn hóa ảnh 10 giây và FFmpeg 45 giây. Status/type/byte/decode không hợp lệ từ ảnh remote có thể chuyển sang video chỉ có chữ. Lỗi local về temporary directory/filesystem/tool capability, timeout, signal hoặc giới hạn stderr dừng luồng an toàn với `IMAGE_RESOLUTION_FAILED`; chúng không bị che bằng fallback. Khi chuyển sang production, tác vụ render phải được đưa sang durable queue/worker thay vì giữ request web mở.
 
 ## Cấu trúc foundation
 
