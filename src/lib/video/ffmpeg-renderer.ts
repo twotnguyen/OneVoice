@@ -3,7 +3,16 @@
 import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import type {
@@ -67,7 +76,14 @@ async function runProcess(
       if (timedOut) {
         reject(new Error("Media process timed out"));
       } else if (code !== 0) {
-        reject(new Error(`Media process exited with code ${code}: ${stderr.toString("utf8")}`));
+        // Keep ffmpeg/ffprobe stderr (which carries absolute local paths) out of
+        // the Error message; retain it on a non-enumerable field for debug only.
+        const error = new Error(`Media process exited with code ${code}`);
+        Object.defineProperty(error, "stderr", {
+          value: stderr.toString("utf8"),
+          enumerable: false,
+        });
+        reject(error);
       } else {
         resolve({ stdout: Buffer.concat(stdout).toString("utf8"), stderr: stderr.toString("utf8") });
       }
@@ -123,6 +139,72 @@ export async function probeVideo(
     height,
     durationMs: Math.round(durationSeconds * 1000),
   };
+}
+
+const INTERMEDIATE_CONTAINERS = [".output", ".images"] as const;
+const STALE_ROOT_PREFIXES = [".stage-", ".work-"] as const;
+const DEFAULT_INTERMEDIATE_MAX_AGE_MS = 60 * 60 * 1000;
+
+/**
+ * Remove orphaned intermediate render artifacts left behind when a render process
+ * is SIGKILLed before the pipeline's `finally` cleanup runs. Without this, a hard
+ * crash mid-render leaks `<mediaRoot>/.output/<uuid>.mp4`, `.images/asset-*` and
+ * `.stage-*` staging directories forever and `renders/` grows unbounded.
+ *
+ * Sweeps entries older than `maxAgeMs`:
+ *   - every entry inside `<mediaRoot>/.output` and `<mediaRoot>/.images`
+ *   - `<mediaRoot>/.stage-*` and `<mediaRoot>/.work-*` staging directories
+ *
+ * Defensive by construction: it only visits the dedicated intermediate paths, so
+ * the `<mediaRoot>/<uuid>/` render directories are never touched; it never
+ * follows or deletes symlinks; and a missing directory is a no-op. Returns the
+ * number of entries removed.
+ */
+export async function sweepStaleIntermediates(
+  mediaRoot: string,
+  maxAgeMs = DEFAULT_INTERMEDIATE_MAX_AGE_MS,
+): Promise<number> {
+  const root = path.resolve(mediaRoot);
+  const cutoff = Date.now() - Math.max(0, maxAgeMs);
+  let removed = 0;
+
+  const removeIfStale = async (entryPath: string): Promise<void> => {
+    try {
+      const details = await lstat(entryPath);
+      if (details.isSymbolicLink()) return;
+      if (details.mtimeMs > cutoff) return;
+      await rm(entryPath, { recursive: true, force: true });
+      removed += 1;
+    } catch {
+      // Best-effort: ignore ENOENT races, permission noise, and concurrent sweeps.
+    }
+  };
+
+  for (const container of INTERMEDIATE_CONTAINERS) {
+    const containerPath = path.join(root, container);
+    let entries: string[];
+    try {
+      entries = await readdir(containerPath);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      await removeIfStale(path.join(containerPath, entry));
+    }
+  }
+
+  let rootEntries: string[];
+  try {
+    rootEntries = await readdir(root);
+  } catch {
+    return removed;
+  }
+  for (const entry of rootEntries) {
+    if (!STALE_ROOT_PREFIXES.some((prefix) => entry.startsWith(prefix))) continue;
+    await removeIfStale(path.join(root, entry));
+  }
+
+  return removed;
 }
 
 async function resolveFont(configuredPath?: string): Promise<string> {

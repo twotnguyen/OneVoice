@@ -154,4 +154,6 @@ docker compose config
 git diff --check
 ```
 
+Cảnh báo: với `output: "standalone"`, một lệnh `pnpm build` trần sẽ copy `.env` sang `.next/standalone/.env`. Nếu tự tay đóng gói standalone bundle, phải xóa `.env*` khỏi `.next/standalone` trước khi phân phối (Dockerfile đã tự làm bước này).
+
 Máy proof local đã dùng Homebrew FFmpeg 7.1.1 và `ffmpeg -version` cho thấy build có `--enable-gpl`. Điều này chỉ chứng minh luồng chạy local; nó **không phải quyết định cấp phép binary cho bản phát hành công khai**. Trước khi phân phối image/binary, đội phải lưu `ffmpeg -version`, `ffmpeg -buildconf`, package inventory/SBOM và review GPL/LGPL cùng codec thực tế của chính artifact phát hành.

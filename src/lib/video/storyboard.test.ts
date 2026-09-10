@@ -76,4 +76,29 @@ describe("compileProductStoryboard", () => {
     expect(result.scenes[0].lines[2]).toMatch(/…$/);
     expect(result.scenes[2].lines[1]).toMatch(/…$/);
   });
+
+  it("truncates multi-byte copy on code-point boundaries without emitting U+FFFD", () => {
+    const result = compileProductStoryboard(snapshot, {
+      ...content,
+      // Astral-plane emoji: each is one code point but two UTF-16 code units, so
+      // a UTF-16 slice at an odd boundary would cut a surrogate pair in half.
+      hook: `${"\u{1F680}".repeat(25)} `.repeat(5),
+      cta: `${"\u{1F600}".repeat(25)} `.repeat(5),
+    });
+
+    expect(result.scenes[0].lines).toHaveLength(3);
+    expect(result.scenes[2].lines).toHaveLength(2);
+    for (const scene of result.scenes) {
+      for (const line of scene.lines) {
+        expect(line).not.toContain("�");
+        // Bound still holds when measured in code points (facts line cap is 24).
+        expect(Array.from(line).length).toBeLessThanOrEqual(24);
+      }
+    }
+    // The truncation branch runs on both the hook (cap 20) and the CTA (cap 20).
+    expect(result.scenes[0].lines[2]).toMatch(/…$/);
+    expect(result.scenes[2].lines[1]).toMatch(/…$/);
+    expect(Array.from(result.scenes[0].lines[2]).length).toBeLessThanOrEqual(20);
+    expect(Array.from(result.scenes[2].lines[1]).length).toBeLessThanOrEqual(20);
+  });
 });

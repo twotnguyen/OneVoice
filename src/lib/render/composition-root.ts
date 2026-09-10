@@ -9,7 +9,7 @@ import { CatalogRepository } from "@/lib/catalog/repository";
 import { generateProductContent } from "@/lib/content/generate-product-content";
 import { readServerEnv } from "@/lib/env/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { FfmpegVideoRenderer } from "@/lib/video/ffmpeg-renderer";
+import { FfmpegVideoRenderer, sweepStaleIntermediates } from "@/lib/video/ffmpeg-renderer";
 import { LocalVideoLibrary } from "@/lib/video/local-video-library";
 import { RemoteImageResolver } from "@/lib/video/remote-image-resolver";
 import { compileProductStoryboard } from "@/lib/video/storyboard";
@@ -47,6 +47,9 @@ function compose() {
     fontPath: environment.runtime.fontPath,
   });
   const library = new LocalVideoLibrary(mediaRoot);
+  // Best-effort sweep of intermediate artifacts orphaned by a crash/SIGKILL mid-render.
+  // Runs once when the composition is first built; failures are swallowed.
+  void sweepStaleIntermediates(mediaRoot).catch(() => {});
   const progress = new RenderProgressStore();
   const pipeline = new ProductVideoPipeline({
     catalog,
