@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -546,6 +566,71 @@ export type Database = {
           },
         ]
       }
+      render_events: {
+        Row: {
+          created_at: string
+          error_code: string | null
+          error_stage: string | null
+          id: string
+          model: string | null
+          organization_id: string
+          product_id: string | null
+          render_id: string
+          stage_timings: Json | null
+          status: string
+          tokens_input: number | null
+          tokens_output: number | null
+          tokens_total: number | null
+          total_duration_ms: number | null
+          video_bytes: number | null
+          video_duration_ms: number | null
+        }
+        Insert: {
+          created_at?: string
+          error_code?: string | null
+          error_stage?: string | null
+          id?: string
+          model?: string | null
+          organization_id: string
+          product_id?: string | null
+          render_id: string
+          stage_timings?: Json | null
+          status: string
+          tokens_input?: number | null
+          tokens_output?: number | null
+          tokens_total?: number | null
+          total_duration_ms?: number | null
+          video_bytes?: number | null
+          video_duration_ms?: number | null
+        }
+        Update: {
+          created_at?: string
+          error_code?: string | null
+          error_stage?: string | null
+          id?: string
+          model?: string | null
+          organization_id?: string
+          product_id?: string | null
+          render_id?: string
+          stage_timings?: Json | null
+          status?: string
+          tokens_input?: number | null
+          tokens_output?: number | null
+          tokens_total?: number | null
+          total_duration_ms?: number | null
+          video_bytes?: number | null
+          video_duration_ms?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "render_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       active_product_promotions: {
@@ -905,7 +990,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
+
