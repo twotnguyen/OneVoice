@@ -1,0 +1,75 @@
+{
+  "schema": "onevoice.script.v1",
+  "renderer": "hyperframes",
+  "aspect": "9:16",
+  "music": "inspiring-advertising",
+  "voice": { "speed": 1.0 },
+  "meta": {
+    "hook": "Tai nghe chống ồn giảm giá sâu hôm nay",
+    "caption": "Tai nghe chống ồn chủ động với pin 40 giờ, sạc nhanh USB-C và đệm tai êm ái cho ngày dài. Ưu đãi hôm nay kèm miễn phí vận chuyển toàn quốc.",
+    "cta": "Đặt mua ngay hôm nay"
+  },
+  "scenes": [
+    {
+      "id": "hook-1",
+      "type": "hook",
+      "voiceText": "Bạn có nghe thấy sự yên tĩnh này không, tai nghe chống ồn giảm giá sâu cho ngày hôm nay",
+      "templateId": "frame-liquid-bg-hero",
+      "inputs": {
+        "kicker": "OneVoice",
+        "headline": "Yên tĩnh tuyệt đối",
+        "subheadline": "Chống ồn chủ động thế hệ mới",
+        "cta": "Xem ngay",
+        "brand": "OneVoice"
+      },
+      "durationMs": 5000,
+      "factRefs": ["anc"],
+      "sfx": { "name": "ding", "volume": 0.4, "startOffsetSec": 0 }
+    },
+    {
+      "id": "body-1",
+      "type": "body",
+      "voiceText": "Pin bốn mươi giờ liên tục, sạc nhanh mười phút dùng cả ngày dài, đệm tai mềm mại êm ái vô cùng",
+      "templateId": "frame-bold-poster",
+      "inputs": {
+        "kicker": "OneVoice",
+        "figure": "40",
+        "headline": ["Pin cực khủng", "bốn mươi giờ", "liên tục"],
+        "standfirst": "Sạc nhanh USB-C, mười phút dùng cả ngày.",
+        "footer_left": "OneVoice",
+        "footer_right": "onevoice.local"
+      },
+      "durationMs": 5000,
+      "factRefs": ["battery"]
+    },
+    {
+      "id": "body-2",
+      "type": "body",
+      "voiceText": "Giảm ồn tới chín mươi tám phần trăm, nghe nhạc hay gọi điện đều rõ ràng trong mọi không gian ồn ào",
+      "templateId": "frame-pentagram-stat",
+      "inputs": {
+        "label": "Chống ồn · ANC",
+        "headline": "98%",
+        "subtitle": "Giảm ồn chủ động đo trong phòng lab.",
+        "anchor": "98",
+        "footer_left": "OneVoice",
+        "footer_right": "onevoice.local"
+      },
+      "durationMs": 5000,
+      "factRefs": ["anc"]
+    },
+    {
+      "id": "outro-1",
+      "type": "outro",
+      "voiceText": "Tạm biệt và hẹn gặp lại nhé",
+      "templateId": "frame-logo-outro",
+      "inputs": {
+        "brand_name": "OneVoice",
+        "tagline": "Video mỗi ngày",
+        "primary_url": "https://onevoice.local/"
+      },
+      "durationMs": 5000,
+      "factRefs": []
+    }
+  ]
+}
