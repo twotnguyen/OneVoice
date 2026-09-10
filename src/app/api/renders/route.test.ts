@@ -5,8 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { StoredVideo, VideoManifest } from "@/lib/video/types";
 import { RenderProgressStore } from "@/lib/render/progress-store";
 import { createRenderStatusRoute } from "./[renderId]/route";
-import { createDownloadRoute } from "./[renderId]/download/route";
-import { createVideoRoute } from "./[renderId]/video/route";
+import { createDownloadRoute, createVideoRoute } from "@/lib/video/media-response";
 import { createRendersRoute } from "./route";
 
 const renderId = "b0000000-0000-4000-8000-000000000001";
@@ -257,6 +256,7 @@ describe("render artifact routes", () => {
     );
     expect(invalid.status).toBe(416);
     expect(invalid.headers.get("content-range")).toBe("bytes */10");
+    expect(invalid.headers.get("content-type")).toBeNull();
     expect(invalidFile.closed()).toBe(1);
 
     const headFile = videoLibrary();
