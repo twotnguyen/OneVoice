@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
+import { defaultDiagnosticSink, type DiagnosticSink } from "@/lib/render/diagnostics";
 import type { ResolvedAsset } from "./types";
 
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -98,6 +99,7 @@ type ResolverOptions = Readonly<{
   ffmpegPath?: string;
   ffprobePath?: string;
   writeChunk?: (handle: FileHandle, chunk: Buffer) => Promise<{ bytesWritten: number }>;
+  diagnostic?: DiagnosticSink;
 }>;
 
 class RemoteContentError extends Error {}
@@ -523,8 +525,10 @@ export class RemoteImageResolver {
   ) => Promise<{ bytesWritten: number }>;
   private capabilityValidation?: Promise<void>;
   private consecutiveMediaProcessFailures = 0;
+  private readonly diagnostic: DiagnosticSink;
 
   constructor(options: ResolverOptions) {
+    this.diagnostic = options.diagnostic ?? defaultDiagnosticSink;
     this.allowedHostnames = new Set(
       options.allowedHostnames.map((hostname) => hostname.toLowerCase()),
     );
@@ -803,8 +807,10 @@ export class RemoteImageResolver {
         if (error instanceof MediaProcessNonzeroError) {
           // Corrupt remote content, not a broken toolchain: fall back to a text-only video and
           // only pay for a capability revalidation once failures accumulate with no success
-          // in between.
+          // in between. Emit on every failure so observability can spot a degrading toolchain
+          // before the revalidation threshold trips.
           this.consecutiveMediaProcessFailures += 1;
+          this.diagnostic({ stage: "media", code: "IMAGE_MEDIA_PROCESS_FAILED" });
           if (this.consecutiveMediaProcessFailures >= MEDIA_PROCESS_REVALIDATION_THRESHOLD) {
             this.consecutiveMediaProcessFailures = 0;
             try {
