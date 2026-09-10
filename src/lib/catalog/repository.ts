@@ -18,6 +18,16 @@ import type {
 
 const MAX_PRODUCT_FACTS = 8;
 
+// PostgREST parses `or=(a,b)` filter lists structurally: an unescaped comma,
+// parenthesis, backslash or double quote in an interpolated value breaks out of
+// the intended expression and injects arbitrary filters (a bare `"` also yields a
+// 400 "failed to parse filter"). `%` / `*` would act as `ilike` wildcards. Strip
+// all of them so the term can only ever be a literal contains-match fragment
+// (a leading/trailing `"` from an inch spec like `14"` is simply dropped).
+function sanitizePostgrestSearchTerm(term: string): string {
+  return term.replace(/[,()\\%*"]/g, "").trim();
+}
+
 export interface CatalogRepositoryOptions {
   client: SupabaseClient<Database>;
   defaultOrganizationId?: string;
@@ -205,8 +215,10 @@ export class CatalogRepository {
     query = query.eq("organization_id", orgId);
 
     if (filters.search && filters.search.trim()) {
-      const term = filters.search.trim();
-      query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%`);
+      const term = sanitizePostgrestSearchTerm(filters.search);
+      if (term) {
+        query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%`);
+      }
     }
 
     if (filters.brand) {
