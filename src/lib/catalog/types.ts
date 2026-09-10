@@ -23,6 +23,42 @@ export interface CatalogPagination {
   pageSize?: number;
 }
 
+export type OrganizationScope = Readonly<{
+  organizationId: string;
+}>;
+
+export type StudioProduct = Readonly<{
+  id: string;
+  name: string;
+  sku: string | null;
+  brand: string | null;
+  priceVnd: number;
+  currency: string;
+  stockQuantity: number | null;
+  collectedAt: string | null;
+}>;
+
+export type ProductFact = Readonly<{
+  ref: string;
+  label: string;
+  value: string;
+  critical: boolean;
+}>;
+
+export type ProductSnapshot = Readonly<{
+  productId: string;
+  organizationId: string;
+  name: string;
+  sku: string | null;
+  brand: string | null;
+  priceVnd: number;
+  currency: string;
+  stockQuantity: number | null;
+  collectedAt: string | null;
+  primaryImageUrl: string | null;
+  facts: readonly ProductFact[];
+}>;
+
 export interface PaginatedResult<T> {
   data: T[];
   total: number;

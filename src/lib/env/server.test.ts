@@ -29,6 +29,14 @@ describe("readServerEnv", () => {
         apiKey: "ai-secret-example",
         model: "demo-model",
       },
+      runtime: {
+        organizationId: "a0000000-0000-0000-0000-000000000001",
+        mediaRoot: "renders",
+        imageHosts: ["product.hstatic.net"],
+        ffmpegPath: "ffmpeg",
+        ffprobePath: "ffprobe",
+        fontPath: undefined,
+      },
     });
   });
 
@@ -40,5 +48,42 @@ describe("readServerEnv", () => {
         NEXT_PUBLIC_AI_API_KEY: "public-leak",
       }),
     ).toThrow(/AI_API_KEY/);
+  });
+
+  it("applies local video runtime defaults", () => {
+    expect(readServerEnv(validEnvironment).runtime).toEqual({
+      organizationId: "a0000000-0000-0000-0000-000000000001",
+      mediaRoot: "renders",
+      imageHosts: ["product.hstatic.net"],
+      ffmpegPath: "ffmpeg",
+      ffprobePath: "ffprobe",
+      fontPath: undefined,
+    });
+  });
+
+  it("parses configured image hosts and rejects an empty allow-list", () => {
+    expect(readServerEnv({
+      ...validEnvironment,
+      ONEVOICE_IMAGE_HOSTS: "cdn.example.com, product.hstatic.net ",
+    }).runtime.imageHosts).toEqual(["cdn.example.com", "product.hstatic.net"]);
+
+    expect(() => readServerEnv({
+      ...validEnvironment,
+      ONEVOICE_IMAGE_HOSTS: " , ",
+    })).toThrow(/ONEVOICE_IMAGE_HOSTS/);
+  });
+
+  it("validates the configured organization identifier", () => {
+    expect(() => readServerEnv({
+      ...validEnvironment,
+      ONEVOICE_ORGANIZATION_ID: "not-a-uuid",
+    })).toThrow(/ONEVOICE_ORGANIZATION_ID/);
+  });
+
+  it("accepts the explicitly configured canonical demo organization ID", () => {
+    expect(readServerEnv({
+      ...validEnvironment,
+      ONEVOICE_ORGANIZATION_ID: "a0000000-0000-0000-0000-000000000001",
+    }).runtime.organizationId).toBe("a0000000-0000-0000-0000-000000000001");
   });
 });

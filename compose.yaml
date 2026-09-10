@@ -12,8 +12,14 @@ services:
         required: false
     environment:
       NODE_ENV: production
+      ONEVOICE_MEDIA_ROOT: /app/renders
+      FFMPEG_PATH: ffmpeg
+      FFPROBE_PATH: ffprobe
+      ONEVOICE_FONT_PATH: /usr/share/fonts/dejavu/DejaVuSans.ttf
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - onevoice-renders:/app/renders
     restart: unless-stopped
     healthcheck:
       test:
@@ -25,3 +31,6 @@ services:
       timeout: 3s
       retries: 12
       start_period: 10s
+
+volumes:
+  onevoice-renders:

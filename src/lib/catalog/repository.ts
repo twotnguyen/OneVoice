@@ -7,10 +7,16 @@ import type {
   CatalogPagination,
   CatalogQueryFilters,
   CatalogQuerySort,
+  OrganizationScope,
   PaginatedResult,
   ProductContentContext,
   ProductDetail,
+  ProductFact,
+  ProductSnapshot,
+  StudioProduct,
 } from "./types";
+
+const MAX_PRODUCT_FACTS = 8;
 
 export interface CatalogRepositoryOptions {
   client: SupabaseClient<Database>;
@@ -25,6 +31,161 @@ export class CatalogRepository {
     this.client = options.client;
     this.defaultOrgId =
       options.defaultOrganizationId ?? "a0000000-0000-0000-0000-000000000001";
+  }
+
+  async listStudioProducts(
+    scope: OrganizationScope,
+    pagination: CatalogPagination = {}
+  ): Promise<Readonly<{
+    items: readonly StudioProduct[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  }>> {
+    const page = Math.min(100, Math.max(1, pagination.page ?? 1));
+    const pageSize = Math.max(1, Math.min(100, pagination.pageSize ?? 20));
+    const offset = (page - 1) * pageSize;
+
+    const { data, count, error } = await this.client
+      .from("content_ready_products")
+      .select(
+        "id, name, sku, brand, price_vnd, currency, stock_quantity, collected_at",
+        { count: "exact" }
+      )
+      .eq("organization_id", scope.organizationId)
+      .eq("product_type", "laptop")
+      .eq("quality", "usable")
+      .eq("in_stock", true)
+      .gt("price_vnd", 0)
+      .order("price_vnd", { ascending: false, nullsFirst: false })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Failed to list studio products: ${error.message}`);
+    }
+
+    const items: StudioProduct[] = (data ?? []).flatMap((product) => {
+      if (!product.id || !product.name || !product.price_vnd) {
+        return [];
+      }
+
+      return [{
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        brand: product.brand,
+        priceVnd: product.price_vnd,
+        currency: product.currency ?? "VND",
+        stockQuantity: product.stock_quantity,
+        collectedAt: product.collected_at,
+      }];
+    });
+    const total = count ?? 0;
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async getProductSnapshot(
+    scope: OrganizationScope,
+    productId: string
+  ): Promise<ProductSnapshot | null> {
+    const { data, error } = await this.client
+      .from("product_content_context")
+      .select(
+        "product_id, organization_id, name, sku, brand, current_price, stock_quantity, primary_image_url, specifications, collected_at, product_type, quality, in_stock"
+      )
+      .eq("product_id", productId)
+      .eq("organization_id", scope.organizationId)
+      .eq("product_type", "laptop")
+      .eq("quality", "usable")
+      .eq("in_stock", true)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error("Failed to get product snapshot");
+    }
+
+    if (
+      !data?.name ||
+      !data.current_price ||
+      data.current_price <= 0 ||
+      data.product_type !== "laptop" ||
+      data.quality !== "usable" ||
+      data.in_stock !== true
+    ) {
+      return null;
+    }
+
+    const facts: ProductFact[] = [
+      { ref: "product.name", label: "Product", value: data.name, critical: true },
+      ...(data.sku
+        ? [{ ref: "product.sku", label: "SKU", value: data.sku, critical: true }]
+        : []),
+      {
+        ref: "offer.price",
+        label: "Price",
+        value: `${data.current_price} VND`,
+        critical: true,
+      },
+      ...(data.stock_quantity === null
+        ? []
+        : [{
+            ref: "inventory.stock",
+            label: "Stock",
+            value: String(data.stock_quantity),
+            critical: true,
+          }]),
+      ...this.toSpecificationFacts(data.specifications),
+    ].slice(0, MAX_PRODUCT_FACTS);
+
+    return {
+      productId,
+      organizationId: scope.organizationId,
+      name: data.name,
+      sku: data.sku,
+      brand: data.brand,
+      priceVnd: data.current_price,
+      currency: "VND",
+      stockQuantity: data.stock_quantity,
+      collectedAt: data.collected_at,
+      primaryImageUrl: data.primary_image_url,
+      facts,
+    };
+  }
+
+  private toSpecificationFacts(specifications: unknown): ProductFact[] {
+    if (!Array.isArray(specifications)) {
+      return [];
+    }
+
+    return specifications.flatMap((specification, index) => {
+      if (
+        typeof specification !== "object" ||
+        specification === null ||
+        !("name" in specification) ||
+        !("value" in specification) ||
+        typeof specification.name !== "string" ||
+        typeof specification.value !== "string" ||
+        !specification.name.trim() ||
+        !specification.value.trim()
+      ) {
+        return [];
+      }
+
+      return [{
+        ref: `spec.${index}`,
+        label: specification.name,
+        value: specification.value,
+        critical: true,
+      }];
+    });
   }
 
   async listProducts(

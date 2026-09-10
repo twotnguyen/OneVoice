@@ -159,3 +159,9 @@ Desktop.ini
 *.pt
 
 references/
+
+# -----------------------------------------------------------------------------
+# oh-my-claudecode orchestration state
+# Team/spec/session artifacts are local operational state, not source.
+# -----------------------------------------------------------------------------
+/.omc/
