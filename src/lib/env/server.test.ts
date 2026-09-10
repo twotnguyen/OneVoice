@@ -37,6 +37,8 @@ describe("readServerEnv", () => {
         ffprobePath: "ffprobe",
         hyperframesPath: "hyperframes",
         fontPath: undefined,
+        scriptModel: undefined,
+        scriptTimeoutMs: 180000,
       },
     });
   });
@@ -60,6 +62,8 @@ describe("readServerEnv", () => {
       ffprobePath: "ffprobe",
       hyperframesPath: "hyperframes",
       fontPath: undefined,
+      scriptModel: undefined,
+      scriptTimeoutMs: 180000,
     });
   });
 

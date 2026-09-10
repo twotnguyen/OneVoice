@@ -41,6 +41,7 @@ export type RenderedVideo = VideoProbe &
     bytes: number;
     sha256: string;
     rendererRevision: "onevoice-ffmpeg-v1";
+    timings?: Readonly<Record<string, number>>;
     cleanup: () => Promise<void>;
   }>;
 

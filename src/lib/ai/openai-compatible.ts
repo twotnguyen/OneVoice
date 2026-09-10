@@ -74,7 +74,7 @@ export class OpenAICompatibleProvider implements AiProvider {
           "x-session-id": randomUUID(),
         },
         body: JSON.stringify({
-          model: this.config.model,
+          model: input.model ?? this.config.model,
           input: input.prompt,
         }),
         signal: AbortSignal.timeout(input.timeoutMs ?? 30_000),

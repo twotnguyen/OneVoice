@@ -27,6 +27,8 @@ const serverEnvironmentSchema = z.object({
   FFPROBE_PATH: z.string().min(1).default("ffprobe"),
   ONEVOICE_HYPERFRAMES_PATH: z.string().min(1).default("hyperframes"),
   ONEVOICE_FONT_PATH: z.string().optional().transform((value) => value?.trim() || undefined),
+  ONEVOICE_SCRIPT_MODEL: z.string().optional().transform((value) => value?.trim() || undefined),
+  ONEVOICE_SCRIPT_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
 });
 
 export type ServerEnv = {
@@ -49,6 +51,8 @@ export type ServerEnv = {
     ffprobePath: string;
     hyperframesPath: string;
     fontPath?: string;
+    scriptModel?: string;
+    scriptTimeoutMs: number;
   };
 };
 
@@ -77,6 +81,8 @@ export function readServerEnv(
       ffprobePath: environment.FFPROBE_PATH,
       hyperframesPath: environment.ONEVOICE_HYPERFRAMES_PATH,
       fontPath: environment.ONEVOICE_FONT_PATH,
+      scriptModel: environment.ONEVOICE_SCRIPT_MODEL,
+      scriptTimeoutMs: environment.ONEVOICE_SCRIPT_TIMEOUT_MS,
     },
   };
 }

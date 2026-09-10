@@ -13,7 +13,7 @@
     {
       "id": "hook-1",
       "type": "hook",
-      "voiceText": "Bạn có nghe thấy sự yên tĩnh này không, tai nghe chống ồn giảm giá sâu cho ngày hôm nay",
+      "voiceText": "Bạn có nghe sự yên tĩnh này không, tai nghe chống ồn giảm giá sâu",
       "templateId": "frame-liquid-bg-hero",
       "inputs": {
         "kicker": "OneVoice",
@@ -29,7 +29,7 @@
     {
       "id": "body-1",
       "type": "body",
-      "voiceText": "Pin bốn mươi giờ liên tục, sạc nhanh mười phút dùng cả ngày dài, đệm tai mềm mại êm ái vô cùng",
+      "voiceText": "Pin bốn mươi giờ, sạc nhanh mười phút dùng cả ngày dài",
       "templateId": "frame-bold-poster",
       "inputs": {
         "kicker": "OneVoice",
@@ -45,7 +45,7 @@
     {
       "id": "body-2",
       "type": "body",
-      "voiceText": "Giảm ồn tới chín mươi tám phần trăm, nghe nhạc hay gọi điện đều rõ ràng trong mọi không gian ồn ào",
+      "voiceText": "Giảm ồn chín mươi tám phần trăm, nghe gọi rõ trong ồn ào",
       "templateId": "frame-pentagram-stat",
       "inputs": {
         "label": "Chống ồn · ANC",

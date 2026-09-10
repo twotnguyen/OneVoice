@@ -242,6 +242,7 @@ export class ProductVideoPipeline {
           }, content), command, ctx);
         }
         timings.rendering_video_ms = Math.round(performance.now() - t);
+        Object.assign(timings, video.timings ?? {});
       }
 
       const run: RenderRun = {

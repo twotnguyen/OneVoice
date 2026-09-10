@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { OpenAICompatibleProvider } from "@/lib/ai/openai-compatible";
 import { CatalogRepository } from "@/lib/catalog/repository";
-import { generateProductContent } from "@/lib/content/generate-product-content";
+import { generateVideoScript } from "@/lib/content/generate-video-script";
 import { readServerEnv } from "@/lib/env/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { FfmpegVideoRenderer, sweepStaleIntermediates } from "@/lib/video/ffmpeg-renderer";
@@ -58,7 +58,13 @@ function compose() {
   );
   const pipeline = new ProductVideoPipeline({
     catalog,
-    generateContent: (snapshot) => generateProductContent(provider, snapshot),
+    generateContent: async (snapshot) =>
+      (
+        await generateVideoScript(provider, snapshot, {
+          timeoutMs: environment.runtime.scriptTimeoutMs,
+          ...(environment.runtime.scriptModel ? { model: environment.runtime.scriptModel } : {}),
+        })
+      ).content,
     imageResolver,
     compileStoryboard: compileProductStoryboard,
     renderer,
