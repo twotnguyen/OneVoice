@@ -797,6 +797,32 @@ describe("RemoteImageResolver content boundary", () => {
     expect(await lines()).toBe(10); // counter reset, back to a single runtime normalization
   });
 
+  it("emits a diagnostic on every malformed-image failure, before the revalidation threshold", async () => {
+    const root = await temporaryRoot();
+    const ffprobePath = path.join(root, "ffprobe-runtime-metadata");
+    await writeFile(
+      ffprobePath,
+      `#!/bin/sh\ncase "$PWD" in */asset-*) printf '%s\\n' '{"streams":[{"codec_name":"png","width":2,"height":2}]}' ; exit 0;; esac\nexec ffprobe "$@"\n`,
+    );
+    await chmod(ffprobePath, 0o700);
+    const diagnostics: unknown[] = [];
+    const resolver = new RemoteImageResolver({
+      ...resolverOptions(path.join(root, "assets"), async () =>
+        fakeResponse(Buffer.from(PNG_HEADER), 200, { "content-type": "image/png" }),
+      ),
+      ffprobePath,
+      diagnostic: (entry: unknown) => diagnostics.push(entry),
+    } as never);
+
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+    await expect(resolver.resolve("https://images.example.com/a.png")).resolves.toBeNull();
+
+    expect(diagnostics).toEqual([
+      { stage: "media", code: "IMAGE_MEDIA_PROCESS_FAILED" },
+      { stage: "media", code: "IMAGE_MEDIA_PROCESS_FAILED" },
+    ]);
+  });
+
   it("resets the consecutive-failure counter after a successful resolve", async () => {
     const root = await temporaryRoot();
     const ffprobePath = path.join(root, "ffprobe-logger");
