@@ -81,6 +81,9 @@ describe("CatalogRepository", () => {
       priceVnd: 30_000_000,
       currency: "VND",
       stockQuantity: 4,
+      inStock: true,
+      primaryImageUrl: null,
+      keySpecs: ["Intel Core i7"],
       collectedAt: "2026-08-31T00:00:00Z",
     });
     expect(result).toMatchObject({ total: 1, page: 1, pageSize: 18, totalPages: 1 });
@@ -117,6 +120,40 @@ describe("CatalogRepository", () => {
     expect(query.eq).toHaveBeenCalledWith("product_type", "laptop");
     expect(query.ilike).toHaveBeenCalledWith("brand", "ACER");
     expect(query.or).toHaveBeenCalledWith("name.ilike.%Nitro 16 pro%,sku.ilike.%Nitro 16 pro%");
+  });
+
+  it("filters studio products by price range and inStockOnly", async () => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      lte: vi.fn().mockReturnThis(),
+      ilike: vi.fn().mockReturnThis(),
+      or: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({
+        data: [],
+        count: 0,
+        error: null,
+      }),
+    };
+    const client = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient<Database>;
+    const repository = new CatalogRepository({ client });
+
+    await repository.listStudioProducts(
+      { organizationId: "org-1" },
+      { page: 1, pageSize: 18 },
+      "laptop",
+      { minPrice: 15_000_000, maxPrice: 30_000_000, inStockOnly: true },
+    );
+
+    expect(client.from).toHaveBeenCalledWith("content_ready_products");
+    expect(query.gte).toHaveBeenCalledWith("price_vnd", 15_000_000);
+    expect(query.lte).toHaveBeenCalledWith("price_vnd", 30_000_000);
+    expect(query.eq).toHaveBeenCalledWith("in_stock", true);
   });
 
   it("does not apply or filter when search term sanitizes to empty string", async () => {
