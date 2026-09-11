@@ -243,6 +243,11 @@ p {
   color: var(--ink-primary);
   letter-spacing: -0.03em;
   text-decoration: none;
+  transition: color 0.15s ease;
+  cursor: pointer;
+}
+.app-brand:hover {
+  color: var(--brand-primary);
 }
 
 .app-nav ul {
