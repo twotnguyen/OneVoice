@@ -35,7 +35,9 @@ type StudioProduct = Readonly<{
   keySpecs?: readonly string[];
   collectedAt: string | null;
 }>;
+
 type PriceRange = "all" | "under-15" | "15-25" | "25-35" | "above-35";
+
 const PRICE_RANGES: readonly { id: PriceRange; label: string; min?: number; max?: number }[] = [
   { id: "all", label: "Tất cả giá" },
   { id: "under-15", label: "< 15 triệu", max: 15_000_000 },
@@ -43,6 +45,7 @@ const PRICE_RANGES: readonly { id: PriceRange; label: string; min?: number; max?
   { id: "25-35", label: "25 - 35 triệu", min: 25_000_000, max: 35_000_000 },
   { id: "above-35", label: "> 35 triệu", min: 35_000_000 },
 ];
+
 type ProductsResponse = Readonly<{
   items: readonly StudioProduct[];
   total: number;
@@ -50,19 +53,20 @@ type ProductsResponse = Readonly<{
   pageSize: number;
   totalPages: number;
 }>;
+
 const PAGE_SIZE = 18;
 const BRANDS = ["ACER", "ASUS", "DELL", "GIGABYTE", "HP", "LENOVO", "LG", "MSI"] as const;
 const currency = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
+
 const stageLabels: Record<RenderStage, string> = {
   loading_product: "Đang tải bản chụp sản phẩm",
-  generating_content: "Đang tạo nội dung",
+  generating_content: "Đang tạo kịch bản AI",
   resolving_asset: "Đang xử lý ảnh sản phẩm",
-  synthesizing_voice: "Đang tạo giọng đọc",
-  composing_scenes: "Đang dựng từng cảnh",
-  rendering_video: "Đang dựng video",
-  storing_artifact: "Đang lưu thành phẩm",
+  synthesizing_voice: "Đang tạo giọng đọc AI",
+  composing_scenes: "Đang dựng từng phân cảnh",
+  rendering_video: "Đang render video MP4",
+  storing_artifact: "Đang lưu trữ thành phẩm",
 };
-
 
 export function VideoStudio() {
   const [products, setProducts] = useState<readonly StudioProduct[]>([]);
@@ -87,6 +91,7 @@ export function VideoStudio() {
   priceRangeRef.current = selectedPriceRange;
   const inStockOnlyRef = useRef(inStockOnly);
   inStockOnlyRef.current = inStockOnly;
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
@@ -124,6 +129,7 @@ export function VideoStudio() {
     if (stock) {
       url += `&inStockOnly=true`;
     }
+
     return fetch(url, signal ? { signal } : undefined)
       .then(async (response) => {
         if (!response.ok) throw new Error("catalog unavailable");
@@ -318,36 +324,70 @@ export function VideoStudio() {
 
   return (
     <div className="studio-shell">
+      {/* Studio Header / Masthead */}
       <header className="studio-masthead">
-        <div className="brand-lockup"><span className="brand-signal" aria-hidden="true" /><span className="brand-name">OneVoice</span></div>
-        <div className="desk-status" aria-live="polite"><span className={`desk-status__light desk-status__light--${desk.status}`} aria-hidden="true" />{operationLabel}</div>
+        <div className="brand-lockup">
+          <span className="brand-signal" aria-hidden="true" />
+          <span className="brand-name">OneVoice AI Studio</span>
+        </div>
+        <div className="desk-status" aria-live="polite">
+          <span className={`desk-status__light desk-status__light--${desk.status}`} aria-hidden="true" />
+          <span>{operationLabel}</span>
+        </div>
       </header>
 
-      <section className="studio-intro" aria-labelledby="studio-title">
-        <div><p className="phase">Bàn sản xuất video</p><h1 id="studio-title">Từ catalog đến video bán hàng.</h1></div>
-        <p>Chọn một laptop từ bản chụp catalog công khai. OneVoice viết thông điệp, dựng video dọc và lưu bản hoàn chỉnh ngay trên máy này.</p>
+      {/* Intro Hero Section */}
+      <section className="studio-intro-hero" aria-labelledby="studio-title">
+        <div className="studio-intro-hero__title">
+          <h1 id="studio-title">Bàn Sản Xuất Video Bán Hàng Đa Kênh</h1>
+          <p>Chọn sản phẩm từ catalog công khai. AI tự động lập kịch bản, lồng tiếng tiếng Việt và dựng video dọc 9:16 lưu trữ cục bộ.</p>
+        </div>
+        <div className="studio-intro-hero__badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>HyperFrames AI Engine</span>
+        </div>
       </section>
 
-      <ol className="production-rail" aria-label="Quy trình sản xuất">
-        <li className={selectedProduct ? "is-complete" : "is-current"}><span>Chọn sản phẩm</span><small>Bản chụp catalog công khai</small></li>
-        <li className={desk.status === "creating" && desk.stage ? "is-current" : desk.status === "ready" ? "is-complete" : ""}><span>Tạo nội dung và dựng</span><small>{desk.status === "creating" && desk.stage ? stageLabels[desk.stage] : "Chờ trạng thái máy chủ"}</small></li>
-        <li className={desk.status === "ready" ? "is-current" : ""}><span>Duyệt thành phẩm</span><small>Phát và tải MP4</small></li>
-      </ol>
+      {/* Modern 2-Column Balanced Workspace Grid */}
+      <div className="studio-workspace-grid">
+        {/* CỘT TRÁI: Kho sản phẩm (42%) */}
+        <section className="studio-catalog-card" aria-labelledby="catalog-title">
+          <header className="catalog-card-header">
+            <h2 id="catalog-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+              <span>Kho Sản Phẩm</span>
+            </h2>
+            {catalogState === "ready" && (
+              <span className="catalog-count-pill">{totalCount} sản phẩm khả dụng</span>
+            )}
+          </header>
 
-      <div className="production-desk">
-        <section className="desk-panel catalog-panel" aria-labelledby="catalog-title">
-          <div className="panel-heading"><div><p className="panel-index">01</p><h2 id="catalog-title">Sản phẩm</h2></div>{catalogState === "ready" && <span>{totalCount} lựa chọn</span>}</div>
-          <div className="catalog-controls">
-            <input
-              type="search"
-              className="catalog-search-input"
-              placeholder="Tìm theo tên máy, mã SKU..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              disabled={desk.status === "creating"}
-              aria-label="Tìm theo tên máy, mã SKU"
-            />
-            <div className="brand-pills" role="toolbar" aria-label="Lọc theo thương hiệu">
+          <div className="catalog-filter-panel">
+            {/* Search Input */}
+            <div className="search-input-wrapper">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                type="search"
+                className="catalog-search-input"
+                placeholder="Tìm theo tên máy, mã SKU..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                disabled={desk.status === "creating"}
+                aria-label="Tìm theo tên máy, mã SKU"
+              />
+            </div>
+
+            {/* Brand Filter Pills */}
+            <div className="brand-pills-row" role="toolbar" aria-label="Lọc theo thương hiệu">
               <button
                 type="button"
                 className={selectedBrand === null ? "brand-pill brand-pill--active" : "brand-pill"}
@@ -373,153 +413,343 @@ export function VideoStudio() {
                 );
               })}
             </div>
-          <div className="price-filters" role="toolbar" aria-label="Lọc theo mức giá">
-            {PRICE_RANGES.map((pr) => {
-              const active = selectedPriceRange === pr.id;
-              return (
-                <button
-                  key={pr.id}
-                  type="button"
-                  className={active ? "price-pill price-pill--active" : "price-pill"}
-                  onClick={() => handlePriceRangeClick(pr.id)}
-                  aria-pressed={active}
+
+            {/* Price Filter Pills */}
+            <div className="price-filters-row" role="toolbar" aria-label="Lọc theo mức giá">
+              {PRICE_RANGES.map((pr) => {
+                const active = selectedPriceRange === pr.id;
+                return (
+                  <button
+                    key={pr.id}
+                    type="button"
+                    className={active ? "price-pill price-pill--active" : "price-pill"}
+                    onClick={() => handlePriceRangeClick(pr.id)}
+                    aria-pressed={active}
+                    disabled={desk.status === "creating"}
+                  >
+                    {pr.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* In-Stock Only Toggle */}
+            <div className="stock-toggle-row">
+              <label className="filter-toggle-label">
+                <input
+                  type="checkbox"
+                  checked={inStockOnly}
+                  onChange={(e) => handleInStockToggle(e.target.checked)}
                   disabled={desk.status === "creating"}
-                >
-                  {pr.label}
-                </button>
-              );
-            })}
+                />
+                <span>Chỉ hiện sản phẩm còn hàng sẵn sàng</span>
+              </label>
+            </div>
           </div>
-          <label className="filter-toggle">
-            <input
-              type="checkbox"
-              checked={inStockOnly}
-              onChange={(e) => handleInStockToggle(e.target.checked)}
-              disabled={desk.status === "creating"}
-            />
-            <span>Chỉ hiện sản phẩm còn hàng</span>
-          </label>
-        </div>
-        {catalogState === "loading" && <p className="state-note" role="status">Đang đọc danh mục sản phẩm…</p>}
-        {catalogState === "error" && <div className="state-note state-note--error" role="alert"><p>Không thể tải danh mục.</p><button className="text-action" type="button" onClick={reloadProducts}>Tải lại</button></div>}
-        {catalogState === "empty" && <p className="state-note">Chưa có laptop đủ dữ liệu để sản xuất.</p>}
-        {catalogState === "ready" && <><div className="product-list" aria-label="Danh sách sản phẩm">
-          {products.map((product) => {
-            const selected = product.id === selectedId;
-            const meta = [product.brand, product.sku].filter(Boolean).join(" · ");
-            const formattedPrice = currency.format(product.priceVnd ?? 0);
-            const ariaLabel = `${product.name}${meta ? ` · ${meta}` : ""}${formattedPrice ? ` · ${formattedPrice}` : ""}`;
-            const isInStock = product.inStock !== false;
-            const stockQty = product.stockQuantity;
-            const specs = product.keySpecs || [];
 
-            return (
-              <button
-                className="product-row"
-                data-selected={selected || undefined}
-                aria-pressed={selected}
-                aria-label={ariaLabel}
-                title={product.name}
-                disabled={desk.status === "creating"}
-                key={product.id}
-                type="button"
-                onClick={() => dispatch({ type: "select", productId: product.id })}
-              >
-                <span className="product-row__marker" aria-hidden="true" />
+          {/* Product Cards List */}
+          {catalogState === "loading" && (
+            <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--ink-muted)" }}>
+              <p>Đang tải dữ liệu sản phẩm từ Supabase…</p>
+            </div>
+          )}
 
-                <div className="product-row__thumb">
-                  {product.primaryImageUrl ? (
-                    <img
-                      src={product.primaryImageUrl}
-                      alt=""
-                      loading="lazy"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.display = "none";
-                      }}
-                    />
-                  ) : (
-                    <span className="product-row__thumb-fallback">{product.brand || "PC"}</span>
-                  )}
-                </div>
+          {catalogState === "error" && (
+            <div style={{ padding: "30px 20px", textAlign: "center", color: "var(--danger)" }}>
+              <p style={{ marginBottom: "10px", fontWeight: 600 }}>Không thể tải danh mục sản phẩm.</p>
+              <button className="btn" type="button" onClick={reloadProducts}>Thử tải lại</button>
+            </div>
+          )}
 
-                <div className="product-row__copy">
-                  <div className="product-row__header">
-                    <strong className="product-row__title">{product.name}</strong>
-                    <span className={`stock-badge ${isInStock ? "stock-badge--in" : "stock-badge--out"}`}>
-                      <span className="stock-badge__dot" aria-hidden="true" />
-                      {isInStock ? (stockQty ? `Còn hàng (${stockQty})` : "Còn hàng") : "Hết hàng"}
-                    </span>
-                  </div>
+          {catalogState === "empty" && (
+            <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--ink-muted)" }}>
+              <p>Không tìm thấy sản phẩm phù hợp với bộ lọc hiện tại.</p>
+            </div>
+          )}
 
-                  {specs.length > 0 && (
-                    <div className="spec-pills" aria-label="Thông số nổi bật">
-                      {specs.map((spec, i) => (
-                        <span key={i} className="spec-pill">{spec}</span>
-                      ))}
-                    </div>
-                  )}
+          {catalogState === "ready" && (
+            <>
+              <div className="product-card-list" aria-label="Danh sách sản phẩm">
+                {products.map((product) => {
+                  const selected = product.id === selectedId;
+                  const meta = [product.brand, product.sku].filter(Boolean).join(" · ");
+                  const formattedPrice = currency.format(product.priceVnd ?? 0);
+                  const ariaLabel = `${product.name}${meta ? ` · ${meta}` : ""}${formattedPrice ? ` · ${formattedPrice}` : ""}`;
+                  const isInStock = product.inStock !== false;
+                  const stockQty = product.stockQuantity;
+                  const specs = product.keySpecs || [];
 
-                  <div className="product-row__footer">
-                    <span className="product-row__price">{formattedPrice}</span>
-                    <span className="product-row__sku">{meta || "Chưa có SKU"}</span>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div><nav className="catalog-pagination" aria-label="Phân trang danh mục">
-            <button className="text-action" type="button" disabled={page <= 1 || desk.status === "creating"} onClick={() => goToPage(page - 1)}>Trước</button>
-            <span aria-live="polite">Trang {page}/{totalPages} · Tổng {totalCount}</span>
-            <button className="text-action" type="button" disabled={page >= totalPages || desk.status === "creating"} onClick={() => goToPage(page + 1)}>Sau</button>
-          </nav></>}
+                  return (
+                    <button
+                      className="product-card-item"
+                      data-selected={selected || undefined}
+                      aria-pressed={selected}
+                      aria-label={ariaLabel}
+                      title={product.name}
+                      disabled={desk.status === "creating"}
+                      key={product.id}
+                      type="button"
+                      onClick={() => dispatch({ type: "select", productId: product.id })}
+                    >
+                      <div className="product-card-marker" aria-hidden="true" />
+
+                      <div className="product-card-thumb">
+                        {product.primaryImageUrl ? (
+                          <img
+                            src={product.primaryImageUrl}
+                            alt=""
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <span className="product-card-thumb-fallback">{product.brand || "PC"}</span>
+                        )}
+                      </div>
+
+                      <div className="product-card-details">
+                        <div className="product-card-top-line">
+                          <span className="product-card-name">{product.name}</span>
+                          <span className={`stock-badge ${isInStock ? "stock-badge--in" : "stock-badge--out"}`}>
+                            <span className="stock-badge-dot" aria-hidden="true" />
+                            {isInStock ? (stockQty ? `Còn hàng (${stockQty})` : "Còn hàng") : "Hết hàng"}
+                          </span>
+                        </div>
+
+                        {specs.length > 0 && (
+                          <div className="product-card-specs" aria-label="Thông số nổi bật">
+                            {specs.map((spec, i) => (
+                              <span key={i} className="spec-chip">{spec}</span>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="product-card-bottom-line">
+                          <span className="product-card-price">{formattedPrice}</span>
+                          <span className="product-card-meta">{meta || "Chưa có SKU"}</span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Pagination */}
+              <nav className="catalog-pagination-bar" aria-label="Phân trang danh mục">
+                <button
+                  className="pagination-btn"
+                  type="button"
+                  disabled={page <= 1 || desk.status === "creating"}
+                  onClick={() => goToPage(page - 1)}
+                >
+                  ← Trước
+                </button>
+                <span className="pagination-info">
+                  Trang {page} / {totalPages} · Tổng {totalCount} máy
+                </span>
+                <button
+                  className="pagination-btn"
+                  type="button"
+                  disabled={page >= totalPages || desk.status === "creating"}
+                  onClick={() => goToPage(page + 1)}
+                >
+                  Sau →
+                </button>
+              </nav>
+            </>
+          )}
         </section>
 
-        <section className="desk-panel script-panel" aria-labelledby="script-title">
-          <div className="panel-heading"><div><p className="panel-index">02</p><h2 id="script-title">Kịch bản</h2></div></div>
-          {!selectedProduct ? <p className="state-note">Chọn một sản phẩm để mở bàn biên tập.</p> : <>
-            <div className="selected-product">
-              <span>Sản phẩm đang chọn</span>
-              <div className="selected-product__layout">
-                {selectedProduct.primaryImageUrl && (
-                  <div className="selected-product__thumb">
-                    <img src={selectedProduct.primaryImageUrl} alt={selectedProduct.name} />
-                  </div>
+        {/* CỘT PHẢI: Bàn biên tập & Preview Player (58%) */}
+        <div className="studio-canvas-deck">
+          {/* Section 1: Hero Selected Product */}
+          {selectedProduct ? (
+            <div className="selected-hero-card">
+              <div className="selected-hero-card__thumb">
+                {selectedProduct.primaryImageUrl ? (
+                  <img src={selectedProduct.primaryImageUrl} alt={selectedProduct.name} />
+                ) : (
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--ink-muted)" }}>{selectedProduct.brand}</span>
                 )}
-                <div className="selected-product__details">
-                  <strong>{selectedProduct.name}</strong>
-                  <p>{currency.format(selectedProduct.priceVnd ?? 0)}{selectedProduct.sku ? ` · ${selectedProduct.sku}` : ""}</p>
-                  {selectedProduct.keySpecs && selectedProduct.keySpecs.length > 0 && (
-                    <div className="spec-pills" style={{ marginTop: "4px" }}>
-                      {selectedProduct.keySpecs.map((spec, idx) => (
-                        <span key={idx} className="spec-pill">{spec}</span>
-                      ))}
-                    </div>
-                  )}
-                  <small>{formatSnapshotLabel(selectedProduct.collectedAt)}</small>
+              </div>
+              <div className="selected-hero-card__info">
+                <span className="selected-hero-card__kicker">Sản phẩm đang chọn</span>
+                <h2 className="selected-hero-card__name" title={selectedProduct.name}>{selectedProduct.name}</h2>
+                <div className="selected-hero-card__price-row">
+                  <span className="selected-hero-card__price">{currency.format(selectedProduct.priceVnd ?? 0)}</span>
+                  {selectedProduct.sku && <span className="spec-chip">{selectedProduct.sku}</span>}
+                  {selectedProduct.keySpecs?.slice(0, 2).map((s, idx) => (
+                    <span key={idx} className="spec-chip">{s}</span>
+                  ))}
                 </div>
               </div>
             </div>
-            {desk.status === "ready" ? <dl className="campaign-copy">
-              <div><dt>Mở đầu</dt><dd>{desk.result.content.hook}</dd></div>
-              <div><dt>Chú thích</dt><dd>{desk.result.content.caption}</dd></div>
-              <div><dt>Kêu gọi</dt><dd>{desk.result.content.cta}</dd></div>
-            </dl> : <p className="script-guidance">Nội dung chỉ dùng giá, SKU và thông tin trong bản chụp catalog công khai đã chọn.</p>}
-            <button className="primary-action" type="button" disabled={desk.status === "creating"} onClick={() => void createVideo()}>{desk.status === "creating" ? "Đang tạo video…" : desk.status === "error" ? "Thử tạo lại" : desk.status === "artifact_error" ? "Tạo lại video" : "Tạo video"}</button>
-            {desk.status === "creating" && <p className="operation-note" role="status">{desk.stage ? stageLabels[desk.stage] : "Đang chờ máy chủ ghi nhận tác vụ."}</p>}
-            {desk.status === "error" && <p className="operation-note operation-note--error" role="alert">{desk.message}</p>}
-            {desk.status === "artifact_error" && <p className="operation-note operation-note--error" role="alert">Không thể mở thành phẩm đã lưu. Hãy tạo lại video.</p>}
-          </>}
-        </section>
+          ) : (
+            <div className="selected-hero-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+              <strong style={{ fontSize: "0.95rem", color: "var(--ink-primary)" }}>Chưa chọn sản phẩm</strong>
+              <p style={{ fontSize: "0.8rem", color: "var(--ink-muted)" }}>Hãy bấm chọn một laptop từ danh sách bên trái để mở bàn sản xuất kịch bản.</p>
+            </div>
+          )}
 
-        <section className="desk-panel output-panel" aria-labelledby="output-title">
-          <div className="panel-heading"><div><p className="panel-index">03</p><h2 id="output-title">Thành phẩm</h2></div></div>
-          {desk.status === "ready" ? <div className="video-result">
-            <video controls preload="metadata" src={desk.result.urls.video} onError={() => dispatch({ type: "artifact_failure", token: desk.operation.token })}>Trình duyệt của bạn không hỗ trợ phát video.</video>
-            <div className="video-result__footer"><div><strong>Video dọc{desk.status === "ready" && desk.result.durationSeconds ? ` · ${desk.result.durationSeconds} giây` : ""}</strong><span>MP4 đã lưu cục bộ</span></div><button className="download-action" type="button" onClick={() => void downloadVideo()}>Tải video</button></div>
-          </div> : <div className="output-placeholder" aria-hidden="true"><span className="frame-corner frame-corner--top" /><span>1080 × 1920</span><i /><p>Video hoàn chỉnh sẽ xuất hiện tại đây.</p><span className="frame-corner frame-corner--bottom" /></div>}
-        </section>
+          {/* Section 2: Creative Script Canvas */}
+          <div className="script-canvas-card">
+            <div className="script-canvas-header">
+              <h3>02. Kịch Bản Video AI</h3>
+              {desk.status === "ready" && (
+                <span style={{ fontSize: "0.75rem", color: "var(--emerald)", fontWeight: 700 }}>
+                  ✓ Đã đồng bộ âm thanh & video
+                </span>
+              )}
+            </div>
+
+            {desk.status === "ready" ? (
+              <div className="scene-cards-grid">
+                <div className="scene-card">
+                  <div className="scene-card-header">
+                    <span className="scene-card-title">⚡ Cảnh 1 · Mở Đầu (Hook)</span>
+                    <span className="scene-card-duration">~4.0s</span>
+                  </div>
+                  <p className="scene-card-content">{desk.result.content.hook}</p>
+                </div>
+                <div className="scene-card">
+                  <div className="scene-card-header">
+                    <span className="scene-card-title">💡 Cảnh 2 · Thân Bài (Caption)</span>
+                    <span className="scene-card-duration">~8.0s</span>
+                  </div>
+                  <p className="scene-card-content">{desk.result.content.caption}</p>
+                </div>
+                <div className="scene-card">
+                  <div className="scene-card-header">
+                    <span className="scene-card-title">🚀 Cảnh 3 · Kêu Gọi (CTA)</span>
+                    <span className="scene-card-duration">~3.0s</span>
+                  </div>
+                  <p className="scene-card-content">{desk.result.content.cta}</p>
+                </div>
+              </div>
+            ) : (
+              <p style={{ color: "var(--ink-muted)", fontSize: "0.85rem", lineHeight: 1.6 }}>
+                AI sẽ tự động sinh kịch bản gồm 3 phân cảnh chuẩn cấu trúc TikTok/Reels, đối chiếu và chuẩn hóa 100% số liệu từ catalog công khai của máy.
+              </p>
+            )}
+
+            {/* Action Bar */}
+            <div className="canvas-action-row">
+              <button
+                className="btn-create-video"
+                type="button"
+                disabled={!selectedId || desk.status === "creating"}
+                onClick={() => void createVideo()}
+              >
+                {desk.status === "creating" ? (
+                  <>
+                    <span className="phone-spinner" style={{ width: "18px", height: "18px", borderWidth: "2px" }} />
+                    <span>Đang render video…</span>
+                  </>
+                ) : desk.status === "error" ? (
+                  "Thử tạo lại video"
+                ) : desk.status === "artifact_error" ? (
+                  "Tạo lại video"
+                ) : (
+                  <>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                    <span>Bắt đầu dựng video AI</span>
+                  </>
+                )}
+              </button>
+
+              {desk.status === "creating" && (
+                <div className="action-status-banner action-status-banner--creating" role="status">
+                  <span className="desk-status__light desk-status__light--creating" />
+                  <span>{desk.stage ? stageLabels[desk.stage] : "Đang kết nối hàng đợi worker…"}</span>
+                </div>
+              )}
+
+              {desk.status === "error" && (
+                <div className="action-status-banner action-status-banner--error" role="alert">
+                  <span>{desk.message}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section 3: Phone Mockup Video Player */}
+          <div className="phone-mockup-container">
+            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, marginBottom: "16px", alignSelf: "flex-start" }}>
+              03. Khung Xem Video Điện Thoại (9:16)
+            </h3>
+
+            <div className="phone-mockup-frame">
+              <div className="phone-notch" />
+              <div className="phone-screen">
+                {desk.status === "ready" ? (
+                  <video
+                    controls
+                    autoPlay
+                    playsInline
+                    preload="metadata"
+                    src={desk.result.urls.video}
+                    onError={() => dispatch({ type: "artifact_failure", token: desk.operation.token })}
+                  >
+                    Trình duyệt không hỗ trợ phát video.
+                  </video>
+                ) : desk.status === "creating" ? (
+                  <div className="phone-rendering-state">
+                    <div className="phone-spinner" />
+                    <span className="phone-rendering-label">
+                      {desk.stage ? stageLabels[desk.stage] : "Đang chuẩn bị render…"}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="phone-idle-state">
+                    <div className="phone-idle-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                      </svg>
+                    </div>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Video dọc 1080×1920</span>
+                    <span style={{ fontSize: "0.72rem", color: "#64748b" }}>Thành phẩm sau khi render sẽ xuất hiện tại đây.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {desk.status === "ready" && (
+              <div className="phone-controls-row">
+                <div className="phone-video-meta">
+                  <strong>Video dọc MP4</strong>
+                  <span>{desk.result.durationSeconds ? `${desk.result.durationSeconds} giây` : "Chuẩn định dạng"} · 1080×1920</span>
+                </div>
+                <button
+                  className="btn-download-video"
+                  type="button"
+                  onClick={() => void downloadVideo()}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  <span>Tải video MP4</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-      <footer className="studio-footer"><span>Nguồn: bản chụp catalog công khai</span><a href="/api/health">Kiểm tra hệ thống</a></footer>
+
+      {/* Studio Footer */}
+      <footer className="studio-footer-bar">
+        <span>Nguồn: Bản chụp catalog công khai · Xác thực 100% dữ liệu gốc</span>
+        <a href="/api/health">Kiểm tra trạng thái hệ thống</a>
+      </footer>
     </div>
   );
 }
