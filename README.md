@@ -1,6 +1,6 @@
 # OneVoice
 
-OneVoice là hệ thống marketing và bán hàng đa kênh có AI cho doanh nghiệp. **Sự thật hiện tại:** bản này chỉ có bàn sản xuất video local 12 giây — chọn một sản phẩm từ bản chụp catalog công khai, tạo nội dung qua AI và dựng video MP4 dọc bằng FFmpeg. **Blueprint toàn dự án** (`docs/development/onevoice-project-blueprint.md`) mô tả vòng vận hành đầy đủ Dữ liệu → Cơ hội → Chiến dịch → Nội dung → Hội thoại → Đơn hàng, nhưng đó là **mục tiêu P0–P3, chưa phải thứ bản này làm được** — đừng đọc README này như lời hứa full-loop.
+OneVoice là hệ thống marketing và bán hàng đa kênh có AI cho doanh nghiệp. **Sự thật hiện tại:** bản này sở hữu bàn sản xuất video tự động **15–25 giây** (template-based duration, cùng legacy fallback 12 giây) — chọn một sản phẩm từ bản chụp catalog công khai, tạo kịch bản qua AI và dựng video MP4 dọc bằng kiến trúc đa tiến trình (Next.js web BFF + file-queue background worker + VieNeu-TTS sidecar + HyperFrames & FFmpeg). **Blueprint toàn dự án** (`docs/development/onevoice-project-blueprint.md`) mô tả vòng vận hành đầy đủ Dữ liệu → Cơ hội → Chiến dịch → Nội dung → Hội thoại → Đơn hàng, nhưng đó là **mục tiêu P0–P3, chưa phải thứ bản này làm được** — đừng đọc README này như lời hứa full-loop.
 
 ## Yêu cầu
 
@@ -51,7 +51,7 @@ pnpm dev
 Mở <http://localhost:3000> ("Bàn sản xuất video") và làm theo ba bước trong giao diện:
 
 1. **Cột 01 – Sản phẩm:** danh sách laptop lấy từ Supabase (`GET /api/products`). Bấm chọn một sản phẩm.
-2. **Cột 02 – Kịch bản:** bấm **Tạo video 12 giây**. Các nhãn trạng thái thật sẽ chạy lần lượt: *Đang tải bản chụp sản phẩm → Đang tạo nội dung → Đang xử lý ảnh sản phẩm → Đang dựng video → Đang lưu thành phẩm* (thường 20–40 giây, tùy độ trễ của model AI). Xong sẽ hiện `hook` / `caption` / `cta` do AI viết.
+2. **Cột 02 – Kịch bản:** bấm **Tạo video** (thời lượng chuẩn **15–25 giây** theo template engine). Các nhãn trạng thái thật sẽ cập nhật lần lượt qua cơ chế poll (2000ms): *Đang xếp hàng (202 Queued) → Đang tạo kịch bản AI → Đang tổng hợp giọng nói TTS → Đang dựng các scene template → Đang ghép audio/video → Đang lưu thành phẩm*. Xong sẽ hiện `hook` / `caption` / `cta` do AI viết.
 3. **Cột 03 – Thành phẩm:** video phát ngay trong trang; bấm **Tải video** để lưu MP4.
 
 Liveness endpoint: <http://localhost:3000/api/health> (không gọi dịch vụ ngoài).
@@ -64,13 +64,13 @@ Mỗi lần dựng ghi vào `renders/<uuid>/video.mp4` và `renders/<uuid>/manif
 pnpm video:verify -- renders/<uuid>/video.mp4
 ```
 
-Phải in `RENDERED VIDEO VERIFICATION PASSED` với: MP4 / H.264 / yuv420p / 1080×1920 / thời lượng **11.5–12.5 giây** (gate legacy mặc định cho bàn local 12s). Verifier đọc `FFPROBE_PATH` từ `.env`, chỉ nhận regular file local không rỗng (không theo symlink hoặc URL/protocol) và chỉ chấp nhận MP4 có major brand `isom`, `iso2`, `mp41`, `mp42` hoặc `avc1`. Với video dựng bằng template renderer ở thời lượng khác, dùng mode template khớp gate của renderer (sai lệch cho phép mặc định ±250 ms, tự đọc `artifact.durationMs` từ `manifest.json` anh em nếu không truyền mốc):
+Xác minh video đạt chuẩn: MP4 / H.264 / yuv420p / 1080×1920. Với video dựng bằng template renderer, thời lượng chuẩn là **15–25 giây** (kiểm tra sai lệch qua `--template`, mặc định ±250 ms so với mốc `artifact.durationMs` trong `manifest.json`):
 
 ```bash
 pnpm video:verify -- renders/<uuid>/video.mp4 --template
-pnpm video:verify -- renders/<uuid>/video.mp4 --template --duration-ms 12000 --tolerance 250
 ```
 
+(Với video dựng bằng legacy renderer, gate thời lượng mặc định là 11.5–12.5 giây). Verifier đọc `FFPROBE_PATH` từ `.env`, chỉ nhận regular file local không rỗng và chỉ chấp nhận MP4 có major brand `isom`, `iso2`, `mp41`, `mp42` hoặc `avc1`.
 ### Xử lý sự cố nhanh
 
 | Triệu chứng | Nguyên nhân thường gặp | Cách xử lý |
@@ -129,28 +129,34 @@ Không đưa `SUPABASE_SECRET_KEY`, `AI_API_KEY` hoặc các biến runtime này
 ## Kiểm tra
 
 ```bash
-pnpm check
-pnpm build
-pnpm data:verify
-pnpm ai:verify
+pnpm build:worker # đóng gói worker entrypoint src/worker/main.ts -> dist/worker.js
+pnpm test         # chạy toàn bộ vitest unit tests
+pnpm check        # chạy eslint + typecheck + vitest
+pnpm data:verify  # kiểm tra kết nối Supabase catalog
+pnpm ai:verify    # kiểm tra kết nối AI provider
 ```
 
-Hai lệnh cuối kết nối thật đến Supabase và AI provider đã cấu hình. Dataset là **bản chụp catalog công khai ngày 31/08/2026**, không phải tồn kho hiện tại hoặc dữ liệu của đối tác.
-
-## Chạy bằng Docker Compose
+Để chạy bộ kiểm thử tích hợp và kiểm tra tính tất định (determinism check) trên toàn pipeline, kích hoạt biến môi trường `ONEVOICE_E2E=1`:
 
 ```bash
-docker compose up --build -d
-docker compose ps
-curl --fail http://localhost:3000/api/health
-docker compose exec app ffmpeg -version
-docker compose exec app ffprobe -version
+ONEVOICE_E2E=1 pnpm test src/lib/video/determinism.e2e.test.ts
+ONEVOICE_E2E=1 pnpm test src/worker/e2e.test.ts
 ```
 
-Image runtime cài FFmpeg, chạy ứng dụng bằng user không phải root và ghi media vào `/app/renders`. Compose cố định executable container-native `ffmpeg`/`ffprobe` và font `/usr/share/fonts/dejavu/DejaVuSans.ttf`, nên đường dẫn native trong `.env` không ghi đè cấu hình container. Named volume `onevoice-renders` giữ video khi container được tạo lại. Xem log bằng `docker compose logs -f app`; `docker compose down` giữ volume, còn `docker compose down -v` xóa vĩnh viễn các artifact trong volume.
+*Lưu ý:* Bộ E2E yêu cầu binary `hyperframes` và `ffmpeg` khả dụng trong `PATH`. Hai lệnh `data:verify` và `ai:verify` kết nối thật đến Supabase và AI provider đã cấu hình. Dataset là **bản chụp catalog công khai ngày 31/08/2026**, không phải tồn kho hiện tại hoặc dữ liệu của đối tác.
+## Chạy bằng Docker Compose
 
-Compose chỉ chạy web app, bind mặc định tại `127.0.0.1:3000`; không thêm database, queue hay worker. Cơ sở dữ liệu chính chạy trên Supabase Cloud. Muốn cho máy khác truy cập phải thiết kế riêng authentication, TLS và network policy trước khi đổi bind address; không expose cấu hình local này trực tiếp.
+Kiến trúc đa dịch vụ gồm 3 thành phần: `app` (Next.js web + BFF enqueue-only), `worker` (tiến trình render nền chạy `dist/worker.js`) và `tts` (VieNeu-TTS sidecar):
 
+```bash
+docker compose build
+docker compose --profile tts run --rm tts python provision.py  # tải trọng số mô hình TTS một lần (cần Internet)
+docker compose --profile tts up -d
+docker compose ps
+curl --fail http://localhost:3000/api/health
+```
+
+Named volume `onevoice-renders` chia sẻ hàng đợi `queue/` và video thành phẩm giữa `app` và `worker`. Named volume `onevoice-tts-models` lưu trữ trọng số mô hình TTS ngoại tuyến. Xem log worker bằng `docker compose logs -f worker`; `docker compose down` giữ volume, còn `docker compose down -v` xóa vĩnh viễn dữ liệu hàng đợi và media.
 ## Giới hạn bản local
 
 Render hiện chạy đồng bộ trong web process và chỉ phù hợp cho phát triển/demo local, không expose trực tiếp ra Internet. Call tạo nội dung AI có timeout 120 giây (mặc định provider là 30 giây), tải/chuẩn hóa ảnh 10 giây và FFmpeg 45 giây. Status/type/byte/decode không hợp lệ từ ảnh remote có thể chuyển sang video chỉ có chữ. Lỗi local về temporary directory/filesystem/tool capability, timeout, signal hoặc giới hạn stderr dừng luồng an toàn với `IMAGE_RESOLUTION_FAILED`; chúng không bị che bằng fallback. Khi chuyển sang production, tác vụ render phải được đưa sang durable queue/worker thay vì giữ request web mở.
@@ -160,16 +166,20 @@ Phạm vi nói rõ: bản này **không** có Opportunity Engine, phê duyệt/x
 ## Cấu trúc foundation
 
 ```text
-src/app/                 Next.js UI và route handlers
+src/app/                 Next.js UI và route handlers (enqueue-only)
+src/worker/              Background render worker (dist/worker.js)
+services/tts/            VieNeu-TTS v3 Turbo FastAPI sidecar
+src/lib/queue/           File-backed JobQueue bền vững (queued/running/done)
+src/lib/tts/             VieNeu-TTS client adapter
+src/lib/stats/           render_events ledger và determinism check
 src/lib/ai/              AI provider port và OpenAI-compatible adapter
-src/lib/render/          Orchestration cho luồng tạo video
-src/lib/env/             Kiểm tra biến môi trường server
+src/lib/render/          Pipeline orchestration và runtime paths
+src/lib/env/             Kiểm tra biến môi trường server và worker
 src/lib/supabase/        Supabase server client
-src/lib/video/           Storyboard, ảnh, FFmpeg và lưu artifact local
-supabase/migrations/     Schema có version
+src/lib/video/           Template renderer, HyperFrames composer, FFmpeg mux
+supabase/migrations/     Schema có version (kèm render_events ledger)
 supabase/seed.sql        Dữ liệu demo tái lập
 ```
-
 ## Giấy phép
 
 Code do đội OneVoice viết được phát hành theo [Apache License 2.0](LICENSE). Dependency, dataset, model và media giữ giấy phép riêng và phải được kiểm kê trước khi phát hành. FFmpeg 7.1.1 dùng cho proof local qua Homebrew được build với `--enable-gpl`; bằng chứng local đó không phải quyết định cấp phép binary cho bản phát hành công khai. Phải audit build flags và codec của image phát hành riêng.
