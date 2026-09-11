@@ -130,6 +130,11 @@ export class TemplateVideoRenderer {
 
   async render(request: TemplateRenderRequest): Promise<RenderedVideo> {
     const timings: Record<string, number> = {};
+    if (request.imagePath) {
+      console.warn(
+        "[onevoice] asset_ignored: template renderer is text-only, skipping image",
+      );
+    }
     const parsed = ProductScriptSchema.safeParse(request.script);
     if (!parsed.success) throw new Error("TEMPLATE_SCRIPT_INVALID");
     const script = parsed.data;

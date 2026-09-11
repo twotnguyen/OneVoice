@@ -1,23 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { randomUUID } from "node:crypto";
+import { OpenAICompatibleProvider } from "../src/lib/ai/openai-compatible.ts";
 
-type ResponsesApiResult = {
-  id?: string;
-  model?: string;
-  output_text?: string;
-  output?: Array<{
-    content?: Array<{
-      type?: string;
-      text?: string;
-    }>;
-  }>;
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-    total_tokens?: number;
-  };
-};
+const EXPECTED_MARKER = "ONEVOICE_AI_OK";
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 function requireEnvironment(name: "AI_BASE_URL" | "AI_API_KEY" | "AI_MODEL"): string {
   const value = process.env[name]?.trim();
@@ -25,59 +11,48 @@ function requireEnvironment(name: "AI_BASE_URL" | "AI_API_KEY" | "AI_MODEL"): st
   return value;
 }
 
-function responseText(result: ResponsesApiResult): string | undefined {
-  if (result.output_text) return result.output_text;
-
-  return result.output
-    ?.flatMap((item) => item.content ?? [])
-    .find((content) => content.type === "output_text" && content.text)?.text;
+function readTimeoutMs(): number {
+  const raw = process.env.AI_TIMEOUT_MS?.trim();
+  if (!raw) return DEFAULT_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error("AI_TIMEOUT_MS must be a positive integer");
+  }
+  return parsed;
 }
 
 async function main(): Promise<void> {
-  const baseUrl = requireEnvironment("AI_BASE_URL").replace(/\/+$/, "");
+  const baseUrl = requireEnvironment("AI_BASE_URL");
   const apiKey = requireEnvironment("AI_API_KEY");
   const model = requireEnvironment("AI_MODEL");
-  const endpoint = baseUrl.endsWith("/responses") ? baseUrl : `${baseUrl}/responses`;
+  const timeoutMs = readTimeoutMs();
+  const provider = new OpenAICompatibleProvider({ baseUrl, apiKey, model });
+  const endpoint = baseUrl.replace(/\/+$/, "").endsWith("/responses")
+    ? baseUrl.replace(/\/+$/, "")
+    : `${baseUrl.replace(/\/+$/, "")}/responses`;
   const startedAt = performance.now();
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "x-session-id": randomUUID(),
-    },
-    body: JSON.stringify({
-      model,
-      input: "Reply exactly with ONEVOICE_AI_OK",
-    }),
-    signal: AbortSignal.timeout(30_000),
+  const result = await provider.generateText({
+    prompt: `Reply exactly with ${EXPECTED_MARKER}`,
+    timeoutMs,
   });
   const latencyMs = Math.round(performance.now() - startedAt);
 
-  if (!response.ok) {
-    const detail = (await response.text()).replace(/\s+/g, " ").slice(0, 300);
-    throw new Error(
-      `AI provider request failed: ${response.status} ${response.statusText}${detail ? ` - ${detail}` : ""}`,
-    );
+  if (!result.text.includes(EXPECTED_MARKER)) {
+    throw new Error(`AI provider verification failed: output missing ${EXPECTED_MARKER}`);
   }
-
-  const result = (await response.json()) as ResponsesApiResult;
-  const text = responseText(result);
-  if (!text) throw new Error("AI provider returned no output text");
 
   console.log("=== ONEVOICE AI PROVIDER VERIFICATION ===");
   console.log(`Endpoint: ${endpoint}`);
-  console.log(`HTTP: ${response.status} ${response.statusText}`);
-  console.log(`Model: ${result.model ?? model}`);
+  console.log(`Model: ${result.model}`);
   console.log(`Latency: ${latencyMs} ms`);
-  if (result.id) console.log(`Response ID: ${result.id}`);
+  if (result.responseId) console.log(`Response ID: ${result.responseId}`);
   if (result.usage) {
     console.log(
-      `Usage: input=${result.usage.input_tokens ?? "unknown"}, output=${result.usage.output_tokens ?? "unknown"}, total=${result.usage.total_tokens ?? "unknown"}`,
+      `Usage: input=${result.usage.inputTokens ?? "unknown"}, output=${result.usage.outputTokens ?? "unknown"}, total=${result.usage.totalTokens ?? "unknown"}`,
     );
   }
-  console.log(`Output: ${text.slice(0, 200)}`);
+  console.log(`Output: ${result.text.slice(0, 200)}`);
   console.log("\n>>> AI PROVIDER VERIFICATION PASSED <<<");
 }
 

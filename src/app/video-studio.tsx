@@ -9,17 +9,29 @@ import {
   checkDownloadArtifact,
   formatSnapshotLabel,
   initialStudioState,
+  isSucceededRenderResponse,
+  isValidRenderId,
+  newStudioUuid,
+  nextPollDelayMs,
   parseRunningStage,
+  readJsonBody,
+  STUDIO_POLL_TOTAL_TIMEOUT_MS,
   StudioOperationController,
   studioReducer,
-  type RenderResponse,
 } from "./video-studio-state";
 
 type StudioProduct = Readonly<{
   id: string; name: string; sku: string | null; brand: string | null;
   priceVnd: number; currency: string; stockQuantity: number | null; collectedAt: string | null;
 }>;
-type ProductsResponse = Readonly<{ items: readonly StudioProduct[]; total: number }>;
+type ProductsResponse = Readonly<{
+  items: readonly StudioProduct[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}>;
+const PAGE_SIZE = 18;
 const currency = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 const stageLabels: Record<RenderStage, string> = {
   loading_product: "Đang tải bản chụp sản phẩm",
@@ -43,18 +55,30 @@ function safeRenderMessage(code?: string): string {
 export function VideoStudio() {
   const [products, setProducts] = useState<readonly StudioProduct[]>([]);
   const [catalogState, setCatalogState] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [studio, dispatch] = useReducer(studioReducer, initialStudioState);
   const operationController = useRef(new StudioOperationController());
   const { selectedId, desk } = studio;
 
-  const loadProducts = useCallback((signal?: AbortSignal) => {
-    return fetch("/api/products?page=1&pageSize=18", signal ? { signal } : undefined)
-      .then((response) => {
+  const loadProducts = useCallback((pageToLoad: number, signal?: AbortSignal) => {
+    return fetch(`/api/products?page=${pageToLoad}&pageSize=${PAGE_SIZE}`, signal ? { signal } : undefined)
+      .then(async (response) => {
         if (!response.ok) throw new Error("catalog unavailable");
-        return response.json() as Promise<ProductsResponse>;
-      })
-      .then((payload) => {
+        const payload = (await readJsonBody(response)) as ProductsResponse | null;
+        if (!payload || !Array.isArray(payload.items)) throw new Error("catalog unavailable");
+        const total = typeof payload.total === "number" && Number.isFinite(payload.total) ? payload.total : payload.items.length;
+        const serverTotalPages = typeof payload.totalPages === "number" && Number.isFinite(payload.totalPages) && payload.totalPages >= 1
+          ? Math.floor(payload.totalPages)
+          : 1;
+        const serverPage = typeof payload.page === "number" && Number.isFinite(payload.page) && payload.page >= 1
+          ? Math.floor(payload.page)
+          : pageToLoad;
         setProducts(payload.items);
+        setTotalCount(total);
+        setTotalPages(serverTotalPages);
+        setPage(serverPage);
         setCatalogState(payload.items.length > 0 ? "ready" : "empty");
       })
       .catch((error: Error) => {
@@ -64,12 +88,18 @@ export function VideoStudio() {
 
   const reloadProducts = useCallback(() => {
     setCatalogState("loading");
-    void loadProducts();
-  }, [loadProducts]);
+    void loadProducts(page);
+  }, [loadProducts, page]);
+
+  const goToPage = useCallback((nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
+    setCatalogState("loading");
+    void loadProducts(nextPage);
+  }, [loadProducts, page, totalPages]);
 
   useEffect(() => {
     const controller = new AbortController();
-    void loadProducts(controller.signal);
+    void loadProducts(1, controller.signal);
     return () => controller.abort();
   }, [loadProducts]);
 
@@ -85,24 +115,34 @@ export function VideoStudio() {
 
   async function createVideo() {
     if (!selectedId || desk.status === "creating") return;
-    const operation = { token: crypto.randomUUID(), renderId: crypto.randomUUID(), productId: selectedId };
+    const operation = { token: newStudioUuid(), renderId: newStudioUuid(), productId: selectedId };
+    if (!isValidRenderId(operation.renderId)) {
+      dispatch({ type: "start", operation });
+      dispatch({ type: "failure", token: operation.token, message: "Không thể khởi tạo mã tác vụ. Hãy thử lại." });
+      return;
+    }
     const controller = operationController.current.start();
     if (!controller) return;
     dispatch({ type: "start", operation });
     let settled = false;
+    const pollStartedAt = Date.now();
     void (async () => {
+      let attempt = 0;
       while (!settled && !controller.signal.aborted) {
+        if (Date.now() - pollStartedAt > STUDIO_POLL_TOTAL_TIMEOUT_MS) return;
         try {
           const response = await fetch(`/api/renders/${operation.renderId}`, { signal: controller.signal, cache: "no-store" });
           if (response.ok) {
-            const stage = parseRunningStage(await response.json());
+            const stage = parseRunningStage(await readJsonBody(response));
             if (stage) dispatch({ type: "progress", token: operation.token, stage });
           }
         } catch {
           if (controller.signal.aborted) return;
         }
+        const delay = nextPollDelayMs(attempt);
+        attempt += 1;
         await new Promise<void>((resolve) => {
-          const timer = window.setTimeout(resolve, 500);
+          const timer = window.setTimeout(resolve, delay);
           controller.signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve(); }, { once: true });
         });
       }
@@ -114,9 +154,14 @@ export function VideoStudio() {
         body: JSON.stringify({ renderId: operation.renderId, productId: operation.productId }),
         signal: controller.signal,
       });
-      const payload = await response.json() as RenderResponse | { error?: { code?: string } };
-      if (!response.ok || !("status" in payload) || payload.status !== "succeeded") {
-        dispatch({ type: "failure", token: operation.token, message: safeRenderMessage("error" in payload ? payload.error?.code : undefined) });
+      const payload = await readJsonBody(response);
+      const errorCode = payload !== null && typeof payload === "object" && "error" in payload &&
+        payload.error !== null && typeof payload.error === "object" && "code" in payload.error &&
+        typeof payload.error.code === "string"
+        ? payload.error.code
+        : undefined;
+      if (!response.ok || !isSucceededRenderResponse(payload) || payload.renderId !== operation.renderId) {
+        dispatch({ type: "failure", token: operation.token, message: safeRenderMessage(errorCode) });
         return;
       }
       dispatch({ type: "success", token: operation.token, result: payload });
@@ -135,8 +180,10 @@ export function VideoStudio() {
       if (!(await checkDownloadArtifact(desk.result.urls.download))) throw new Error("artifact unavailable");
       const link = document.createElement("a");
       link.href = desk.result.urls.download;
-      link.download = "";
+      link.download = `onevoice-${desk.result.renderId}.mp4`;
+      document.body.appendChild(link);
       link.click();
+      link.remove();
     } catch {
       dispatch({ type: "artifact_failure", token: desk.operation.token });
     }
@@ -149,7 +196,7 @@ export function VideoStudio() {
           : selectedProduct ? "Sẵn sàng tạo nội dung" : "Chờ chọn sản phẩm";
 
   return (
-    <main className="studio-shell">
+    <div className="studio-shell">
       <header className="studio-masthead">
         <div className="brand-lockup"><span className="brand-signal" aria-hidden="true" /><span className="brand-name">OneVoice</span></div>
         <div className="desk-status" aria-live="polite"><span className={`desk-status__light desk-status__light--${desk.status}`} aria-hidden="true" />{operationLabel}</div>
@@ -168,26 +215,30 @@ export function VideoStudio() {
 
       <div className="production-desk">
         <section className="desk-panel catalog-panel" aria-labelledby="catalog-title">
-          <div className="panel-heading"><div><p className="panel-index">01</p><h2 id="catalog-title">Sản phẩm</h2></div>{catalogState === "ready" && <span>{products.length} lựa chọn</span>}</div>
+          <div className="panel-heading"><div><p className="panel-index">01</p><h2 id="catalog-title">Sản phẩm</h2></div>{catalogState === "ready" && <span>{totalCount} lựa chọn</span>}</div>
           {catalogState === "loading" && <p className="state-note" role="status">Đang đọc danh mục sản phẩm…</p>}
           {catalogState === "error" && <div className="state-note state-note--error" role="alert"><p>Không thể tải danh mục.</p><button className="text-action" type="button" onClick={reloadProducts}>Tải lại</button></div>}
           {catalogState === "empty" && <p className="state-note">Chưa có laptop đủ dữ liệu để sản xuất.</p>}
-          {catalogState === "ready" && <div className="product-list" aria-label="Danh sách sản phẩm">
+          {catalogState === "ready" && <><div className="product-list" aria-label="Danh sách sản phẩm">
             {products.map((product) => {
               const selected = product.id === selectedId;
               return <button className="product-row" data-selected={selected || undefined} aria-pressed={selected} disabled={desk.status === "creating"} key={product.id} type="button" onClick={() => dispatch({ type: "select", productId: product.id })}>
                 <span className="product-row__marker" aria-hidden="true" />
                 <span className="product-row__copy"><strong>{product.name}</strong><small>{[product.brand, product.sku].filter(Boolean).join(" · ") || "Không có mã SKU"}</small></span>
-                <span className="product-row__price">{currency.format(product.priceVnd)}</span>
+                <span className="product-row__price">{currency.format(product.priceVnd ?? 0)}</span>
               </button>;
             })}
-          </div>}
+          </div><nav className="catalog-pagination" aria-label="Phân trang danh mục">
+            <button className="text-action" type="button" disabled={page <= 1 || desk.status === "creating"} onClick={() => goToPage(page - 1)}>Trước</button>
+            <span aria-live="polite">Trang {page}/{totalPages} · Tổng {totalCount}</span>
+            <button className="text-action" type="button" disabled={page >= totalPages || desk.status === "creating"} onClick={() => goToPage(page + 1)}>Sau</button>
+          </nav></>}
         </section>
 
         <section className="desk-panel script-panel" aria-labelledby="script-title">
           <div className="panel-heading"><div><p className="panel-index">02</p><h2 id="script-title">Kịch bản</h2></div></div>
           {!selectedProduct ? <p className="state-note">Chọn một sản phẩm để mở bàn biên tập.</p> : <>
-            <div className="selected-product"><span>Sản phẩm đang chọn</span><strong>{selectedProduct.name}</strong><p>{currency.format(selectedProduct.priceVnd)}{selectedProduct.sku ? ` · ${selectedProduct.sku}` : ""}</p><small>{formatSnapshotLabel(selectedProduct.collectedAt)}</small></div>
+            <div className="selected-product"><span>Sản phẩm đang chọn</span><strong>{selectedProduct.name}</strong><p>{currency.format(selectedProduct.priceVnd ?? 0)}{selectedProduct.sku ? ` · ${selectedProduct.sku}` : ""}</p><small>{formatSnapshotLabel(selectedProduct.collectedAt)}</small></div>
             {desk.status === "ready" ? <dl className="campaign-copy">
               <div><dt>Mở đầu</dt><dd>{desk.result.content.hook}</dd></div>
               <div><dt>Chú thích</dt><dd>{desk.result.content.caption}</dd></div>
@@ -209,6 +260,6 @@ export function VideoStudio() {
         </section>
       </div>
       <footer className="studio-footer"><span>Nguồn: bản chụp catalog công khai</span><a href="/api/health">Kiểm tra hệ thống</a></footer>
-    </main>
+    </div>
   );
 }

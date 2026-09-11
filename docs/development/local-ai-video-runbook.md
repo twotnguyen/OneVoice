@@ -2,6 +2,8 @@
 
 Runbook này mô tả đúng bản proof hiện tại: web app gọi Supabase Cloud và một AI provider tương thích OpenAI, sau đó dựng và lưu MP4 trên cùng máy chạy web process. Đây là luồng **local-only**, không phải kiến trúc production.
 
+> **Sự thật hiện tại vs blueprint:** thứ chạy được ở đây chỉ là **bàn video local 12 giây** (chọn sản phẩm → AI viết nội dung → FFmpeg dựng MP4 → lưu local). Blueprint toàn dự án (`docs/development/onevoice-project-blueprint.md`) vẽ vòng full-loop Dữ liệu → Cơ hội → Chiến dịch → Nội dung → Hội thoại → Đơn hàng, nhưng đó là **mục tiêu P0–P3, chưa triển khai**. Đừng hứa với stakeholder những gì blueprint chưa thành code.
+
 ## 1. Điều kiện chạy
 
 - Node.js 24 trở lên.
@@ -78,7 +80,14 @@ Mở <http://localhost:3000> và thực hiện:
 pnpm video:verify -- renders/<uuid>/video.mp4
 ```
 
-Verifier chỉ thành công khi artifact là MP4 có major brand trong allow-list `isom`, `iso2`, `mp41`, `mp42`, `avc1`, video H.264, `yuv420p`, 1080×1920 và thời lượng trong khoảng 11.5–12.5 giây (khớp cửa sổ của renderer); QuickTime MOV, 3GP và ISO-BMFF khác bị từ chối. Input được resolve thành absolute local path trước khi gọi ffprobe và phải là regular file đọc được, không rỗng; URL/protocol và symlink bị từ chối. Verifier giới hạn output, dừng ffprobe sau 10 giây, và chỉ in metadata hoặc mã lỗi an toàn, không in path, nội dung file hay stderr của ffprobe. Mỗi render nằm tại:
+Verifier chỉ thành công khi artifact là MP4 có major brand trong allow-list `isom`, `iso2`, `mp41`, `mp42`, `avc1`, video H.264, `yuv420p`, 1080×1920 và thời lượng trong khoảng 11.5–12.5 giây (gate legacy mặc định của bàn local 12s); QuickTime MOV, 3GP và ISO-BMFF khác bị từ chối. Với video template renderer ở thời lượng khác, dùng mode `--template` để kiểm tra sai lệch so với mốc mili-giây theo đúng gate của renderer (mặc định ±250 ms):
+
+```bash
+pnpm video:verify -- renders/<uuid>/video.mp4 --template
+pnpm video:verify -- renders/<uuid>/video.mp4 --template --duration-ms 12000 --tolerance 250
+```
+
+Không truyền `--duration-ms` thì verifier tự đọc `artifact.durationMs` từ `manifest.json` nằm cùng thư mục video; không có mốc nào thì chỉ kiểm tra profile, bỏ qua gate thời lượng. Input được resolve thành absolute local path trước khi gọi ffprobe và phải là regular file đọc được, không rỗng; URL/protocol và symlink bị từ chối. Verifier giới hạn output, dừng ffprobe sau 10 giây, và chỉ in metadata hoặc mã lỗi an toàn, không in path, nội dung file hay stderr của ffprobe. Mỗi render nằm tại:
 
 ```text
 renders/<uuid>/video.mp4

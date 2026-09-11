@@ -68,9 +68,6 @@ export type DashboardData = Readonly<{
   recent: readonly ActivityRow[];
 }>;
 
-// Minimal structural client so this module does not depend on the generated
-// Database type (ponytail: tighten to SupabaseClient<Database> once
-// database.types.ts includes render_events).
 export type DashboardQueryResult = Readonly<{
   data: RenderEventRow[] | null;
   error: { code: string; message: string } | null;
@@ -100,6 +97,7 @@ export type DashboardClient = {
 };
 
 const DASHBOARD_TIMEOUT_MS = 3000;
+const DASHBOARD_LIMIT = 2000;
 const RENDER_WINDOW_DAYS = 30;
 const TREND_DAYS = 14;
 const RECENT_LIMIT = 20;
@@ -230,20 +228,34 @@ export async function getDashboardData(
   scope: DashboardScope,
 ): Promise<DashboardData> {
   const since = new Date(Date.now() - RENDER_WINDOW_DAYS * 86_400_000).toISOString();
-  const signal = AbortSignal.timeout(DASHBOARD_TIMEOUT_MS);
+  // One timeout per query: a shared AbortSignal would abort the sibling
+  // queries once the first one settles.
+  const newSignal = (): AbortSignal => AbortSignal.timeout(DASHBOARD_TIMEOUT_MS);
 
   const eventsResult = (await client
     .from("render_events")
     .select(
       "render_id,organization_id,product_id,status,error_stage,error_code,model,tokens_input,tokens_output,tokens_total,stage_timings,total_duration_ms,video_bytes,video_duration_ms,created_at",
+      { count: "exact" },
     )
     .eq("organization_id", scope.organizationId)
     .gte("created_at", since)
     .order("created_at", { ascending: false })
-    .limit(2000)
-    .abortSignal(signal)) as unknown as DashboardQueryResult;
+    .limit(DASHBOARD_LIMIT)
+    .abortSignal(newSignal())) as unknown as DashboardQueryResult;
   throwOnError(eventsResult, "DASHBOARD_QUERY_FAILED");
   const rows = eventsResult.data ?? [];
+  if (
+    eventsResult.count != null
+      ? eventsResult.count > rows.length
+      : rows.length >= DASHBOARD_LIMIT
+  ) {
+    console.warn(
+      `[dashboard] render_events truncated: returned ${rows.length} rows ` +
+        `(limit ${DASHBOARD_LIMIT}, exact count ${eventsResult.count ?? "unknown"}) ` +
+        `for organization ${scope.organizationId}`,
+    );
+  }
 
   let contentReadyTotal = 0;
   try {
@@ -254,10 +266,14 @@ export async function getDashboardData(
       .eq("product_type", "laptop")
       .eq("quality", "usable")
       .eq("in_stock", true)
-      .abortSignal(signal)) as unknown as DashboardQueryResult;
+      .abortSignal(newSignal())) as unknown as DashboardQueryResult;
     throwOnError(countResult, "DASHBOARD_COUNT_FAILED");
     contentReadyTotal = countResult.count ?? 0;
-  } catch {
+  } catch (error) {
+    console.error(
+      "[dashboard] content_ready_products count failed; degrading coverage to null",
+      error,
+    );
     contentReadyTotal = 0;
   }
 
@@ -271,7 +287,7 @@ export async function getDashboardData(
         .select("id,name")
         .eq("organization_id", scope.organizationId)
         .in("id", ids)
-        .abortSignal(signal)) as unknown as NameQueryResult;
+        .abortSignal(newSignal())) as unknown as NameQueryResult;
       throwOnError(namesResult, "DASHBOARD_NAMES_FAILED");
       for (const product of namesResult.data ?? []) names.set(product.id, product.name);
     } catch {

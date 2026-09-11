@@ -228,23 +228,9 @@ export class ProductVideoPipeline {
     let asset: ResolvedAsset | null = null;
     let video: RenderedVideo | null = null;
     try {
-      this.stage(command, "resolving_asset");
-      if (snapshot.primaryImageUrl) {
-        const t = performance.now();
-        try {
-          asset = await this.dependencies.imageResolver.resolve(snapshot.primaryImageUrl);
-        } catch {
-          timings.resolving_asset_ms = Math.round(performance.now() - t);
-          return await this.terminate(await this.fail(command, {
-            stage: "resolving_asset",
-            code: "IMAGE_RESOLUTION_FAILED",
-          }, content), command, ctx);
-        }
-        timings.resolving_asset_ms = Math.round(performance.now() - t);
-      }
-
       // Template path (T7): the script stage already produced the script, so
       // the renderer takes it directly. Ffmpeg path: derive a storyboard.
+      // Resolve image only for ffmpeg path — template renderer is text-only.
       const generateScript = this.dependencies.generateScript;
       let script: GeneratedVideoScript["script"] | undefined;
       if (generateScript) {
@@ -259,8 +245,28 @@ export class ProductVideoPipeline {
         }
       }
       if (script) {
+        if (snapshot.primaryImageUrl) {
+          console.warn(
+            "[onevoice] asset_ignored: template renderer is text-only, skipping image resolve",
+          );
+        }
         this.stage(command, "synthesizing_voice");
         this.stage(command, "composing_scenes");
+      } else {
+        this.stage(command, "resolving_asset");
+        if (snapshot.primaryImageUrl) {
+          const t = performance.now();
+          try {
+            asset = await this.dependencies.imageResolver.resolve(snapshot.primaryImageUrl);
+          } catch {
+            timings.resolving_asset_ms = Math.round(performance.now() - t);
+            return await this.terminate(await this.fail(command, {
+              stage: "resolving_asset",
+              code: "IMAGE_RESOLUTION_FAILED",
+            }, content), command, ctx);
+          }
+          timings.resolving_asset_ms = Math.round(performance.now() - t);
+        }
       }
       this.stage(command, "rendering_video");
       {
@@ -270,19 +276,25 @@ export class ProductVideoPipeline {
             ? await this.dependencies.renderer.render({
                 script,
                 snapshot,
-                ...(asset ? { imagePath: asset.path } : {}),
                 onStage: (stage) => this.stage(command, stage),
               })
             : await this.dependencies.renderer.render({
                 storyboard: this.dependencies.compileStoryboard(snapshot, content),
                 ...(asset ? { imagePath: asset.path } : {}),
               });
-        } catch {
+        } catch (error) {
           timings.rendering_video_ms = Math.round(performance.now() - t);
-          return await this.terminate(await this.fail(command, {
-            stage: "rendering_video",
-            code: "VIDEO_RENDER_FAILED",
-          }, content), command, ctx);
+          const message = error instanceof Error ? error.message : "";
+          const mapped = message === "TEMPLATE_SCRIPT_INVALID"
+            ? { stage: "generating_content" as const, code: "SCRIPT_SCHEMA_INVALID" as const }
+            : message === "SCRIPT_TRUTH_VIOLATION"
+              ? { stage: "generating_content" as const, code: "SCRIPT_TRUTH_VIOLATION" as const }
+              : message === "SCENE_BELOW_NATURAL_DURATION"
+                ? { stage: "generating_content" as const, code: "SCRIPT_DURATION_EXCEEDED" as const }
+                : message === "NARRATION_OVERRUNS_SCENE"
+                  ? { stage: "synthesizing_voice" as const, code: "NARRATION_OVERRUNS_SCENE" as const }
+                  : { stage: "rendering_video" as const, code: "VIDEO_RENDER_FAILED" as const };
+          return await this.terminate(await this.fail(command, mapped, content), command, ctx);
         }
         timings.rendering_video_ms = Math.round(performance.now() - t);
         Object.assign(timings, video.timings ?? {});

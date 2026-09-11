@@ -576,12 +576,16 @@ export type Database = {
           organization_id: string
           product_id: string | null
           render_id: string
+          renderer_revision: string | null
+          scene_count: number | null
+          script_sha256: string | null
           stage_timings: Json | null
           status: string
           tokens_input: number | null
           tokens_output: number | null
           tokens_total: number | null
           total_duration_ms: number | null
+          tts_total_ms: number | null
           video_bytes: number | null
           video_duration_ms: number | null
         }
@@ -594,12 +598,16 @@ export type Database = {
           organization_id: string
           product_id?: string | null
           render_id: string
+          renderer_revision?: string | null
+          scene_count?: number | null
+          script_sha256?: string | null
           stage_timings?: Json | null
           status: string
           tokens_input?: number | null
           tokens_output?: number | null
           tokens_total?: number | null
           total_duration_ms?: number | null
+          tts_total_ms?: number | null
           video_bytes?: number | null
           video_duration_ms?: number | null
         }
@@ -612,12 +620,16 @@ export type Database = {
           organization_id?: string
           product_id?: string | null
           render_id?: string
+          renderer_revision?: string | null
+          scene_count?: number | null
+          script_sha256?: string | null
           stage_timings?: Json | null
           status?: string
           tokens_input?: number | null
           tokens_output?: number | null
           tokens_total?: number | null
           total_duration_ms?: number | null
+          tts_total_ms?: number | null
           video_bytes?: number | null
           video_duration_ms?: number | null
         }

@@ -16,6 +16,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build \
+  && pnpm build:worker \
   && find /app/.next/standalone -type f -name '.env*' -delete
 
 FROM node:24.13.0-alpine AS runner
@@ -38,6 +39,7 @@ RUN apk add --no-cache ffmpeg font-dejavu \
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
 
 USER nextjs
 EXPOSE 3000

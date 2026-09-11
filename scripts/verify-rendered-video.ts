@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { spawn } from "node:child_process";
-import { lstat, open, realpath } from "node:fs/promises";
+import { lstat, open, realpath, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const FFPROBE_TIMEOUT_MS = 10_000;
 const PROCESS_OUTPUT_LIMIT_BYTES = 64 * 1024;
 const LOCAL_PROTOCOL_PATTERN = /^[a-z][a-z\d+.-]*:/i;
 const MP4_MAJOR_BRANDS = new Set(["isom", "iso2", "mp41", "mp42", "avc1"]);
+// Khớp PROBE_TOLERANCE_MS của template-video-renderer (duration trong ±250 ms).
+const DEFAULT_TEMPLATE_TOLERANCE_MS = 250;
+// Gate legacy cho bàn video local 12s: 11.5–12.5 giây.
+const LEGACY_MIN_DURATION_S = 11.5;
+const LEGACY_MAX_DURATION_S = 12.5;
 
 type FailureCode =
   | "FFPROBE_UNAVAILABLE"
@@ -130,16 +135,93 @@ function parseProbe(rawProbe: string): ProbeResult {
   }
 }
 
+type VerifierOptions = {
+  videoPath: string;
+  templateMode: boolean;
+  expectedDurationMs: number | null;
+  toleranceMs: number;
+};
+
+function printUsage(): void {
+  console.error(
+    "Usage: pnpm video:verify -- <path> [--template [--duration-ms N] [--tolerance N]]"
+  );
+}
+
+function finiteInt(value: unknown): number | null {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(number) && Number.isFinite(number) ? number : null;
+}
+
+function parseVerifierArgs(rawArgs: string[]): VerifierOptions | null {
+  let templateMode = false;
+  let expectedDurationMs: number | null = null;
+  let toleranceMs = DEFAULT_TEMPLATE_TOLERANCE_MS;
+  let toleranceOverridden = false;
+  let videoPath: string | null = null;
+
+  for (let index = 0; index < rawArgs.length; index++) {
+    const arg = rawArgs[index];
+    if (arg === "--template") {
+      templateMode = true;
+    } else if (arg === "--duration-ms" || arg.startsWith("--duration-ms=")) {
+      const rawValue = arg.includes("=")
+        ? arg.slice("--duration-ms=".length)
+        : rawArgs[++index];
+      const parsed = finiteInt(rawValue);
+      if (parsed === null || parsed <= 0 || parsed > 3_600_000) return null;
+      expectedDurationMs = parsed;
+    } else if (arg === "--tolerance" || arg.startsWith("--tolerance=")) {
+      const rawValue = arg.includes("=") ? arg.slice("--tolerance=".length) : rawArgs[++index];
+      const parsed = finiteInt(rawValue);
+      if (parsed === null || parsed < 0 || parsed > 60_000) return null;
+      toleranceMs = parsed;
+      toleranceOverridden = true;
+    } else if (arg.startsWith("--")) {
+      return null;
+    } else if (videoPath === null) {
+      videoPath = arg;
+    } else {
+      return null;
+    }
+  }
+
+  if (videoPath === null) return null;
+  // --duration-ms / --tolerance ngầm bật kiểm tra kiểu template (so với mốc ms).
+  if (expectedDurationMs !== null || toleranceOverridden) templateMode = true;
+  return { videoPath, templateMode, expectedDurationMs, toleranceMs };
+}
+
+/**
+ * Đọc mốc thời lượng kỳ vọng từ manifest anh em (renders/<uuid>/manifest.json,
+ * field artifact.durationMs) khi chạy --template mà không truyền --duration-ms.
+ * Thất bại (không có file, JSON sai, thiếu field) thì trả null để caller fallback;
+ * không in path hay nội dung file ra output.
+ */
+async function readManifestDurationMs(videoAbsolutePath: string): Promise<number | null> {
+  try {
+    const manifestPath = path.join(path.dirname(videoAbsolutePath), "manifest.json");
+    const raw = await readFile(manifestPath, "utf8");
+    const parsed = JSON.parse(raw) as { artifact?: { durationMs?: unknown } };
+    const durationMs = finiteNumber(parsed.artifact?.durationMs);
+    if (durationMs === null || !Number.isInteger(durationMs) || durationMs <= 0) return null;
+    return durationMs;
+  } catch {
+    return null;
+  }
+}
+
 async function main(): Promise<void> {
   const rawArgs = process.argv.slice(2);
   const args = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
-  if (args.length !== 1) {
-    console.error("Usage: pnpm video:verify -- <path>");
+  const options = parseVerifierArgs(args);
+  if (!options) {
+    printUsage();
     process.exitCode = 1;
     return;
   }
 
-  const file = await resolveLocalFile(args[0]);
+  const file = await resolveLocalFile(options.videoPath);
   const ffprobePath = process.env.FFPROBE_PATH?.trim() || "ffprobe";
   const probe = parseProbe(await runFfprobe(ffprobePath, file.path));
   const stream = probe.streams?.[0];
@@ -161,10 +243,26 @@ async function main(): Promise<void> {
     pixelFormat !== "yuv420p" ||
     width !== 1080 ||
     height !== 1920 ||
-    duration === null ||
-    duration < 11.5 ||
-    duration > 12.5
+    duration === null
   ) {
+    throw new VerificationFailure("PROFILE_MISMATCH");
+  }
+
+  const durationMs = Math.round(duration * 1000);
+  let expectedDurationMs = options.expectedDurationMs;
+  let manifestDurationMs: number | null = null;
+  if (options.templateMode && expectedDurationMs === null) {
+    manifestDurationMs = await readManifestDurationMs(file.path);
+    expectedDurationMs = manifestDurationMs;
+  }
+
+  if (expectedDurationMs !== null) {
+    // Gate kiểu template-video-renderer: |probe - totalMs| <= tolerance (mặc định ±250 ms).
+    if (Math.abs(durationMs - expectedDurationMs) > options.toleranceMs) {
+      throw new VerificationFailure("PROFILE_MISMATCH");
+    }
+  } else if (duration < LEGACY_MIN_DURATION_S || duration > LEGACY_MAX_DURATION_S) {
+    // Gate legacy mặc định cho bàn video local 12s.
     throw new VerificationFailure("PROFILE_MISMATCH");
   }
 
@@ -175,6 +273,19 @@ async function main(): Promise<void> {
   console.log(`Pixel format: ${pixelFormat}`);
   console.log(`Dimensions: ${width}x${height}`);
   console.log(`Duration: ${duration.toFixed(3)} seconds`);
+  if (expectedDurationMs !== null) {
+    console.log(`Mode: template (expected ${expectedDurationMs} ms, tolerance ±${options.toleranceMs} ms)`);
+    if (manifestDurationMs !== null && options.expectedDurationMs !== null &&
+        manifestDurationMs !== options.expectedDurationMs) {
+      console.log(`Manifest duration: ${manifestDurationMs} ms (flag --duration-ms takes precedence)`);
+    } else if (manifestDurationMs !== null) {
+      console.log(`Manifest duration: ${manifestDurationMs} ms`);
+    }
+  } else if (options.templateMode) {
+    console.log("Mode: template (no expected duration reference; duration gate skipped)");
+  } else {
+    console.log(`Mode: legacy (expected ${LEGACY_MIN_DURATION_S}-${LEGACY_MAX_DURATION_S} seconds)`);
+  }
   console.log(`File size: ${file.bytes} bytes`);
   console.log("\n>>> RENDERED VIDEO VERIFICATION PASSED <<<");
 }

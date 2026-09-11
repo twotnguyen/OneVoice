@@ -97,3 +97,64 @@ export class StudioOperationController {
     this.active = null;
   }
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isValidRenderId(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
+function randomUuidFallback(): string {
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export function newStudioUuid(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      const candidate = crypto.randomUUID();
+      if (isValidRenderId(candidate)) return candidate;
+    }
+  } catch {
+    // Fall through to the getRandomValues-based fallback below.
+  }
+  return randomUuidFallback();
+}
+
+export async function readJsonBody(response: Response): Promise<unknown | null> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) return null;
+  try {
+    return (await response.json()) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+export function isSucceededRenderResponse(value: unknown): value is RenderResponse {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("status" in value) || value.status !== "succeeded") return false;
+  if (!("renderId" in value) || !isValidRenderId(value.renderId)) return false;
+  if (!("content" in value) || typeof value.content !== "object" || value.content === null) return false;
+  if (!("urls" in value) || typeof value.urls !== "object" || value.urls === null) return false;
+  return true;
+}
+
+export const STUDIO_POLL_INITIAL_DELAY_MS = 500;
+export const STUDIO_POLL_MAX_DELAY_MS = 2000;
+export const STUDIO_POLL_TOTAL_TIMEOUT_MS = 300_000;
+
+export function nextPollDelayMs(attempt: number): number {
+  const safeAttempt = Number.isFinite(attempt) && attempt > 0 ? Math.floor(attempt) : 0;
+  return Math.min(STUDIO_POLL_INITIAL_DELAY_MS * 2 ** safeAttempt, STUDIO_POLL_MAX_DELAY_MS);
+}

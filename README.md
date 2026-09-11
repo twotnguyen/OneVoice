@@ -1,6 +1,6 @@
 # OneVoice
 
-OneVoice là hệ thống marketing và bán hàng đa kênh có AI cho doanh nghiệp. Bản hiện tại có bàn sản xuất cục bộ: chọn một sản phẩm từ bản chụp catalog công khai, tạo nội dung qua AI và dựng video MP4 dọc 12 giây bằng FFmpeg.
+OneVoice là hệ thống marketing và bán hàng đa kênh có AI cho doanh nghiệp. **Sự thật hiện tại:** bản này chỉ có bàn sản xuất video local 12 giây — chọn một sản phẩm từ bản chụp catalog công khai, tạo nội dung qua AI và dựng video MP4 dọc bằng FFmpeg. **Blueprint toàn dự án** (`docs/development/onevoice-project-blueprint.md`) mô tả vòng vận hành đầy đủ Dữ liệu → Cơ hội → Chiến dịch → Nội dung → Hội thoại → Đơn hàng, nhưng đó là **mục tiêu P0–P3, chưa phải thứ bản này làm được** — đừng đọc README này như lời hứa full-loop.
 
 ## Yêu cầu
 
@@ -64,7 +64,12 @@ Mỗi lần dựng ghi vào `renders/<uuid>/video.mp4` và `renders/<uuid>/manif
 pnpm video:verify -- renders/<uuid>/video.mp4
 ```
 
-Phải in `RENDERED VIDEO VERIFICATION PASSED` với: MP4 / H.264 / yuv420p / 1080×1920 / thời lượng **11.5–12.5 giây**. Verifier đọc `FFPROBE_PATH` từ `.env`, chỉ nhận regular file local không rỗng (không theo symlink hoặc URL/protocol) và chỉ chấp nhận MP4 có major brand `isom`, `iso2`, `mp41`, `mp42` hoặc `avc1`.
+Phải in `RENDERED VIDEO VERIFICATION PASSED` với: MP4 / H.264 / yuv420p / 1080×1920 / thời lượng **11.5–12.5 giây** (gate legacy mặc định cho bàn local 12s). Verifier đọc `FFPROBE_PATH` từ `.env`, chỉ nhận regular file local không rỗng (không theo symlink hoặc URL/protocol) và chỉ chấp nhận MP4 có major brand `isom`, `iso2`, `mp41`, `mp42` hoặc `avc1`. Với video dựng bằng template renderer ở thời lượng khác, dùng mode template khớp gate của renderer (sai lệch cho phép mặc định ±250 ms, tự đọc `artifact.durationMs` từ `manifest.json` anh em nếu không truyền mốc):
+
+```bash
+pnpm video:verify -- renders/<uuid>/video.mp4 --template
+pnpm video:verify -- renders/<uuid>/video.mp4 --template --duration-ms 12000 --tolerance 250
+```
 
 ### Xử lý sự cố nhanh
 
@@ -149,6 +154,8 @@ Compose chỉ chạy web app, bind mặc định tại `127.0.0.1:3000`; không 
 ## Giới hạn bản local
 
 Render hiện chạy đồng bộ trong web process và chỉ phù hợp cho phát triển/demo local, không expose trực tiếp ra Internet. Call tạo nội dung AI có timeout 120 giây (mặc định provider là 30 giây), tải/chuẩn hóa ảnh 10 giây và FFmpeg 45 giây. Status/type/byte/decode không hợp lệ từ ảnh remote có thể chuyển sang video chỉ có chữ. Lỗi local về temporary directory/filesystem/tool capability, timeout, signal hoặc giới hạn stderr dừng luồng an toàn với `IMAGE_RESOLUTION_FAILED`; chúng không bị che bằng fallback. Khi chuyển sang production, tác vụ render phải được đưa sang durable queue/worker thay vì giữ request web mở.
+
+Phạm vi nói rõ: bản này **không** có Opportunity Engine, phê duyệt/xuất bản, hội thoại, tư vấn, đơn nháp/đơn hàng hay đo lường attribution — các mục P0–P3 trong blueprint vẫn là kế hoạch, chưa phải tính năng. Mọi con số catalog (4109 sản phẩm / 1455 content-ready) đều thuộc bản chụp ngày 31/08/2026, không phải tồn kho hiện tại.
 
 ## Cấu trúc foundation
 
