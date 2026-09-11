@@ -30,6 +30,7 @@ export type OrganizationScope = Readonly<{
 export interface StudioProductFilters {
   brand?: string;
   search?: string;
+  productType?: string;
   minPrice?: number;
   maxPrice?: number;
   inStockOnly?: boolean;

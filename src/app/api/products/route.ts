@@ -25,6 +25,7 @@ type Dependencies = Readonly<{
 const querySchema = z.object({
   page: z.coerce.number().int().min(1).max(100).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(18),
+  productType: z.string().trim().max(50).optional(),
   brand: z.string().trim().max(50).optional(),
   search: z.string().trim().max(100).optional(),
   minPrice: z.coerce.number().int().nonnegative().optional(),
@@ -42,6 +43,7 @@ export function createProductsRoute(dependencies: Dependencies) {
       const parsed = querySchema.safeParse({
         page: url.searchParams.get("page") ?? undefined,
         pageSize: url.searchParams.get("pageSize") ?? undefined,
+        productType: url.searchParams.get("productType") ?? undefined,
         brand: url.searchParams.get("brand") ?? undefined,
         search: url.searchParams.get("search") ?? undefined,
         minPrice: url.searchParams.get("minPrice") ?? undefined,
@@ -52,8 +54,9 @@ export function createProductsRoute(dependencies: Dependencies) {
         return Response.json({ error: { code: "INVALID_REQUEST" } }, { status: 400 });
       }
 
-      const { page, pageSize, brand, search, minPrice, maxPrice, inStockOnly } = parsed.data;
+      const { page, pageSize, productType, brand, search, minPrice, maxPrice, inStockOnly } = parsed.data;
       const filters: StudioProductFilters = {
+        ...(productType ? { productType } : {}),
         ...(brand ? { brand } : {}),
         ...(search ? { search } : {}),
         ...(typeof minPrice === "number" ? { minPrice } : {}),
@@ -62,17 +65,13 @@ export function createProductsRoute(dependencies: Dependencies) {
       };
       const hasFilters = Object.keys(filters).length > 0;
       try {
-        const result = hasFilters
-          ? await dependencies.catalog.listStudioProducts(
-              dependencies.scope,
-              { page, pageSize },
-              "laptop",
-              filters,
-            )
-          : await dependencies.catalog.listStudioProducts(
-              dependencies.scope,
-              { page, pageSize },
-            );
+        const targetProductType = productType ?? "laptop";
+        const result = await dependencies.catalog.listStudioProducts(
+          dependencies.scope,
+          { page, pageSize },
+          targetProductType,
+          hasFilters ? filters : undefined,
+        );
         return Response.json(result);
       } catch {
         return Response.json({ error: { code: "CATALOG_UNAVAILABLE" } }, { status: 500 });

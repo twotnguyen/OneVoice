@@ -45,6 +45,22 @@ const PRICE_RANGES: readonly { id: PriceRange; label: string; min?: number; max?
   { id: "25-35", label: "25 - 35 triệu", min: 25_000_000, max: 35_000_000 },
   { id: "above-35", label: "> 35 triệu", min: 35_000_000 },
 ];
+type CategoryTab = Readonly<{
+  id: string;
+  label: string;
+  count: number;
+}>;
+
+const CATEGORY_TABS: readonly CategoryTab[] = [
+  { id: "all", label: "🌟 Tất cả", count: 1455 },
+  { id: "monitor", label: "🖥️ Màn hình", count: 265 },
+  { id: "keyboard", label: "⌨️ Bàn phím", count: 135 },
+  { id: "laptop", label: "💻 Laptop", count: 105 },
+  { id: "mouse", label: "🖱️ Chuột", count: 64 },
+  { id: "headset", label: "🎧 Tai nghe", count: 59 },
+  { id: "furniture", label: "🪑 Bàn/Ghế", count: 45 },
+  { id: "pc", label: "🖥️ PC bộ", count: 29 },
+];
 
 type ProductsResponse = Readonly<{
   items: readonly StudioProduct[];
@@ -77,6 +93,7 @@ export function VideoStudio() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedPriceRange, setSelectedPriceRange] = useState<PriceRange>("all");
   const [inStockOnly, setInStockOnly] = useState<boolean>(true);
   const [studio, dispatch] = useReducer(studioReducer, initialStudioState);
@@ -87,11 +104,12 @@ export function VideoStudio() {
   searchRef.current = search;
   const brandRef = useRef(selectedBrand);
   brandRef.current = selectedBrand;
+  const categoryRef = useRef(selectedCategory);
+  categoryRef.current = selectedCategory;
   const priceRangeRef = useRef(selectedPriceRange);
   priceRangeRef.current = selectedPriceRange;
   const inStockOnlyRef = useRef(inStockOnly);
   inStockOnlyRef.current = inStockOnly;
-
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
@@ -104,15 +122,22 @@ export function VideoStudio() {
     signal?: AbortSignal,
     currentSearch?: string,
     currentBrand?: string | null,
+    currentCategory?: string,
     currentPriceRange?: PriceRange,
     currentInStockOnly?: boolean,
   ) => {
     const brand = currentBrand !== undefined ? currentBrand : brandRef.current;
     const s = currentSearch !== undefined ? currentSearch : searchRef.current;
+    const cat = currentCategory !== undefined ? currentCategory : categoryRef.current;
     const pr = currentPriceRange !== undefined ? currentPriceRange : priceRangeRef.current;
     const stock = currentInStockOnly !== undefined ? currentInStockOnly : inStockOnlyRef.current;
 
     let url = `/api/products?page=${pageToLoad}&pageSize=${PAGE_SIZE}`;
+    if (cat && cat !== "all") {
+      url += `&productType=${encodeURIComponent(cat)}`;
+    } else {
+      url += `&productType=all`;
+    }
     if (brand) {
       url += `&brand=${encodeURIComponent(brand)}`;
     }
@@ -129,7 +154,6 @@ export function VideoStudio() {
     if (stock) {
       url += `&inStockOnly=true`;
     }
-
     return fetch(url, signal ? { signal } : undefined)
       .then(async (response) => {
         if (!response.ok) throw new Error("catalog unavailable");
@@ -155,26 +179,30 @@ export function VideoStudio() {
 
   const reloadProducts = useCallback(() => {
     setCatalogState("loading");
-    void loadProducts(page, undefined, debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly);
-  }, [loadProducts, page, debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly]);
+    void loadProducts(page, undefined, debouncedSearch, selectedBrand, selectedCategory, selectedPriceRange, inStockOnly);
+  }, [loadProducts, page, debouncedSearch, selectedBrand, selectedCategory, selectedPriceRange, inStockOnly]);
 
   const goToPage = useCallback((nextPage: number) => {
     if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
     setCatalogState("loading");
-    void loadProducts(nextPage, undefined, debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly);
-  }, [loadProducts, page, totalPages, debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly]);
+    void loadProducts(nextPage, undefined, debouncedSearch, selectedBrand, selectedCategory, selectedPriceRange, inStockOnly);
+  }, [loadProducts, page, totalPages, debouncedSearch, selectedBrand, selectedCategory, selectedPriceRange, inStockOnly]);
 
   const handleBrandClick = useCallback((brand: string | null) => {
     const nextBrand = brand === null ? null : selectedBrand === brand ? null : brand;
     if (nextBrand === selectedBrand) {
       if (page !== 1) {
         setCatalogState("loading");
-        void loadProducts(1, undefined, debouncedSearch, nextBrand, selectedPriceRange, inStockOnly);
+        void loadProducts(1, undefined, debouncedSearch, nextBrand, selectedCategory, selectedPriceRange, inStockOnly);
       }
       return;
     }
     setSelectedBrand(nextBrand);
-  }, [selectedBrand, page, loadProducts, debouncedSearch, selectedPriceRange, inStockOnly]);
+  }, [selectedBrand, page, loadProducts, debouncedSearch, selectedCategory, selectedPriceRange, inStockOnly]);
+
+  const handleCategoryClick = useCallback((categoryId: string) => {
+    setSelectedCategory(categoryId);
+  }, []);
 
   const handlePriceRangeClick = useCallback((rangeId: PriceRange) => {
     setSelectedPriceRange(rangeId);
@@ -187,9 +215,9 @@ export function VideoStudio() {
   useEffect(() => {
     setCatalogState("loading");
     const controller = new AbortController();
-    void loadProducts(1, controller.signal, debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly);
+    void loadProducts(1, controller.signal, debouncedSearch, selectedBrand, selectedCategory, selectedPriceRange, inStockOnly);
     return () => controller.abort();
-  }, [debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly, loadProducts]);
+  }, [debouncedSearch, selectedBrand, selectedCategory, selectedPriceRange, inStockOnly, loadProducts]);
 
   useEffect(() => {
     const operations = operationController.current;
@@ -340,7 +368,7 @@ export function VideoStudio() {
       <section className="studio-intro-hero" aria-labelledby="studio-title">
         <div className="studio-intro-hero__title">
           <h1 id="studio-title">Bàn Sản Xuất Video Bán Hàng Đa Kênh</h1>
-          <p>Chọn sản phẩm từ catalog công khai. AI tự động lập kịch bản, lồng tiếng tiếng Việt và dựng video dọc 9:16 lưu trữ cục bộ.</p>
+          <p>Chọn sản phẩm từ 1.455 laptop, màn hình, bàn phím trong catalog công khai. AI tự động lập kịch bản, lồng tiếng tiếng Việt và dựng video dọc 9:16 lưu trữ cục bộ.</p>
         </div>
         <div className="studio-intro-hero__badge">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -369,6 +397,27 @@ export function VideoStudio() {
           </header>
 
           <div className="catalog-filter-panel">
+            {/* Category Selector Tabs */}
+            <div className="category-tabs-scroll" role="tablist" aria-label="Chọn loại sản phẩm">
+              {CATEGORY_TABS.map((cat) => {
+                const active = selectedCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={active ? "category-tab-btn category-tab-btn--active" : "category-tab-btn"}
+                    onClick={() => handleCategoryClick(cat.id)}
+                    disabled={desk.status === "creating"}
+                  >
+                    <span>{cat.label}</span>
+                    <span className="category-tab-badge">{cat.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Search Input */}
             <div className="search-input-wrapper">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
