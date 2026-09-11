@@ -71,7 +71,16 @@ type ProductsResponse = Readonly<{
 }>;
 
 const PAGE_SIZE = 18;
-const BRANDS = ["ACER", "ASUS", "DELL", "GIGABYTE", "HP", "LENOVO", "LG", "MSI"] as const;
+const BRANDS_BY_CATEGORY: Record<string, readonly string[]> = {
+  all: ["ASUS", "ACER", "MSI", "Logitech", "Razer", "AULA", "LG", "DELL", "Samsung"],
+  laptop: ["ACER", "ASUS", "GIGABYTE", "DELL", "MSI", "LENOVO", "LG", "HP"],
+  monitor: ["ASUS", "ViewSonic", "AOC", "LG", "MSI", "ACER", "Samsung", "E-Dra"],
+  keyboard: ["AULA", "Logitech", "ASUS", "Leobog", "AKKO", "DareU", "Razer", "HyperWork"],
+  mouse: ["Logitech", "Razer", "ASUS", "AKKO", "HyperWork", "DareU"],
+  headset: ["Razer", "HyperX", "Logitech", "AKKO", "DareU"],
+  furniture: ["Razer", "Warrior", "E-Dra", "Corsair", "HyperWork", "Sihoo"],
+  pc: ["GEARVN", "MSI", "ACER"],
+};
 const currency = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 
 const stageLabels: Record<RenderStage, string> = {
@@ -99,6 +108,38 @@ export function VideoStudio() {
   const [studio, dispatch] = useReducer(studioReducer, initialStudioState);
   const operationController = useRef(new StudioOperationController());
   const { selectedId, desk } = studio;
+
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  const activeBrands = BRANDS_BY_CATEGORY[selectedCategory] || BRANDS_BY_CATEGORY.all;
+
+  const checkScrollability = useCallback(() => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  const scrollCategoryTabs = useCallback((direction: "left" | "right") => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const distance = direction === "left" ? -220 : 220;
+    el.scrollBy({ left: distance, behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    checkScrollability();
+    el.addEventListener("scroll", checkScrollability, { passive: true });
+    window.addEventListener("resize", checkScrollability);
+    return () => {
+      el.removeEventListener("scroll", checkScrollability);
+      window.removeEventListener("resize", checkScrollability);
+    };
+  }, [checkScrollability]);
 
   const searchRef = useRef(search);
   searchRef.current = search;
@@ -202,7 +243,11 @@ export function VideoStudio() {
 
   const handleCategoryClick = useCallback((categoryId: string) => {
     setSelectedCategory(categoryId);
-  }, []);
+    const brandsForCat = BRANDS_BY_CATEGORY[categoryId] || BRANDS_BY_CATEGORY.all;
+    if (selectedBrand && !brandsForCat.includes(selectedBrand)) {
+      setSelectedBrand(null);
+    }
+  }, [selectedBrand]);
 
   const handlePriceRangeClick = useCallback((rangeId: PriceRange) => {
     setSelectedPriceRange(rangeId);
@@ -397,74 +442,101 @@ export function VideoStudio() {
           </header>
 
           <div className="catalog-filter-panel">
-            {/* Category Selector Tabs */}
-            <div className="category-tabs-scroll" role="tablist" aria-label="Chọn loại sản phẩm">
-              {CATEGORY_TABS.map((cat) => {
-                const active = selectedCategory === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    className={active ? "category-tab-btn category-tab-btn--active" : "category-tab-btn"}
-                    onClick={() => handleCategoryClick(cat.id)}
-                    disabled={desk.status === "creating"}
-                  >
-                    <span>{cat.label}</span>
-                    <span className="category-tab-badge">{cat.count}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Search Input */}
-            <div className="search-input-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <input
-                type="search"
-                className="catalog-search-input"
-                placeholder="Tìm theo tên máy, mã SKU..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                disabled={desk.status === "creating"}
-                aria-label="Tìm theo tên máy, mã SKU"
-              />
-            </div>
-
-            {/* Brand Filter Pills */}
-            <div className="brand-pills-row" role="toolbar" aria-label="Lọc theo thương hiệu">
+            {/* Category Navigation with Left/Right Scroll Arrows */}
+            <div className="category-tabs-wrapper">
               <button
                 type="button"
-                className={selectedBrand === null ? "brand-pill brand-pill--active" : "brand-pill"}
-                onClick={() => handleBrandClick(null)}
-                aria-pressed={selectedBrand === null}
-                disabled={desk.status === "creating"}
+                className={`category-nav-arrow category-nav-arrow--left ${canScrollLeft ? "is-visible" : ""}`}
+                onClick={() => scrollCategoryTabs("left")}
+                aria-label="Cuộn danh mục sang trái"
+                disabled={!canScrollLeft}
               >
-                Tất cả
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
               </button>
-              {BRANDS.map((brand) => {
-                const active = selectedBrand === brand;
-                return (
-                  <button
-                    key={brand}
-                    type="button"
-                    className={active ? "brand-pill brand-pill--active" : "brand-pill"}
-                    onClick={() => handleBrandClick(brand)}
-                    aria-pressed={active}
-                    disabled={desk.status === "creating"}
-                  >
-                    {brand}
-                  </button>
-                );
-              })}
+
+              <div
+                className="category-tabs-scroll"
+                ref={categoryScrollRef}
+                role="tablist"
+                aria-label="Chọn loại sản phẩm"
+              >
+                {CATEGORY_TABS.map((cat) => {
+                  const active = selectedCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      className={active ? "category-tab-btn category-tab-btn--active" : "category-tab-btn"}
+                      onClick={() => handleCategoryClick(cat.id)}
+                      disabled={desk.status === "creating"}
+                    >
+                      <span>{cat.label}</span>
+                      <span className="category-tab-badge">{cat.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                className={`category-nav-arrow category-nav-arrow--right ${canScrollRight ? "is-visible" : ""}`}
+                onClick={() => scrollCategoryTabs("right")}
+                aria-label="Cuộn danh mục sang phải"
+                disabled={!canScrollRight}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
             </div>
 
-            {/* Price Filter Pills */}
+            {/* Row 2: Search Input and In-Stock Toggle */}
+            <div className="catalog-search-row">
+              <div className="search-input-wrapper">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input
+                  type="search"
+                  className="catalog-search-input"
+                  placeholder={`Tìm ${selectedCategory === "all" ? "1.455 sản phẩm" : CATEGORY_TABS.find((c) => c.id === selectedCategory)?.label || "sản phẩm"}...`}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  disabled={desk.status === "creating"}
+                  aria-label="Tìm theo tên máy, mã SKU"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    className="search-clear-btn"
+                    onClick={() => setSearch("")}
+                    aria-label="Xóa tìm kiếm"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className={`stock-filter-pill ${inStockOnly ? "stock-filter-pill--active" : ""}`}
+                onClick={() => handleInStockToggle(!inStockOnly)}
+                disabled={desk.status === "creating"}
+                aria-pressed={inStockOnly}
+              >
+                <span className="stock-badge-dot" aria-hidden="true" />
+                <span>Chỉ còn hàng</span>
+              </button>
+            </div>
+
+            {/* Row 3: Price Filter Pills */}
             <div className="price-filters-row" role="toolbar" aria-label="Lọc theo mức giá">
+              <span className="filter-row-label">Mức giá:</span>
               {PRICE_RANGES.map((pr) => {
                 const active = selectedPriceRange === pr.id;
                 return (
@@ -482,17 +554,33 @@ export function VideoStudio() {
               })}
             </div>
 
-            {/* In-Stock Only Toggle */}
-            <div className="stock-toggle-row">
-              <label className="filter-toggle-label">
-                <input
-                  type="checkbox"
-                  checked={inStockOnly}
-                  onChange={(e) => handleInStockToggle(e.target.checked)}
-                  disabled={desk.status === "creating"}
-                />
-                <span>Chỉ hiện sản phẩm còn hàng sẵn sàng</span>
-              </label>
+            {/* Row 4: Dynamic Brand Filter Pills */}
+            <div className="brand-pills-row" role="toolbar" aria-label="Lọc theo thương hiệu">
+              <span className="filter-row-label">Thương hiệu:</span>
+              <button
+                type="button"
+                className={selectedBrand === null ? "brand-pill brand-pill--active" : "brand-pill"}
+                onClick={() => handleBrandClick(null)}
+                aria-pressed={selectedBrand === null}
+                disabled={desk.status === "creating"}
+              >
+                Tất cả
+              </button>
+              {activeBrands.map((brand) => {
+                const active = selectedBrand === brand;
+                return (
+                  <button
+                    key={brand}
+                    type="button"
+                    className={active ? "brand-pill brand-pill--active" : "brand-pill"}
+                    onClick={() => handleBrandClick(brand)}
+                    aria-pressed={active}
+                    disabled={desk.status === "creating"}
+                  >
+                    {brand}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
