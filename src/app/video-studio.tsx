@@ -109,6 +109,8 @@ export function VideoStudio() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedPriceRange, setSelectedPriceRange] = useState<PriceRange>("all");
   const [inStockOnly, setInStockOnly] = useState<boolean>(true);
+  const [selectedVoice, setSelectedVoice] = useState<string>("vi-VN-HoaiMyNeural");
+  const [copiedSocial, setCopiedSocial] = useState<boolean>(false);
   const [studio, dispatch] = useReducer(studioReducer, initialStudioState);
   const operationController = useRef(new StudioOperationController());
   const { selectedId, desk } = studio;
@@ -817,30 +819,59 @@ export function VideoStudio() {
               )}
             </div>
 
+            {/* Voice & Narration Options */}
+            <div className="voice-selector-row">
+              <span className="filter-row-label">Giọng đọc:</span>
+              <select
+                className="voice-select"
+                value={selectedVoice}
+                onChange={(e) => setSelectedVoice(e.target.value)}
+                disabled={desk.status === "creating"}
+                aria-label="Chọn giọng đọc AI"
+              >
+                <option value="vi-VN-HoaiMyNeural">👩 Hoài My (Nữ miền Bắc · Truyền cảm)</option>
+                <option value="vi-VN-NamMinhNeural">👨 Nam Minh (Nam miền Bắc · Dứt khoát)</option>
+                <option value="vieneu">🤖 VieNeu-TTS (Local Engine)</option>
+              </select>
+            </div>
             {desk.status === "ready" ? (
-              <div className="scene-cards-grid">
-                <div className="scene-card">
-                  <div className="scene-card-header">
-                    <span className="scene-card-title">⚡ Cảnh 1 · Mở Đầu (Hook)</span>
-                    <span className="scene-card-duration">~4.0s</span>
+              <>
+                <div className="scene-cards-grid">
+                  <div className="scene-card">
+                    <div className="scene-card-header">
+                      <span className="scene-card-title">⚡ Cảnh 1 · Mở Đầu (Hook)</span>
+                      <span className="scene-card-duration">~4.0s</span>
+                    </div>
+                    <p className="scene-card-content">{desk.result.content.hook}</p>
                   </div>
-                  <p className="scene-card-content">{desk.result.content.hook}</p>
-                </div>
-                <div className="scene-card">
-                  <div className="scene-card-header">
-                    <span className="scene-card-title">💡 Cảnh 2 · Thân Bài (Caption)</span>
-                    <span className="scene-card-duration">~8.0s</span>
+                  <div className="scene-card">
+                    <div className="scene-card-header">
+                      <span className="scene-card-title">💡 Cảnh 2 · Thân Bài (Caption)</span>
+                      <span className="scene-card-duration">~8.0s</span>
+                    </div>
+                    <p className="scene-card-content">{desk.result.content.caption}</p>
                   </div>
-                  <p className="scene-card-content">{desk.result.content.caption}</p>
-                </div>
-                <div className="scene-card">
-                  <div className="scene-card-header">
-                    <span className="scene-card-title">🚀 Cảnh 3 · Kêu Gọi (CTA)</span>
-                    <span className="scene-card-duration">~3.0s</span>
+                  <div className="scene-card">
+                    <div className="scene-card-header">
+                      <span className="scene-card-title">🚀 Cảnh 3 · Kêu Gọi (CTA)</span>
+                      <span className="scene-card-duration">~3.0s</span>
+                    </div>
+                    <p className="scene-card-content">{desk.result.content.cta}</p>
                   </div>
-                  <p className="scene-card-content">{desk.result.content.cta}</p>
                 </div>
-              </div>
+                <button
+                  className="btn-copy-social"
+                  type="button"
+                  onClick={() => {
+                    const copyText = `${desk.result.content.hook}\n\n${desk.result.content.caption}\n\n👉 ${desk.result.content.cta}\n\n#OneVoice #${selectedProduct?.brand || "CongNghe"} #VideoMarketing #Review`;
+                    void navigator.clipboard.writeText(copyText);
+                    setCopiedSocial(true);
+                    setTimeout(() => setCopiedSocial(false), 2000);
+                  }}
+                >
+                  {copiedSocial ? "✓ Đã sao chép kịch bản & hashtags!" : "📋 Sao chép Caption & Hashtags TikTok"}
+                </button>
+              </>
             ) : (
               <p style={{ color: "var(--ink-muted)", fontSize: "0.85rem", lineHeight: 1.6 }}>
                 AI sẽ tự động sinh kịch bản gồm 3 phân cảnh chuẩn cấu trúc TikTok/Reels, đối chiếu và chuẩn hóa 100% số liệu từ catalog công khai của máy.

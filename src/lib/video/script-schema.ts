@@ -46,8 +46,12 @@ export const ProductScriptSchema = z
     renderer: z.literal("hyperframes"),
     aspect: z.literal("9:16"),
     music: z.enum(MUSIC_NAMES).nullable(),
-    voice: z.object({ speed: z.number().min(0.8).max(1.2) }).strict(),
-    // Bounds copied verbatim from contentSchema in local-video-library.ts:47-53
+    voice: z
+      .object({
+        speed: z.number().min(0.8).max(1.2),
+        voiceId: z.string().trim().max(64).optional(),
+      })
+      .strict(),
     // so library.save can never reject a script the validator accepted.
     // .trim() is additionally applied (strictly safer).
     meta: z
