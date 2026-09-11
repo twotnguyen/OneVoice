@@ -110,36 +110,106 @@ export function VideoStudio() {
   const { selectedId, desk } = studio;
 
   const categoryScrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
+  const sliderTrackRef = useRef<HTMLDivElement>(null);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [thumbRatio, setThumbRatio] = useState(0.3);
+  const isDraggingThumb = useRef(false);
+  const dragStartX = useRef(0);
+  const dragStartScrollLeft = useRef(0);
+  const isDraggingTabs = useRef(false);
+  const tabsStartX = useRef(0);
+  const tabsStartScrollLeft = useRef(0);
 
   const activeBrands = BRANDS_BY_CATEGORY[selectedCategory] || BRANDS_BY_CATEGORY.all;
 
-  const checkScrollability = useCallback(() => {
+  const updateScrollProgress = useCallback(() => {
     const el = categoryScrollRef.current;
     if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 4);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-  }, []);
-
-  const scrollCategoryTabs = useCallback((direction: "left" | "right") => {
-    const el = categoryScrollRef.current;
-    if (!el) return;
-    const distance = direction === "left" ? -220 : 220;
-    el.scrollBy({ left: distance, behavior: "smooth" });
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    if (maxScroll > 0) {
+      setScrollProgress(el.scrollLeft / maxScroll);
+      setThumbRatio(Math.max(0.2, el.clientWidth / el.scrollWidth));
+    } else {
+      setScrollProgress(0);
+      setThumbRatio(1);
+    }
   }, []);
 
   useEffect(() => {
     const el = categoryScrollRef.current;
     if (!el) return;
-    checkScrollability();
-    el.addEventListener("scroll", checkScrollability, { passive: true });
-    window.addEventListener("resize", checkScrollability);
+    updateScrollProgress();
+    el.addEventListener("scroll", updateScrollProgress, { passive: true });
+    window.addEventListener("resize", updateScrollProgress);
     return () => {
-      el.removeEventListener("scroll", checkScrollability);
-      window.removeEventListener("resize", checkScrollability);
+      el.removeEventListener("scroll", updateScrollProgress);
+      window.removeEventListener("resize", updateScrollProgress);
     };
-  }, [checkScrollability]);
+  }, [updateScrollProgress]);
+
+  const handleThumbMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingThumb.current = true;
+    dragStartX.current = e.clientX;
+    const el = categoryScrollRef.current;
+    dragStartScrollLeft.current = el ? el.scrollLeft : 0;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingThumb.current) return;
+      const el = categoryScrollRef.current;
+      const track = sliderTrackRef.current;
+      if (!el || !track) return;
+      const deltaX = moveEvent.clientX - dragStartX.current;
+      const trackWidth = track.clientWidth;
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      const scrollDelta = (deltaX / trackWidth) * el.scrollWidth;
+      el.scrollLeft = Math.max(0, Math.min(maxScroll, dragStartScrollLeft.current + scrollDelta));
+    };
+
+    const handleMouseUp = () => {
+      isDraggingThumb.current = false;
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }, []);
+
+  const handleTrackClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const track = sliderTrackRef.current;
+    const el = categoryScrollRef.current;
+    if (!track || !el) return;
+    const rect = track.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    el.scrollTo({ left: ratio * maxScroll, behavior: "smooth" });
+  }, []);
+
+  const handleTabsMouseDown = useCallback((e: React.MouseEvent) => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    isDraggingTabs.current = true;
+    tabsStartX.current = e.clientX;
+    tabsStartScrollLeft.current = el.scrollLeft;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingTabs.current) return;
+      const deltaX = moveEvent.clientX - tabsStartX.current;
+      el.scrollLeft = tabsStartScrollLeft.current - deltaX;
+    };
+
+    const handleMouseUp = () => {
+      isDraggingTabs.current = false;
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }, []);
 
   const searchRef = useRef(search);
   searchRef.current = search;
@@ -442,25 +512,14 @@ export function VideoStudio() {
           </header>
 
           <div className="catalog-filter-panel">
-            {/* Category Navigation with Left/Right Scroll Arrows */}
+            {/* Category Navigation with Interactive Slider Track */}
             <div className="category-tabs-wrapper">
-              <button
-                type="button"
-                className={`category-nav-arrow category-nav-arrow--left ${canScrollLeft ? "is-visible" : ""}`}
-                onClick={() => scrollCategoryTabs("left")}
-                aria-label="Cuộn danh mục sang trái"
-                disabled={!canScrollLeft}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <polyline points="15 18 9 12 15 6" />
-                </svg>
-              </button>
-
               <div
                 className="category-tabs-scroll"
                 ref={categoryScrollRef}
                 role="tablist"
                 aria-label="Chọn loại sản phẩm"
+                onMouseDown={handleTabsMouseDown}
               >
                 {CATEGORY_TABS.map((cat) => {
                   const active = selectedCategory === cat.id;
@@ -481,17 +540,26 @@ export function VideoStudio() {
                 })}
               </div>
 
-              <button
-                type="button"
-                className={`category-nav-arrow category-nav-arrow--right ${canScrollRight ? "is-visible" : ""}`}
-                onClick={() => scrollCategoryTabs("right")}
-                aria-label="Cuộn danh mục sang phải"
-                disabled={!canScrollRight}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </button>
+              {/* Thanh kéo trượt tương tác (Draggable Slider Track) */}
+              <div className="category-slider-container">
+                <div
+                  className="category-slider-track"
+                  ref={sliderTrackRef}
+                  onClick={handleTrackClick}
+                  role="scrollbar"
+                  aria-orientation="horizontal"
+                  aria-label="Thanh kéo cuộn danh mục"
+                >
+                  <div
+                    className="category-slider-thumb"
+                    style={{
+                      width: `${Math.round(thumbRatio * 100)}%`,
+                      left: `${Math.round(scrollProgress * (1 - thumbRatio) * 100)}%`,
+                    }}
+                    onMouseDown={handleThumbMouseDown}
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Row 2: Search Input and In-Stock Toggle */}
