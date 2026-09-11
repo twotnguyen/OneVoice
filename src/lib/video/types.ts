@@ -87,7 +87,7 @@ export type VideoManifestError =
     }>
   | Readonly<{
       stage: "rendering_video";
-      code: "VIDEO_RENDER_FAILED";
+      code: "VIDEO_RENDER_FAILED" | "WORKER_LOST";
     }>
   | Readonly<{
       stage: "storing_artifact";

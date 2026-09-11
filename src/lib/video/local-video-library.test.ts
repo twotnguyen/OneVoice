@@ -133,6 +133,34 @@ describe("LocalVideoLibrary", () => {
     await expect(library.getRun(renderId)).resolves.toEqual(manifest);
   });
 
+  it("stores the WORKER_LOST recovery manifest (T8 recoverStale terminal state)", async () => {
+    const root = await temporaryRoot();
+    const library = new LocalVideoLibrary(root);
+    const manifest: VideoManifest = {
+      renderId,
+      status: "failed",
+      error: { stage: "rendering_video", code: "WORKER_LOST" },
+    };
+
+    await library.save(renderId, manifest);
+
+    await expect(library.getRun(renderId)).resolves.toEqual(manifest);
+  });
+
+  it("stores the synthesizing_voice TTS_UNAVAILABLE manifest", async () => {
+    const root = await temporaryRoot();
+    const library = new LocalVideoLibrary(root);
+    const manifest: VideoManifest = {
+      renderId,
+      status: "failed",
+      error: { stage: "synthesizing_voice", code: "TTS_UNAVAILABLE" },
+    };
+
+    await library.save(renderId, manifest);
+
+    await expect(library.getRun(renderId)).resolves.toEqual(manifest);
+  });
+
   it("returns null for missing artifacts", async () => {
     const library = new LocalVideoLibrary(await temporaryRoot());
     await expect(library.getRun(renderId)).resolves.toBeNull();

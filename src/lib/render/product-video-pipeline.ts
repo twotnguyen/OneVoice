@@ -30,6 +30,13 @@ export type RenderEventInput = Readonly<{
   videoBytes?: number;
   videoDurationMs?: number;
   createdAt: string;
+  // T9: template-pipeline ledger fields. Only rendererRevision + ttsTotalMs
+  // are populated at the terminate() seam; sceneCount/scriptSha256 population
+  // is a T12-observability follow-up via runToRenderEvent LiveRowCtx.
+  sceneCount?: number;
+  ttsTotalMs?: number;
+  rendererRevision?: string;
+  scriptSha256?: string;
 }>;
 
 export type RenderEventStore = Readonly<{
@@ -135,7 +142,14 @@ export class ProductVideoPipeline {
         timings: { ...ctx.timings },
         totalDurationMs,
         ...(run.status === "succeeded"
-          ? { videoBytes: run.artifact.bytes, videoDurationMs: run.artifact.durationMs }
+          ? {
+              videoBytes: run.artifact.bytes,
+              videoDurationMs: run.artifact.durationMs,
+              rendererRevision: run.artifact.rendererRevision,
+            }
+          : {}),
+        ...(ctx.timings.synthesizing_voice_ms != null
+          ? { ttsTotalMs: ctx.timings.synthesizing_voice_ms }
           : {}),
         createdAt: new Date(ctx.wallClockStart).toISOString(),
       };

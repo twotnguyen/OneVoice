@@ -56,6 +56,10 @@ describe("manifestToRenderEvent (legacy backfill)", () => {
       total_duration_ms: null,
       video_bytes: 1024,
       video_duration_ms: 12_000,
+      scene_count: null,
+      tts_total_ms: null,
+      renderer_revision: null,
+      script_sha256: null,
       created_at: "2026-09-01T00:00:00.000Z",
     });
   });
@@ -70,6 +74,10 @@ describe("manifestToRenderEvent (legacy backfill)", () => {
     expect(row.error_code).toBe("PRODUCT_NOT_FOUND");
     expect(row.video_bytes).toBeNull();
     expect(row.product_id).toBeNull();
+    expect(row.scene_count).toBeNull();
+    expect(row.tts_total_ms).toBeNull();
+    expect(row.renderer_revision).toBeNull();
+    expect(row.script_sha256).toBeNull();
   });
 });
 
@@ -127,5 +135,64 @@ describe("toRow (store input)", () => {
     expect(row.error_stage).toBe("storing_artifact");
     expect(row.model).toBeNull();
     expect(row.tokens_input).toBeNull();
+  });
+
+  it("maps new template-pipeline stage timings and ledger columns", () => {
+    const row = toRow(
+      {
+        renderId: RENDER_ID,
+        productId: "c0000000-0000-4000-8000-000000000001",
+        status: "succeeded",
+        timings: {
+          loading_product_ms: 3,
+          generating_script_ms: 10,
+          synthesizing_voice_ms: 20,
+          composing_scenes_ms: 30,
+          mixing_audio_ms: 40,
+          muxing_ms: 50,
+        },
+        totalDurationMs: 42,
+        videoBytes: 1024,
+        videoDurationMs: 12_000,
+        sceneCount: 4,
+        ttsTotalMs: 20,
+        rendererRevision: "onevoice-template-v1",
+        scriptSha256: "b".repeat(64),
+        createdAt: "2026-09-10T00:00:00.000Z",
+      },
+      ORG,
+    );
+    expect(row.stage_timings).toEqual({
+      loading_product_ms: 3,
+      generating_script_ms: 10,
+      synthesizing_voice_ms: 20,
+      composing_scenes_ms: 30,
+      mixing_audio_ms: 40,
+      muxing_ms: 50,
+    });
+    expect(row.scene_count).toBe(4);
+    expect(row.tts_total_ms).toBe(20);
+    expect(row.renderer_revision).toBe("onevoice-template-v1");
+    expect(row.script_sha256).toBe("b".repeat(64));
+  });
+
+  it("maps runToRenderEvent ledger fields from LiveRowCtx", () => {
+    const row = runToRenderEvent(successManifest, {
+      organizationId: ORG,
+      productId: "c0000000-0000-4000-8000-000000000001",
+      timings: { loading_product_ms: 3 },
+      usage: undefined,
+      model: undefined,
+      totalDurationMs: 42,
+      createdAt: "2026-09-10T00:00:00.000Z",
+      sceneCount: 4,
+      ttsTotalMs: 20,
+      rendererRevision: "onevoice-template-v1",
+      scriptSha256: "b".repeat(64),
+    });
+    expect(row.scene_count).toBe(4);
+    expect(row.tts_total_ms).toBe(20);
+    expect(row.renderer_revision).toBe("onevoice-template-v1");
+    expect(row.script_sha256).toBe("b".repeat(64));
   });
 });

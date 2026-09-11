@@ -32,6 +32,8 @@ const statusByCode: Record<VideoManifestError["code"], number> = {
   TTS_TIMEOUT: 503,
   NARRATION_OVERRUNS_SCENE: 500,
   VIDEO_RENDER_FAILED: 500,
+  // T8 recoverStale terminal state: read path only, worker writes no HTTP.
+  WORKER_LOST: 500,
   STORAGE_FAILED: 500,
 };
 
