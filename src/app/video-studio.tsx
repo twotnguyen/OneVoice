@@ -52,14 +52,16 @@ type CategoryTab = Readonly<{
 }>;
 
 const CATEGORY_TABS: readonly CategoryTab[] = [
-  { id: "all", label: "🌟 Tất cả", count: 1455 },
-  { id: "monitor", label: "🖥️ Màn hình", count: 265 },
-  { id: "keyboard", label: "⌨️ Bàn phím", count: 135 },
-  { id: "laptop", label: "💻 Laptop", count: 105 },
-  { id: "mouse", label: "🖱️ Chuột", count: 64 },
-  { id: "headset", label: "🎧 Tai nghe", count: 59 },
-  { id: "furniture", label: "🪑 Bàn/Ghế", count: 45 },
-  { id: "pc", label: "🖥️ PC bộ", count: 29 },
+  { id: "all", label: "🌟 Tất cả", count: 3977 },
+  { id: "keyboard", label: "⌨️ Bàn phím", count: 527 },
+  { id: "gpu", label: "🎮 Card đồ họa", count: 456 },
+  { id: "monitor", label: "🖥️ Màn hình", count: 308 },
+  { id: "mouse", label: "🖱️ Chuột", count: 247 },
+  { id: "laptop", label: "💻 Laptop", count: 244 },
+  { id: "mainboard", label: "⚙️ Mainboard", count: 227 },
+  { id: "headset", label: "🎧 Tai nghe", count: 194 },
+  { id: "furniture", label: "🪑 Bàn/Ghế", count: 104 },
+  { id: "pc", label: "🖥️ PC bộ", count: 76 },
 ];
 
 type ProductsResponse = Readonly<{
@@ -72,11 +74,13 @@ type ProductsResponse = Readonly<{
 
 const PAGE_SIZE = 18;
 const BRANDS_BY_CATEGORY: Record<string, readonly string[]> = {
-  all: ["ASUS", "ACER", "MSI", "Logitech", "Razer", "AULA", "LG", "DELL", "Samsung"],
-  laptop: ["ACER", "ASUS", "GIGABYTE", "DELL", "MSI", "LENOVO", "LG", "HP"],
-  monitor: ["ASUS", "ViewSonic", "AOC", "LG", "MSI", "ACER", "Samsung", "E-Dra"],
+  all: ["ASUS", "MSI", "GIGABYTE", "ACER", "Razer", "Logitech", "AULA", "Corsair"],
   keyboard: ["AULA", "Logitech", "ASUS", "Leobog", "AKKO", "DareU", "Razer", "HyperWork"],
+  gpu: ["MSI", "GIGABYTE", "ASUS", "Zotac", "SPARKLE"],
+  monitor: ["ASUS", "ViewSonic", "AOC", "LG", "MSI", "ACER", "Samsung", "E-Dra"],
   mouse: ["Logitech", "Razer", "ASUS", "AKKO", "HyperWork", "DareU"],
+  laptop: ["ACER", "ASUS", "GIGABYTE", "DELL", "MSI", "LENOVO", "LG", "HP"],
+  mainboard: ["ASUS", "MSI", "GIGABYTE"],
   headset: ["Razer", "HyperX", "Logitech", "AKKO", "DareU"],
   furniture: ["Razer", "Warrior", "E-Dra", "Corsair", "HyperWork", "Sihoo"],
   pc: ["GEARVN", "MSI", "ACER"],
@@ -483,7 +487,7 @@ export function VideoStudio() {
       <section className="studio-intro-hero" aria-labelledby="studio-title">
         <div className="studio-intro-hero__title">
           <h1 id="studio-title">Bàn Sản Xuất Video Bán Hàng Đa Kênh</h1>
-          <p>Chọn sản phẩm từ 1.455 laptop, màn hình, bàn phím trong catalog công khai. AI tự động lập kịch bản, lồng tiếng tiếng Việt và dựng video dọc 9:16 lưu trữ cục bộ.</p>
+          <p>Chọn sản phẩm từ 3.977 laptop, linh kiện, màn hình, bàn phím trong catalog công khai. AI tự động lập kịch bản, lồng tiếng tiếng Việt và dựng video dọc 9:16 lưu trữ cục bộ.</p>
         </div>
         <div className="studio-intro-hero__badge">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -572,7 +576,7 @@ export function VideoStudio() {
                 <input
                   type="search"
                   className="catalog-search-input"
-                  placeholder={`Tìm ${selectedCategory === "all" ? "1.455 sản phẩm" : CATEGORY_TABS.find((c) => c.id === selectedCategory)?.label || "sản phẩm"}...`}
+                  placeholder={`Tìm ${selectedCategory === "all" ? "3.977 sản phẩm" : CATEGORY_TABS.find((c) => c.id === selectedCategory)?.label || "sản phẩm"}...`}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   disabled={desk.status === "creating"}
