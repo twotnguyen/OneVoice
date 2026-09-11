@@ -46,6 +46,12 @@ describe("readServerEnv", () => {
         templatesRoot: "src/lib/video/template-pipeline/templates",
         audioRoot: "assets/audio",
       },
+      queueRoot: undefined,
+      worker: {
+        workerId: undefined,
+        pollMs: 1000,
+        jobStaleMs: 600_000,
+      },
     });
   });
 

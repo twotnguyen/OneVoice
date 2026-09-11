@@ -35,6 +35,10 @@ const serverEnvironmentSchema = z.object({
   ONEVOICE_MUSIC_GAIN: z.coerce.number().min(0).max(1).default(0.35),
   ONEVOICE_TEMPLATES_ROOT: z.string().min(1).default("src/lib/video/template-pipeline/templates"),
   ONEVOICE_AUDIO_ROOT: z.string().min(1).default("assets/audio"),
+  ONEVOICE_QUEUE_ROOT: z.string().min(1).optional(),
+  ONEVOICE_WORKER_ID: z.string().min(1).optional().transform((value) => value?.trim() || undefined),
+  ONEVOICE_WORKER_POLL_MS: z.coerce.number().int().positive().default(1000),
+  ONEVOICE_JOB_STALE_MS: z.coerce.number().int().positive().default(600_000),
 });
 
 export type ServerEnv = {
@@ -65,6 +69,12 @@ export type ServerEnv = {
     musicGain: number;
     templatesRoot: string;
     audioRoot: string;
+  };
+  queueRoot?: string;
+  worker: {
+    workerId?: string;
+    pollMs: number;
+    jobStaleMs: number;
   };
 };
 
@@ -101,6 +111,12 @@ export function readServerEnv(
       musicGain: environment.ONEVOICE_MUSIC_GAIN,
       templatesRoot: environment.ONEVOICE_TEMPLATES_ROOT,
       audioRoot: environment.ONEVOICE_AUDIO_ROOT,
+    },
+    queueRoot: environment.ONEVOICE_QUEUE_ROOT,
+    worker: {
+      workerId: environment.ONEVOICE_WORKER_ID,
+      pollMs: environment.ONEVOICE_WORKER_POLL_MS,
+      jobStaleMs: environment.ONEVOICE_JOB_STALE_MS,
     },
   };
 }
