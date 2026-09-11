@@ -31,12 +31,18 @@ export type RenderRunView =
       renderId: string;
       status: "succeeded";
       content: VideoManifestContent;
+      durationSeconds?: number;
     }>
   | Readonly<{
       renderId: string;
       status: "failed";
       content?: VideoManifestContent;
       error: VideoManifestError;
+    }>
+  | Readonly<{
+      renderId: string;
+      status: "queued" | "running";
+      stage?: RenderStage;
     }>;
 
 /**
@@ -50,6 +56,7 @@ export function toRenderRunView(manifest: VideoManifest): RenderRunView {
       renderId: manifest.renderId,
       status: "succeeded",
       content: manifest.content,
+      ...(manifest.artifact?.durationMs ? { durationSeconds: Math.round(manifest.artifact.durationMs / 1000) } : {}),
     };
   }
   return {

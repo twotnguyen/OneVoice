@@ -9,12 +9,14 @@ import {
   checkDownloadArtifact,
   formatSnapshotLabel,
   initialStudioState,
+  isQueuedRenderResponse,
   isSucceededRenderResponse,
   isValidRenderId,
   newStudioUuid,
   nextPollDelayMs,
   parseRunningStage,
   readJsonBody,
+  safeRenderMessage,
   STUDIO_POLL_TOTAL_TIMEOUT_MS,
   StudioOperationController,
   studioReducer,
@@ -44,14 +46,6 @@ const stageLabels: Record<RenderStage, string> = {
   storing_artifact: "Đang lưu thành phẩm",
 };
 
-function safeRenderMessage(code?: string): string {
-  if (code === "RENDER_ID_IN_USE") return "Yêu cầu này đang được xử lý. Vui lòng chờ trong giây lát rồi thử lại.";
-  if (code === "PRODUCT_NOT_FOUND") return "Sản phẩm không còn sẵn sàng. Hãy chọn sản phẩm khác.";
-  if (code === "AI_GENERATION_FAILED") return "Dịch vụ viết nội dung chưa phản hồi. Bạn có thể thử lại.";
-  if (code === "IMAGE_RESOLUTION_FAILED") return "Máy xử lý ảnh chưa sẵn sàng. Kiểm tra hệ thống rồi thử lại.";
-  if (code === "VIDEO_RENDER_FAILED") return "Máy dựng chưa thể hoàn thành video. Bạn có thể thử lại.";
-  return "Chưa thể tạo video lúc này. Hãy thử lại sau ít phút.";
-}
 
 export function VideoStudio() {
   const [products, setProducts] = useState<readonly StudioProduct[]>([]);
@@ -166,30 +160,7 @@ export function VideoStudio() {
     }
     const controller = operationController.current.start();
     if (!controller) return;
-    dispatch({ type: "start", operation });
-    let settled = false;
-    const pollStartedAt = Date.now();
-    void (async () => {
-      let attempt = 0;
-      while (!settled && !controller.signal.aborted) {
-        if (Date.now() - pollStartedAt > STUDIO_POLL_TOTAL_TIMEOUT_MS) return;
-        try {
-          const response = await fetch(`/api/renders/${operation.renderId}`, { signal: controller.signal, cache: "no-store" });
-          if (response.ok) {
-            const stage = parseRunningStage(await readJsonBody(response));
-            if (stage) dispatch({ type: "progress", token: operation.token, stage });
-          }
-        } catch {
-          if (controller.signal.aborted) return;
-        }
-        const delay = nextPollDelayMs(attempt);
-        attempt += 1;
-        await new Promise<void>((resolve) => {
-          const timer = window.setTimeout(resolve, delay);
-          controller.signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve(); }, { once: true });
-        });
-      }
-    })();
+
     try {
       const response = await fetch("/api/renders", {
         method: "POST",
@@ -203,18 +174,80 @@ export function VideoStudio() {
         typeof payload.error.code === "string"
         ? payload.error.code
         : undefined;
-      if (!response.ok || !isSucceededRenderResponse(payload) || payload.renderId !== operation.renderId) {
+
+      if (!response.ok || !isQueuedRenderResponse(payload) || payload.renderId !== operation.renderId) {
+        dispatch({ type: "start", operation });
         dispatch({ type: "failure", token: operation.token, message: safeRenderMessage(errorCode) });
+        controller.abort();
+        operationController.current.finish(controller);
         return;
       }
-      dispatch({ type: "success", token: operation.token, result: payload });
     } catch {
-      if (!controller.signal.aborted) dispatch({ type: "failure", token: operation.token, message: "Mất kết nối với máy dựng. Kiểm tra hệ thống rồi thử lại." });
-    } finally {
-      settled = true;
+      if (!controller.signal.aborted) {
+        dispatch({ type: "start", operation });
+        dispatch({ type: "failure", token: operation.token, message: "Mất kết nối với máy dựng. Kiểm tra hệ thống rồi thử lại." });
+      }
       controller.abort();
       operationController.current.finish(controller);
+      return;
     }
+
+    dispatch({ type: "start", operation });
+    let settled = false;
+    const pollStartedAt = Date.now();
+    void (async () => {
+      let attempt = 0;
+      try {
+        while (!settled && !controller.signal.aborted) {
+          if (Date.now() - pollStartedAt > STUDIO_POLL_TOTAL_TIMEOUT_MS) {
+            dispatch({ type: "failure", token: operation.token, message: "Quá thời gian dựng video. Kiểm tra hệ thống rồi thử lại." });
+            settled = true;
+            return;
+          }
+
+          const delay = nextPollDelayMs(attempt);
+          attempt += 1;
+          await new Promise<void>((resolve) => {
+            const timer = window.setTimeout(resolve, delay);
+            controller.signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve(); }, { once: true });
+          });
+
+          if (settled || controller.signal.aborted) return;
+
+          try {
+            const response = await fetch(`/api/renders/${operation.renderId}`, { signal: controller.signal, cache: "no-store" });
+            if (response.ok) {
+              const body = await readJsonBody(response);
+              if (body !== null && typeof body === "object" && "status" in body) {
+                if (body.status === "succeeded" && isSucceededRenderResponse(body)) {
+                  dispatch({ type: "success", token: operation.token, result: body });
+                  settled = true;
+                  return;
+                }
+                if (body.status === "failed") {
+                  const errorCode = "error" in body && body.error !== null && typeof body.error === "object" && "code" in body.error && typeof body.error.code === "string"
+                    ? body.error.code
+                    : undefined;
+                  dispatch({ type: "failure", token: operation.token, message: safeRenderMessage(errorCode) });
+                  settled = true;
+                  return;
+                }
+                const stage = parseRunningStage(body);
+                if (stage) {
+                  dispatch({ type: "progress", token: operation.token, stage });
+                }
+              }
+            }
+          } catch {
+            if (controller.signal.aborted) return;
+          }
+        }
+      } finally {
+        settled = true;
+        controller.abort();
+        operationController.current.finish(controller);
+      }
+    })();
   }
 
   async function downloadVideo() {
@@ -247,7 +280,7 @@ export function VideoStudio() {
 
       <section className="studio-intro" aria-labelledby="studio-title">
         <div><p className="phase">Bàn sản xuất video</p><h1 id="studio-title">Từ catalog đến video bán hàng.</h1></div>
-        <p>Chọn một laptop từ bản chụp catalog công khai. OneVoice viết thông điệp, dựng video dọc 12 giây và lưu bản hoàn chỉnh ngay trên máy này.</p>
+        <p>Chọn một laptop từ bản chụp catalog công khai. OneVoice viết thông điệp, dựng video dọc và lưu bản hoàn chỉnh ngay trên máy này.</p>
       </section>
 
       <ol className="production-rail" aria-label="Quy trình sản xuất">
@@ -337,7 +370,7 @@ export function VideoStudio() {
               <div><dt>Chú thích</dt><dd>{desk.result.content.caption}</dd></div>
               <div><dt>Kêu gọi</dt><dd>{desk.result.content.cta}</dd></div>
             </dl> : <p className="script-guidance">Nội dung chỉ dùng giá, SKU và thông tin trong bản chụp catalog công khai đã chọn.</p>}
-            <button className="primary-action" type="button" disabled={desk.status === "creating"} onClick={() => void createVideo()}>{desk.status === "creating" ? "Đang tạo video…" : desk.status === "error" ? "Thử tạo lại" : desk.status === "artifact_error" ? "Tạo lại video" : "Tạo video 12 giây"}</button>
+            <button className="primary-action" type="button" disabled={desk.status === "creating"} onClick={() => void createVideo()}>{desk.status === "creating" ? "Đang tạo video…" : desk.status === "error" ? "Thử tạo lại" : desk.status === "artifact_error" ? "Tạo lại video" : "Tạo video"}</button>
             {desk.status === "creating" && <p className="operation-note" role="status">{desk.stage ? stageLabels[desk.stage] : "Đang chờ máy chủ ghi nhận tác vụ."}</p>}
             {desk.status === "error" && <p className="operation-note operation-note--error" role="alert">{desk.message}</p>}
             {desk.status === "artifact_error" && <p className="operation-note operation-note--error" role="alert">Không thể mở thành phẩm đã lưu. Hãy tạo lại video.</p>}
@@ -348,7 +381,7 @@ export function VideoStudio() {
           <div className="panel-heading"><div><p className="panel-index">03</p><h2 id="output-title">Thành phẩm</h2></div></div>
           {desk.status === "ready" ? <div className="video-result">
             <video controls preload="metadata" src={desk.result.urls.video} onError={() => dispatch({ type: "artifact_failure", token: desk.operation.token })}>Trình duyệt của bạn không hỗ trợ phát video.</video>
-            <div className="video-result__footer"><div><strong>Video dọc · 12 giây</strong><span>MP4 đã lưu cục bộ</span></div><button className="download-action" type="button" onClick={() => void downloadVideo()}>Tải video</button></div>
+            <div className="video-result__footer"><div><strong>Video dọc{desk.status === "ready" && desk.result.durationSeconds ? ` · ${desk.result.durationSeconds} giây` : ""}</strong><span>MP4 đã lưu cục bộ</span></div><button className="download-action" type="button" onClick={() => void downloadVideo()}>Tải video</button></div>
           </div> : <div className="output-placeholder" aria-hidden="true"><span className="frame-corner frame-corner--top" /><span>1080 × 1920</span><i /><p>Video hoàn chỉnh sẽ xuất hiện tại đây.</p><span className="frame-corner frame-corner--bottom" /></div>}
         </section>
       </div>

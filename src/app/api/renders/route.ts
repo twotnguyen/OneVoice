@@ -3,39 +3,18 @@
 import { z } from "zod";
 
 import type { OrganizationScope } from "@/lib/catalog/types";
-import type { RenderProgressStore } from "@/lib/render/progress-store";
+import type { RenderJob } from "@/lib/queue/types";
 import { RenderGate, sharedRenderGate } from "@/lib/render/render-gate";
-import type { RenderRun, RenderStage } from "@/lib/render/types";
-import { toRenderRunView } from "@/lib/render/types";
-import type { VideoManifest, VideoManifestError } from "@/lib/video/types";
+import type { VideoManifest } from "@/lib/video/types";
 
 type Dependencies = Readonly<{
   scope: OrganizationScope;
-  pipeline: {
-    create(command: { renderId: string; productId: string; scope: OrganizationScope; onStage?: (stage: RenderStage) => void }): Promise<RenderRun>;
-  };
-  progress?: RenderProgressStore;
+  queue: { enqueue(job: RenderJob): Promise<void> };
   library?: { getRun(renderId: string): Promise<VideoManifest | null> };
   gate?: RenderGate;
 }>;
 
 const commandSchema = z.object({ renderId: z.uuid(), productId: z.uuid() });
-const statusByCode: Record<VideoManifestError["code"], number> = {
-  PRODUCT_NOT_FOUND: 404,
-  AI_GENERATION_FAILED: 502,
-  SCRIPT_SCHEMA_INVALID: 502,
-  SCRIPT_TRUTH_VIOLATION: 502,
-  SCRIPT_DURATION_EXCEEDED: 502,
-  IMAGE_RESOLUTION_FAILED: 500,
-  CATALOG_FAILED: 500,
-  TTS_UNAVAILABLE: 503,
-  TTS_TIMEOUT: 503,
-  NARRATION_OVERRUNS_SCENE: 500,
-  VIDEO_RENDER_FAILED: 500,
-  // T8 recoverStale terminal state: read path only, worker writes no HTTP.
-  WORKER_LOST: 500,
-  STORAGE_FAILED: 500,
-};
 
 export function createRendersRoute(dependencies: Dependencies) {
   const gate = dependencies.gate ?? sharedRenderGate;
@@ -73,32 +52,30 @@ export function createRendersRoute(dependencies: Dependencies) {
           }
         }
 
-        const releaseSlot = await gate.acquireSlot();
+        const job: RenderJob = {
+          renderId,
+          productId: parsed.data.productId,
+          organizationId: dependencies.scope.organizationId,
+          status: "queued",
+          enqueuedAt: new Date().toISOString(),
+          attempts: 0,
+        };
+
         try {
-          dependencies.progress?.start(renderId);
-          const run = await dependencies.pipeline.create({
-            ...parsed.data,
-            scope: dependencies.scope,
-            onStage: (stage) => dependencies.progress?.update(renderId, stage),
-          });
-          if (run.status === "failed") {
-            return Response.json(
-              { error: run.error },
-              { status: statusByCode[run.error.code] },
-            );
+          await dependencies.queue.enqueue(job);
+        } catch (error) {
+          if (error instanceof Error && error.message === "JOB_EXISTS") {
+            return Response.json({ error: { code: "RENDER_ID_IN_USE" } }, { status: 409 });
           }
-          const view = toRenderRunView(run);
-          const base = `/api/renders/${view.renderId}`;
-          return Response.json({
-            ...view,
-            urls: { status: base, video: `${base}/video`, download: `${base}/download` },
-          }, { status: 201 });
-        } catch {
           return Response.json({ error: { code: "RENDER_FAILED" } }, { status: 500 });
-        } finally {
-          releaseSlot();
-          dependencies.progress?.clear(renderId);
         }
+
+        const base = `/api/renders/${renderId}`;
+        return Response.json({
+          renderId,
+          status: "queued",
+          urls: { status: base, video: `${base}/video`, download: `${base}/download` },
+        }, { status: 202 });
       } finally {
         gate.release(renderId);
       }
