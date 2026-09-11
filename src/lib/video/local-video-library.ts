@@ -75,7 +75,18 @@ const errorSchema = z.discriminatedUnion("stage", [
   z
     .object({
       stage: z.literal("generating_content"),
-      code: z.literal("AI_GENERATION_FAILED"),
+      code: z.enum([
+        "AI_GENERATION_FAILED",
+        "SCRIPT_SCHEMA_INVALID",
+        "SCRIPT_TRUTH_VIOLATION",
+        "SCRIPT_DURATION_EXCEEDED",
+      ]),
+    })
+    .strict(),
+  z
+    .object({
+      stage: z.literal("synthesizing_voice"),
+      code: z.enum(["TTS_UNAVAILABLE", "TTS_TIMEOUT", "NARRATION_OVERRUNS_SCENE"]),
     })
     .strict(),
   z
@@ -87,7 +98,7 @@ const errorSchema = z.discriminatedUnion("stage", [
   z
     .object({
       stage: z.literal("rendering_video"),
-      code: z.literal("VIDEO_RENDER_FAILED"),
+      code: z.enum(["VIDEO_RENDER_FAILED", "WORKER_LOST"]),
     })
     .strict(),
   z

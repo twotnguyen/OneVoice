@@ -3,6 +3,7 @@
 import type { GenerateTextResult } from "@/lib/ai/provider";
 import type { OrganizationScope, ProductSnapshot } from "@/lib/catalog/types";
 import type { GeneratedProductContent } from "@/lib/content/types";
+import type { GeneratedVideoScript } from "@/lib/content/generate-video-script";
 import type {
   RenderedVideo,
   ResolvedAsset,
@@ -11,6 +12,7 @@ import type {
   VideoRenderRequest,
   VideoStoryboard,
 } from "@/lib/video/types";
+import type { TemplateRenderRequest } from "@/lib/video/template-video-renderer";
 import type { RenderRun } from "./types";
 import { defaultDiagnosticSink, type DiagnosticSink } from "./diagnostics";
 import type { RenderStage } from "./types";
@@ -28,6 +30,13 @@ export type RenderEventInput = Readonly<{
   videoBytes?: number;
   videoDurationMs?: number;
   createdAt: string;
+  // T9: template-pipeline ledger fields. Only rendererRevision + ttsTotalMs
+  // are populated at the terminate() seam; sceneCount/scriptSha256 population
+  // is a T12-observability follow-up via runToRenderEvent LiveRowCtx.
+  sceneCount?: number;
+  ttsTotalMs?: number;
+  rendererRevision?: string;
+  scriptSha256?: string;
 }>;
 
 export type RenderEventStore = Readonly<{
@@ -48,9 +57,10 @@ type Dependencies = Readonly<{
     getProductSnapshot(scope: OrganizationScope, productId: string): Promise<ProductSnapshot | null>;
   };
   generateContent(snapshot: ProductSnapshot): Promise<GeneratedProductContent>;
+  generateScript?: (snapshot: ProductSnapshot) => Promise<GeneratedVideoScript>;
   imageResolver: { resolve(url: string): Promise<ResolvedAsset | null> };
   compileStoryboard(snapshot: ProductSnapshot, content: GeneratedProductContent): VideoStoryboard;
-  renderer: { render(request: VideoRenderRequest): Promise<RenderedVideo> };
+  renderer: { render(request: VideoRenderRequest | TemplateRenderRequest): Promise<RenderedVideo> };
   library: {
     save(renderId: string, manifest: VideoManifest, video?: RenderedVideo): Promise<void>;
   };
@@ -132,7 +142,14 @@ export class ProductVideoPipeline {
         timings: { ...ctx.timings },
         totalDurationMs,
         ...(run.status === "succeeded"
-          ? { videoBytes: run.artifact.bytes, videoDurationMs: run.artifact.durationMs }
+          ? {
+              videoBytes: run.artifact.bytes,
+              videoDurationMs: run.artifact.durationMs,
+              rendererRevision: run.artifact.rendererRevision,
+            }
+          : {}),
+        ...(ctx.timings.synthesizing_voice_ms != null
+          ? { ttsTotalMs: ctx.timings.synthesizing_voice_ms }
           : {}),
         createdAt: new Date(ctx.wallClockStart).toISOString(),
       };
@@ -226,14 +243,40 @@ export class ProductVideoPipeline {
         timings.resolving_asset_ms = Math.round(performance.now() - t);
       }
 
+      // Template path (T7): the script stage already produced the script, so
+      // the renderer takes it directly. Ffmpeg path: derive a storyboard.
+      const generateScript = this.dependencies.generateScript;
+      let script: GeneratedVideoScript["script"] | undefined;
+      if (generateScript) {
+        try {
+          script = (await generateScript(snapshot)).script;
+        } catch {
+          timings.generating_content_ms = Math.round(performance.now() - ctx.startedAt);
+          return await this.terminate(await this.fail(command, {
+            stage: "generating_content",
+            code: "AI_GENERATION_FAILED",
+          }), command, ctx);
+        }
+      }
+      if (script) {
+        this.stage(command, "synthesizing_voice");
+        this.stage(command, "composing_scenes");
+      }
       this.stage(command, "rendering_video");
       {
         const t = performance.now();
         try {
-          video = await this.dependencies.renderer.render({
-            storyboard: this.dependencies.compileStoryboard(snapshot, content),
-            ...(asset ? { imagePath: asset.path } : {}),
-          });
+          video = script
+            ? await this.dependencies.renderer.render({
+                script,
+                snapshot,
+                ...(asset ? { imagePath: asset.path } : {}),
+                onStage: (stage) => this.stage(command, stage),
+              })
+            : await this.dependencies.renderer.render({
+                storyboard: this.dependencies.compileStoryboard(snapshot, content),
+                ...(asset ? { imagePath: asset.path } : {}),
+              });
         } catch {
           timings.rendering_video_ms = Math.round(performance.now() - t);
           return await this.terminate(await this.fail(command, {
@@ -242,6 +285,7 @@ export class ProductVideoPipeline {
           }, content), command, ctx);
         }
         timings.rendering_video_ms = Math.round(performance.now() - t);
+        Object.assign(timings, video.timings ?? {});
       }
 
       const run: RenderRun = {

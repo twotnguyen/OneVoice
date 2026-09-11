@@ -25,7 +25,20 @@ const serverEnvironmentSchema = z.object({
   }),
   FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
   FFPROBE_PATH: z.string().min(1).default("ffprobe"),
+  ONEVOICE_HYPERFRAMES_PATH: z.string().min(1).default("hyperframes"),
   ONEVOICE_FONT_PATH: z.string().optional().transform((value) => value?.trim() || undefined),
+  ONEVOICE_SCRIPT_MODEL: z.string().optional().transform((value) => value?.trim() || undefined),
+  ONEVOICE_SCRIPT_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
+  ONEVOICE_RENDERER: z.enum(["template", "ffmpeg"]).default("template"),
+  ONEVOICE_TTS_ENDPOINT: z.string().min(1).default("http://localhost:8123"),
+  ONEVOICE_TTS_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  ONEVOICE_MUSIC_GAIN: z.coerce.number().min(0).max(1).default(0.35),
+  ONEVOICE_TEMPLATES_ROOT: z.string().min(1).default("src/lib/video/template-pipeline/templates"),
+  ONEVOICE_AUDIO_ROOT: z.string().min(1).default("assets/audio"),
+  ONEVOICE_QUEUE_ROOT: z.string().min(1).optional(),
+  ONEVOICE_WORKER_ID: z.string().min(1).optional().transform((value) => value?.trim() || undefined),
+  ONEVOICE_WORKER_POLL_MS: z.coerce.number().int().positive().default(1000),
+  ONEVOICE_JOB_STALE_MS: z.coerce.number().int().positive().default(600_000),
 });
 
 export type ServerEnv = {
@@ -46,7 +59,22 @@ export type ServerEnv = {
     imageHosts: string[];
     ffmpegPath: string;
     ffprobePath: string;
+    hyperframesPath: string;
     fontPath?: string;
+    scriptModel?: string;
+    scriptTimeoutMs: number;
+    renderer: "template" | "ffmpeg";
+    ttsEndpoint: string;
+    ttsTimeoutMs: number;
+    musicGain: number;
+    templatesRoot: string;
+    audioRoot: string;
+  };
+  queueRoot?: string;
+  worker: {
+    workerId?: string;
+    pollMs: number;
+    jobStaleMs: number;
   };
 };
 
@@ -73,7 +101,22 @@ export function readServerEnv(
       imageHosts: environment.ONEVOICE_IMAGE_HOSTS,
       ffmpegPath: environment.FFMPEG_PATH,
       ffprobePath: environment.FFPROBE_PATH,
+      hyperframesPath: environment.ONEVOICE_HYPERFRAMES_PATH,
       fontPath: environment.ONEVOICE_FONT_PATH,
+      scriptModel: environment.ONEVOICE_SCRIPT_MODEL,
+      scriptTimeoutMs: environment.ONEVOICE_SCRIPT_TIMEOUT_MS,
+      renderer: environment.ONEVOICE_RENDERER,
+      ttsEndpoint: environment.ONEVOICE_TTS_ENDPOINT,
+      ttsTimeoutMs: environment.ONEVOICE_TTS_TIMEOUT_MS,
+      musicGain: environment.ONEVOICE_MUSIC_GAIN,
+      templatesRoot: environment.ONEVOICE_TEMPLATES_ROOT,
+      audioRoot: environment.ONEVOICE_AUDIO_ROOT,
+    },
+    queueRoot: environment.ONEVOICE_QUEUE_ROOT,
+    worker: {
+      workerId: environment.ONEVOICE_WORKER_ID,
+      pollMs: environment.ONEVOICE_WORKER_POLL_MS,
+      jobStaleMs: environment.ONEVOICE_JOB_STALE_MS,
     },
   };
 }

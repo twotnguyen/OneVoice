@@ -23,6 +23,10 @@ export type RenderEventInsert = Readonly<{
   total_duration_ms: number | null;
   video_bytes: number | null;
   video_duration_ms: number | null;
+  scene_count: number | null;
+  tts_total_ms: number | null;
+  renderer_revision: string | null;
+  script_sha256: string | null;
   created_at: string;
 }>;
 
@@ -43,6 +47,10 @@ export function toRow(input: RenderEventInput, organizationId: string): RenderEv
     total_duration_ms: input.totalDurationMs,
     video_bytes: input.videoBytes ?? null,
     video_duration_ms: input.videoDurationMs ?? null,
+    scene_count: input.sceneCount ?? null,
+    tts_total_ms: input.ttsTotalMs ?? null,
+    renderer_revision: input.rendererRevision ?? null,
+    script_sha256: input.scriptSha256 ?? null,
     created_at: input.createdAt,
   };
 }
@@ -78,6 +86,10 @@ export function manifestToRenderEvent(
       error_code: null,
       video_bytes: manifest.artifact.bytes,
       video_duration_ms: manifest.artifact.durationMs,
+      scene_count: null,
+      tts_total_ms: null,
+      renderer_revision: null,
+      script_sha256: null,
     };
   }
   return {
@@ -87,6 +99,10 @@ export function manifestToRenderEvent(
     error_code: manifest.error.code,
     video_bytes: null,
     video_duration_ms: null,
+    scene_count: null,
+    tts_total_ms: null,
+    renderer_revision: null,
+    script_sha256: null,
   };
 }
 
@@ -98,6 +114,12 @@ export type LiveRowCtx = Readonly<{
   model: string | undefined;
   totalDurationMs: number;
   createdAt: string;
+  // T12-observability follow-up surface: populated by callers that hold the
+  // script/template context, not by the terminate() seam.
+  sceneCount?: number;
+  ttsTotalMs?: number;
+  rendererRevision?: string;
+  scriptSha256?: string;
 }>;
 
 /**
@@ -121,6 +143,12 @@ export function runToRenderEvent(
     total_duration_ms: ctx.totalDurationMs,
     created_at: ctx.createdAt,
   } as const;
+  const ledger = {
+    scene_count: ctx.sceneCount ?? null,
+    tts_total_ms: ctx.ttsTotalMs ?? null,
+    renderer_revision: ctx.rendererRevision ?? null,
+    script_sha256: ctx.scriptSha256 ?? null,
+  } as const;
   if (run.status === "succeeded") {
     return {
       ...base,
@@ -129,6 +157,7 @@ export function runToRenderEvent(
       error_code: null,
       video_bytes: run.artifact.bytes,
       video_duration_ms: run.artifact.durationMs,
+      ...ledger,
     };
   }
   return {
@@ -138,5 +167,6 @@ export function runToRenderEvent(
     error_code: run.error.code,
     video_bytes: null,
     video_duration_ms: null,
+    ...ledger,
   };
 }

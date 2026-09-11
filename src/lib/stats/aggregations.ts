@@ -19,6 +19,11 @@ export type RenderEventRow = Readonly<{
   total_duration_ms: number | null;
   video_bytes: number | string | null;
   video_duration_ms: number | null;
+  // T9 ledger columns; optional because the dashboard select does not fetch them.
+  scene_count?: number | null;
+  tts_total_ms?: number | null;
+  renderer_revision?: string | null;
+  script_sha256?: string | null;
   created_at: string;
 }>;
 

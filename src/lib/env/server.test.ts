@@ -35,7 +35,22 @@ describe("readServerEnv", () => {
         imageHosts: ["product.hstatic.net"],
         ffmpegPath: "ffmpeg",
         ffprobePath: "ffprobe",
+        hyperframesPath: "hyperframes",
         fontPath: undefined,
+        scriptModel: undefined,
+        scriptTimeoutMs: 180000,
+        renderer: "template",
+        ttsEndpoint: "http://localhost:8123",
+        ttsTimeoutMs: 60000,
+        musicGain: 0.35,
+        templatesRoot: "src/lib/video/template-pipeline/templates",
+        audioRoot: "assets/audio",
+      },
+      queueRoot: undefined,
+      worker: {
+        workerId: undefined,
+        pollMs: 1000,
+        jobStaleMs: 600_000,
       },
     });
   });
@@ -57,7 +72,16 @@ describe("readServerEnv", () => {
       imageHosts: ["product.hstatic.net"],
       ffmpegPath: "ffmpeg",
       ffprobePath: "ffprobe",
+      hyperframesPath: "hyperframes",
       fontPath: undefined,
+      scriptModel: undefined,
+      scriptTimeoutMs: 180000,
+      renderer: "template",
+      ttsEndpoint: "http://localhost:8123",
+      ttsTimeoutMs: 60000,
+      musicGain: 0.35,
+      templatesRoot: "src/lib/video/template-pipeline/templates",
+      audioRoot: "assets/audio",
     });
   });
 

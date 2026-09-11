@@ -6,6 +6,8 @@ export type RenderStage =
   | "loading_product"
   | "generating_content"
   | "resolving_asset"
+  | "synthesizing_voice"
+  | "composing_scenes"
   | "rendering_video"
   | "storing_artifact";
 
