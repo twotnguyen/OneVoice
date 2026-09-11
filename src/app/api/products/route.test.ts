@@ -23,6 +23,9 @@ describe("GET /api/products", () => {
               priceVnd: 42_990_000,
               currency: "VND",
               stockQuantity: 2,
+              inStock: true,
+              primaryImageUrl: null,
+              keySpecs: [],
               collectedAt: null,
             }],
             total: 1,
@@ -86,6 +89,9 @@ describe("GET /api/products", () => {
               priceVnd: 45_000_000,
               currency: "VND",
               stockQuantity: 5,
+              inStock: true,
+              primaryImageUrl: null,
+              keySpecs: [],
               collectedAt: null,
             }],
             total: 1,
@@ -142,6 +148,39 @@ describe("GET /api/products", () => {
         { page: 1, pageSize: 18 },
         "laptop",
         { search: 'helios,(16)\\%*"pro"' },
+      ],
+    ]);
+  });
+
+  it("passes minPrice, maxPrice, and inStockOnly filters to repository", async () => {
+    const calls: unknown[] = [];
+    const route = createProductsRoute({
+      scope,
+      catalog: {
+        async listStudioProducts(receivedScope, pagination, productType, filters) {
+          calls.push([receivedScope, pagination, productType, filters]);
+          return {
+            items: [],
+            total: 0,
+            page: 1,
+            pageSize: 18,
+            totalPages: 0,
+          };
+        },
+      },
+    });
+
+    const response = await route.GET(new Request(
+      "http://localhost/api/products?minPrice=15000000&maxPrice=30000000&inStockOnly=true",
+    ));
+
+    expect(response.status).toBe(200);
+    expect(calls).toEqual([
+      [
+        scope,
+        { page: 1, pageSize: 18 },
+        "laptop",
+        { minPrice: 15_000_000, maxPrice: 30_000_000, inStockOnly: true },
       ],
     ]);
   });

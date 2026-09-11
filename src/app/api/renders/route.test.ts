@@ -2,13 +2,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { StoredVideo, VideoManifest } from "@/lib/video/types";
+import type { RenderJob } from "@/lib/queue/types";
+import type { RenderStage } from "@/lib/render/types";
 import { RenderProgressStore } from "@/lib/render/progress-store";
-import { MAX_CONCURRENT_RENDERS, RenderGate } from "@/lib/render/render-gate";
-import { createRenderStatusRoute } from "./[renderId]/route";
+import { RenderGate } from "@/lib/render/render-gate";
 import { createDownloadRoute, createVideoRoute } from "@/lib/video/media-response";
+import type { StoredVideo, VideoManifest } from "@/lib/video/types";
+import { createRenderStatusRoute } from "./[renderId]/route";
 import { createRendersRoute } from "./route";
-
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const renderId = "b0000000-0000-4000-8000-000000000001";
@@ -39,78 +40,106 @@ function renderRequest(body: unknown) {
   });
 }
 
+function createFakeQueue() {
+  const jobs = new Map<string, RenderJob>();
+  return {
+    jobs,
+    async enqueue(job: RenderJob) {
+      if (jobs.has(job.renderId)) throw new Error("JOB_EXISTS");
+      jobs.set(job.renderId, job);
+    },
+    async get(id: string) {
+      return jobs.get(id) ?? null;
+    },
+    async claim() { return null; },
+    async heartbeat(id: string, stage: RenderStage) {
+      const j = jobs.get(id);
+      if (j) jobs.set(id, { ...j, status: "running", stage });
+    },
+    async complete() {},
+    async recoverStale() { return 0; },
+  };
+}
+
 describe("POST /api/renders", () => {
-  it("returns 201 with public URLs made only from the render UUID", async () => {
+  it("returns 202 with public URLs and enqueues the job without calling the pipeline", async () => {
+    const queue = createFakeQueue();
     const route = createRendersRoute({
       scope,
-      pipeline: { async create() { return success; } },
+      queue,
     });
 
     const response = await route.POST(renderRequest({ renderId, productId, organizationId: "attacker" }));
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(202);
     const payload = await response.json();
     expect(payload).toEqual({
       renderId,
-      status: "succeeded",
-      content: success.content,
+      status: "queued",
       urls: {
         status: `/api/renders/${renderId}`,
         video: `/api/renders/${renderId}/video`,
         download: `/api/renders/${renderId}/download`,
       },
     });
-    // The wire view drops the persistence-only artifact block.
-    expect(payload).not.toHaveProperty("artifact");
+    expect(queue.jobs.size).toBe(1);
+    expect(queue.jobs.get(renderId)).toMatchObject({
+      renderId,
+      productId,
+      organizationId: scope.organizationId,
+      status: "queued",
+    });
   });
 
   it("rejects malformed identifiers", async () => {
-    const route = createRendersRoute({ scope, pipeline: { async create() { return success; } } });
+    const queue = createFakeQueue();
+    const route = createRendersRoute({ scope, queue });
     const response = await route.POST(renderRequest({ renderId: "../secret", productId }));
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: { code: "INVALID_REQUEST" } });
   });
 
-  it.each([
-    ["PRODUCT_NOT_FOUND", "loading_product", 404],
-    ["AI_GENERATION_FAILED", "generating_content", 502],
-    ["IMAGE_RESOLUTION_FAILED", "resolving_asset", 500],
-    ["VIDEO_RENDER_FAILED", "rendering_video", 500],
-    ["STORAGE_FAILED", "storing_artifact", 500],
-  ] as const)("maps %s to a safe response", async (code, stage, status) => {
+  it("rejects a replayed renderId with 409 and never enqueues to the queue", async () => {
+    const queue = createFakeQueue();
     const route = createRendersRoute({
       scope,
-      pipeline: { async create() { return { renderId, status: "failed", error: { code, stage } } as VideoManifest; } },
-    });
-    const response = await route.POST(renderRequest({ renderId, productId }));
-    expect(response.status).toBe(status);
-    expect(await response.json()).toEqual({ error: { code, stage } });
-  });
-
-  it("rejects a replayed renderId with 409 and never runs the pipeline", async () => {
-    let created = 0;
-    const route = createRendersRoute({
-      scope,
+      queue,
       library: { async getRun() { return success; } },
-      pipeline: { async create() { created += 1; return success; } },
     });
 
     const response = await route.POST(renderRequest({ renderId, productId }));
 
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: { code: "RENDER_ID_IN_USE" } });
-    expect(created).toBe(0);
+    expect(queue.jobs.size).toBe(0);
+  });
+
+  it("rejects duplicating an already-queued renderId with 409 RENDER_ID_IN_USE (C12c)", async () => {
+    const queue = createFakeQueue();
+    const route = createRendersRoute({ scope, queue });
+
+    const first = await route.POST(renderRequest({ renderId, productId }));
+    expect(first.status).toBe(202);
+
+    const second = await route.POST(renderRequest({ renderId, productId }));
+    expect(second.status).toBe(409);
+    expect(await second.json()).toEqual({ error: { code: "RENDER_ID_IN_USE" } });
   });
 
   it("rejects a concurrent POST for the same renderId with a single 409", async () => {
     const gate = new RenderGate();
+    const queue = createFakeQueue();
     let releaseFirst!: () => void;
     const firstPending = new Promise<void>((resolve) => { releaseFirst = resolve; });
-    let created = 0;
     const route = createRendersRoute({
       scope,
       gate,
-      pipeline: { async create() { created += 1; await firstPending; return success; } },
+      queue: {
+        async enqueue(job) {
+          await firstPending;
+          await queue.enqueue(job);
+        },
+      },
     });
 
     const first = route.POST(renderRequest({ renderId, productId }));
@@ -120,89 +149,84 @@ describe("POST /api/renders", () => {
     expect(await second.json()).toEqual({ error: { code: "RENDER_ID_IN_USE" } });
 
     releaseFirst();
-    expect((await first).status).toBe(201);
-    expect(created).toBe(1);
-  });
-
-  it("serialises pipeline execution past the concurrency limit", async () => {
-    const gate = new RenderGate();
-    let started = 0;
-    const releases: Array<() => void> = [];
-    const route = createRendersRoute({
-      scope,
-      gate,
-      pipeline: {
-        async create() {
-          started += 1;
-          await new Promise<void>((resolve) => releases.push(resolve));
-          return success;
-        },
-      },
-    });
-    const ids = [1, 2, 3].map((n) => `b0000000-0000-4000-8000-00000000010${n}`);
-
-    const inFlight = ids.map((id) => route.POST(renderRequest({ renderId: id, productId })));
-    await tick();
-    await tick();
-    expect(started).toBe(MAX_CONCURRENT_RENDERS);
-
-    releases[0]();
-    await tick();
-    await tick();
-    expect(started).toBe(3);
-
-    releases.forEach((release) => release());
-    expect((await Promise.all(inFlight)).map((response) => response.status)).toEqual([201, 201, 201]);
-  });
-
-  it("registers actual pipeline stages and always clears progress", async () => {
-    const progress = new RenderProgressStore();
-    let observedDuringRun: unknown;
-    const route = createRendersRoute({
-      scope,
-      progress,
-      pipeline: {
-        async create(command) {
-          command.onStage?.("resolving_asset");
-          observedDuringRun = progress.get(renderId);
-          return success;
-        },
-      },
-    });
-
-    const response = await route.POST(renderRequest({ renderId, productId }));
-
-    expect(response.status).toBe(201);
-    expect(observedDuringRun).toEqual({ renderId, status: "running", stage: "resolving_asset" });
-    expect(progress.get(renderId)).toBeNull();
+    expect((await first).status).toBe(202);
+    expect(queue.jobs.size).toBe(1);
   });
 });
 
 describe("render artifact routes", () => {
+  it("resolves GET in order: library -> queue -> 404", async () => {
+    const queue = createFakeQueue();
+    let savedRun: VideoManifest | null = null;
+    const route = createRenderStatusRoute({
+      library: { async getRun(id) { return id === renderId ? savedRun : null; } },
+      queue,
+    });
+
+    // 1. Not in library or queue -> 404
+    const notFound = await route.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
+    expect(notFound.status).toBe(404);
+
+    // 2. In queue as queued -> { renderId, status: "queued" }
+    await queue.enqueue({
+      renderId,
+      productId,
+      organizationId: scope.organizationId,
+      status: "queued",
+      enqueuedAt: new Date().toISOString(),
+      attempts: 0,
+    });
+    const queuedResp = await route.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
+    expect(queuedResp.status).toBe(200);
+    expect(await queuedResp.json()).toEqual({ renderId, status: "queued" });
+
+    // 3. Queue flips to running with stage -> { renderId, status: "running", stage: "rendering_video" }
+    await queue.heartbeat(renderId, "rendering_video");
+    const runningResp = await route.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
+    expect(runningResp.status).toBe(200);
+    expect(await runningResp.json()).toEqual({ renderId, status: "running", stage: "rendering_video" });
+
+    // 4. Saved to library -> terminal view
+    savedRun = success;
+    const terminalResp = await route.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
+    expect(terminalResp.status).toBe(200);
+    expect(await terminalResp.json()).toEqual({
+      renderId,
+      status: "succeeded",
+      content: success.content,
+      durationSeconds: 12,
+    });
+  });
+
+  it("returns terminal failed view with WORKER_LOST for a retired job (M1 end-to-end)", async () => {
+    const lostRun: VideoManifest = {
+      renderId,
+      status: "failed",
+      error: { stage: "rendering_video", code: "WORKER_LOST" },
+    };
+    const route = createRenderStatusRoute({
+      library: { async getRun(id) { return id === renderId ? lostRun : null; } },
+    });
+    const response = await route.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      renderId,
+      status: "failed",
+      error: { stage: "rendering_video", code: "WORKER_LOST" },
+    });
+  });
   it("returns a saved safe manifest and 404 for a missing run", async () => {
     const found = createRenderStatusRoute({ library: { async getRun() { return success; } } });
     const missing = createRenderStatusRoute({ library: { async getRun() { return null; } } });
     const foundResponse = await found.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
     expect(foundResponse.status).toBe(200);
     const foundPayload = await foundResponse.json();
-    expect(foundPayload).toEqual({ renderId, status: "succeeded", content: success.content });
+    expect(foundPayload).toEqual({ renderId, status: "succeeded", content: success.content, durationSeconds: 12 });
     expect(foundPayload).not.toHaveProperty("artifact");
     expect((await missing.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) })).status).toBe(404);
     expect((await found.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId: "../bad" }) })).status).toBe(404);
   });
 
-  it("returns running progress before the terminal manifest", async () => {
-    const progress = new RenderProgressStore();
-    progress.start(renderId);
-    progress.update(renderId, "rendering_video");
-    const route = createRenderStatusRoute({
-      progress,
-      library: { async getRun() { throw new Error("must not read terminal storage"); } },
-    });
-    const response = await route.GET(new Request("http://localhost"), { params: Promise.resolve({ renderId }) });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ renderId, status: "running", stage: "rendering_video" });
-  });
 
   it("returns safe 500 for status storage exceptions", async () => {
     const diagnostics: unknown[] = [];

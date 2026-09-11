@@ -9,21 +9,40 @@ import {
   checkDownloadArtifact,
   formatSnapshotLabel,
   initialStudioState,
+  isQueuedRenderResponse,
   isSucceededRenderResponse,
   isValidRenderId,
   newStudioUuid,
   nextPollDelayMs,
   parseRunningStage,
   readJsonBody,
+  safeRenderMessage,
   STUDIO_POLL_TOTAL_TIMEOUT_MS,
   StudioOperationController,
   studioReducer,
 } from "./video-studio-state";
 
 type StudioProduct = Readonly<{
-  id: string; name: string; sku: string | null; brand: string | null;
-  priceVnd: number; currency: string; stockQuantity: number | null; collectedAt: string | null;
+  id: string;
+  name: string;
+  sku: string | null;
+  brand: string | null;
+  priceVnd: number;
+  currency: string;
+  stockQuantity: number | null;
+  inStock?: boolean;
+  primaryImageUrl?: string | null;
+  keySpecs?: readonly string[];
+  collectedAt: string | null;
 }>;
+type PriceRange = "all" | "under-15" | "15-25" | "25-35" | "above-35";
+const PRICE_RANGES: readonly { id: PriceRange; label: string; min?: number; max?: number }[] = [
+  { id: "all", label: "Tất cả giá" },
+  { id: "under-15", label: "< 15 triệu", max: 15_000_000 },
+  { id: "15-25", label: "15 - 25 triệu", min: 15_000_000, max: 25_000_000 },
+  { id: "25-35", label: "25 - 35 triệu", min: 25_000_000, max: 35_000_000 },
+  { id: "above-35", label: "> 35 triệu", min: 35_000_000 },
+];
 type ProductsResponse = Readonly<{
   items: readonly StudioProduct[];
   total: number;
@@ -44,14 +63,6 @@ const stageLabels: Record<RenderStage, string> = {
   storing_artifact: "Đang lưu thành phẩm",
 };
 
-function safeRenderMessage(code?: string): string {
-  if (code === "RENDER_ID_IN_USE") return "Yêu cầu này đang được xử lý. Vui lòng chờ trong giây lát rồi thử lại.";
-  if (code === "PRODUCT_NOT_FOUND") return "Sản phẩm không còn sẵn sàng. Hãy chọn sản phẩm khác.";
-  if (code === "AI_GENERATION_FAILED") return "Dịch vụ viết nội dung chưa phản hồi. Bạn có thể thử lại.";
-  if (code === "IMAGE_RESOLUTION_FAILED") return "Máy xử lý ảnh chưa sẵn sàng. Kiểm tra hệ thống rồi thử lại.";
-  if (code === "VIDEO_RENDER_FAILED") return "Máy dựng chưa thể hoàn thành video. Bạn có thể thử lại.";
-  return "Chưa thể tạo video lúc này. Hãy thử lại sau ít phút.";
-}
 
 export function VideoStudio() {
   const [products, setProducts] = useState<readonly StudioProduct[]>([]);
@@ -62,6 +73,8 @@ export function VideoStudio() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
+  const [selectedPriceRange, setSelectedPriceRange] = useState<PriceRange>("all");
+  const [inStockOnly, setInStockOnly] = useState<boolean>(true);
   const [studio, dispatch] = useReducer(studioReducer, initialStudioState);
   const operationController = useRef(new StudioOperationController());
   const { selectedId, desk } = studio;
@@ -70,7 +83,10 @@ export function VideoStudio() {
   searchRef.current = search;
   const brandRef = useRef(selectedBrand);
   brandRef.current = selectedBrand;
-
+  const priceRangeRef = useRef(selectedPriceRange);
+  priceRangeRef.current = selectedPriceRange;
+  const inStockOnlyRef = useRef(inStockOnly);
+  inStockOnlyRef.current = inStockOnly;
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
@@ -83,15 +99,30 @@ export function VideoStudio() {
     signal?: AbortSignal,
     currentSearch?: string,
     currentBrand?: string | null,
+    currentPriceRange?: PriceRange,
+    currentInStockOnly?: boolean,
   ) => {
     const brand = currentBrand !== undefined ? currentBrand : brandRef.current;
     const s = currentSearch !== undefined ? currentSearch : searchRef.current;
+    const pr = currentPriceRange !== undefined ? currentPriceRange : priceRangeRef.current;
+    const stock = currentInStockOnly !== undefined ? currentInStockOnly : inStockOnlyRef.current;
+
     let url = `/api/products?page=${pageToLoad}&pageSize=${PAGE_SIZE}`;
     if (brand) {
       url += `&brand=${encodeURIComponent(brand)}`;
     }
     if (s && s.trim()) {
       url += `&search=${encodeURIComponent(s.trim())}`;
+    }
+    const priceCfg = PRICE_RANGES.find((p) => p.id === pr);
+    if (priceCfg?.min !== undefined) {
+      url += `&minPrice=${priceCfg.min}`;
+    }
+    if (priceCfg?.max !== undefined) {
+      url += `&maxPrice=${priceCfg.max}`;
+    }
+    if (stock) {
+      url += `&inStockOnly=true`;
     }
     return fetch(url, signal ? { signal } : undefined)
       .then(async (response) => {
@@ -118,33 +149,41 @@ export function VideoStudio() {
 
   const reloadProducts = useCallback(() => {
     setCatalogState("loading");
-    void loadProducts(page, undefined, debouncedSearch, selectedBrand);
-  }, [loadProducts, page, debouncedSearch, selectedBrand]);
+    void loadProducts(page, undefined, debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly);
+  }, [loadProducts, page, debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly]);
 
   const goToPage = useCallback((nextPage: number) => {
     if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
     setCatalogState("loading");
-    void loadProducts(nextPage, undefined, debouncedSearch, selectedBrand);
-  }, [loadProducts, page, totalPages, debouncedSearch, selectedBrand]);
+    void loadProducts(nextPage, undefined, debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly);
+  }, [loadProducts, page, totalPages, debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly]);
 
   const handleBrandClick = useCallback((brand: string | null) => {
     const nextBrand = brand === null ? null : selectedBrand === brand ? null : brand;
     if (nextBrand === selectedBrand) {
       if (page !== 1) {
         setCatalogState("loading");
-        void loadProducts(1, undefined, debouncedSearch, nextBrand);
+        void loadProducts(1, undefined, debouncedSearch, nextBrand, selectedPriceRange, inStockOnly);
       }
       return;
     }
     setSelectedBrand(nextBrand);
-  }, [selectedBrand, page, loadProducts, debouncedSearch]);
+  }, [selectedBrand, page, loadProducts, debouncedSearch, selectedPriceRange, inStockOnly]);
+
+  const handlePriceRangeClick = useCallback((rangeId: PriceRange) => {
+    setSelectedPriceRange(rangeId);
+  }, []);
+
+  const handleInStockToggle = useCallback((checked: boolean) => {
+    setInStockOnly(checked);
+  }, []);
 
   useEffect(() => {
     setCatalogState("loading");
     const controller = new AbortController();
-    void loadProducts(1, controller.signal, debouncedSearch, selectedBrand);
+    void loadProducts(1, controller.signal, debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly);
     return () => controller.abort();
-  }, [debouncedSearch, selectedBrand, loadProducts]);
+  }, [debouncedSearch, selectedBrand, selectedPriceRange, inStockOnly, loadProducts]);
 
   useEffect(() => {
     const operations = operationController.current;
@@ -166,30 +205,7 @@ export function VideoStudio() {
     }
     const controller = operationController.current.start();
     if (!controller) return;
-    dispatch({ type: "start", operation });
-    let settled = false;
-    const pollStartedAt = Date.now();
-    void (async () => {
-      let attempt = 0;
-      while (!settled && !controller.signal.aborted) {
-        if (Date.now() - pollStartedAt > STUDIO_POLL_TOTAL_TIMEOUT_MS) return;
-        try {
-          const response = await fetch(`/api/renders/${operation.renderId}`, { signal: controller.signal, cache: "no-store" });
-          if (response.ok) {
-            const stage = parseRunningStage(await readJsonBody(response));
-            if (stage) dispatch({ type: "progress", token: operation.token, stage });
-          }
-        } catch {
-          if (controller.signal.aborted) return;
-        }
-        const delay = nextPollDelayMs(attempt);
-        attempt += 1;
-        await new Promise<void>((resolve) => {
-          const timer = window.setTimeout(resolve, delay);
-          controller.signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve(); }, { once: true });
-        });
-      }
-    })();
+
     try {
       const response = await fetch("/api/renders", {
         method: "POST",
@@ -203,18 +219,80 @@ export function VideoStudio() {
         typeof payload.error.code === "string"
         ? payload.error.code
         : undefined;
-      if (!response.ok || !isSucceededRenderResponse(payload) || payload.renderId !== operation.renderId) {
+
+      if (!response.ok || !isQueuedRenderResponse(payload) || payload.renderId !== operation.renderId) {
+        dispatch({ type: "start", operation });
         dispatch({ type: "failure", token: operation.token, message: safeRenderMessage(errorCode) });
+        controller.abort();
+        operationController.current.finish(controller);
         return;
       }
-      dispatch({ type: "success", token: operation.token, result: payload });
     } catch {
-      if (!controller.signal.aborted) dispatch({ type: "failure", token: operation.token, message: "Mất kết nối với máy dựng. Kiểm tra hệ thống rồi thử lại." });
-    } finally {
-      settled = true;
+      if (!controller.signal.aborted) {
+        dispatch({ type: "start", operation });
+        dispatch({ type: "failure", token: operation.token, message: "Mất kết nối với máy dựng. Kiểm tra hệ thống rồi thử lại." });
+      }
       controller.abort();
       operationController.current.finish(controller);
+      return;
     }
+
+    dispatch({ type: "start", operation });
+    let settled = false;
+    const pollStartedAt = Date.now();
+    void (async () => {
+      let attempt = 0;
+      try {
+        while (!settled && !controller.signal.aborted) {
+          if (Date.now() - pollStartedAt > STUDIO_POLL_TOTAL_TIMEOUT_MS) {
+            dispatch({ type: "failure", token: operation.token, message: "Quá thời gian dựng video. Kiểm tra hệ thống rồi thử lại." });
+            settled = true;
+            return;
+          }
+
+          const delay = nextPollDelayMs(attempt);
+          attempt += 1;
+          await new Promise<void>((resolve) => {
+            const timer = window.setTimeout(resolve, delay);
+            controller.signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve(); }, { once: true });
+          });
+
+          if (settled || controller.signal.aborted) return;
+
+          try {
+            const response = await fetch(`/api/renders/${operation.renderId}`, { signal: controller.signal, cache: "no-store" });
+            if (response.ok) {
+              const body = await readJsonBody(response);
+              if (body !== null && typeof body === "object" && "status" in body) {
+                if (body.status === "succeeded" && isSucceededRenderResponse(body)) {
+                  dispatch({ type: "success", token: operation.token, result: body });
+                  settled = true;
+                  return;
+                }
+                if (body.status === "failed") {
+                  const errorCode = "error" in body && body.error !== null && typeof body.error === "object" && "code" in body.error && typeof body.error.code === "string"
+                    ? body.error.code
+                    : undefined;
+                  dispatch({ type: "failure", token: operation.token, message: safeRenderMessage(errorCode) });
+                  settled = true;
+                  return;
+                }
+                const stage = parseRunningStage(body);
+                if (stage) {
+                  dispatch({ type: "progress", token: operation.token, stage });
+                }
+              }
+            }
+          } catch {
+            if (controller.signal.aborted) return;
+          }
+        }
+      } finally {
+        settled = true;
+        controller.abort();
+        operationController.current.finish(controller);
+      }
+    })();
   }
 
   async function downloadVideo() {
@@ -247,7 +325,7 @@ export function VideoStudio() {
 
       <section className="studio-intro" aria-labelledby="studio-title">
         <div><p className="phase">Bàn sản xuất video</p><h1 id="studio-title">Từ catalog đến video bán hàng.</h1></div>
-        <p>Chọn một laptop từ bản chụp catalog công khai. OneVoice viết thông điệp, dựng video dọc 12 giây và lưu bản hoàn chỉnh ngay trên máy này.</p>
+        <p>Chọn một laptop từ bản chụp catalog công khai. OneVoice viết thông điệp, dựng video dọc và lưu bản hoàn chỉnh ngay trên máy này.</p>
       </section>
 
       <ol className="production-rail" aria-label="Quy trình sản xuất">
@@ -295,17 +373,48 @@ export function VideoStudio() {
                 );
               })}
             </div>
+          <div className="price-filters" role="toolbar" aria-label="Lọc theo mức giá">
+            {PRICE_RANGES.map((pr) => {
+              const active = selectedPriceRange === pr.id;
+              return (
+                <button
+                  key={pr.id}
+                  type="button"
+                  className={active ? "price-pill price-pill--active" : "price-pill"}
+                  onClick={() => handlePriceRangeClick(pr.id)}
+                  aria-pressed={active}
+                  disabled={desk.status === "creating"}
+                >
+                  {pr.label}
+                </button>
+              );
+            })}
           </div>
-          {catalogState === "loading" && <p className="state-note" role="status">Đang đọc danh mục sản phẩm…</p>}
-          {catalogState === "error" && <div className="state-note state-note--error" role="alert"><p>Không thể tải danh mục.</p><button className="text-action" type="button" onClick={reloadProducts}>Tải lại</button></div>}
-          {catalogState === "empty" && <p className="state-note">Chưa có laptop đủ dữ liệu để sản xuất.</p>}
-          {catalogState === "ready" && <><div className="product-list" aria-label="Danh sách sản phẩm">
-            {products.map((product) => {
-              const selected = product.id === selectedId;
-              const meta = [product.brand, product.sku].filter(Boolean).join(" · ");
-              const formattedPrice = currency.format(product.priceVnd ?? 0);
-              const ariaLabel = `${product.name}${meta ? ` · ${meta}` : ""}${formattedPrice ? ` · ${formattedPrice}` : ""}`;
-              return <button
+          <label className="filter-toggle">
+            <input
+              type="checkbox"
+              checked={inStockOnly}
+              onChange={(e) => handleInStockToggle(e.target.checked)}
+              disabled={desk.status === "creating"}
+            />
+            <span>Chỉ hiện sản phẩm còn hàng</span>
+          </label>
+        </div>
+        {catalogState === "loading" && <p className="state-note" role="status">Đang đọc danh mục sản phẩm…</p>}
+        {catalogState === "error" && <div className="state-note state-note--error" role="alert"><p>Không thể tải danh mục.</p><button className="text-action" type="button" onClick={reloadProducts}>Tải lại</button></div>}
+        {catalogState === "empty" && <p className="state-note">Chưa có laptop đủ dữ liệu để sản xuất.</p>}
+        {catalogState === "ready" && <><div className="product-list" aria-label="Danh sách sản phẩm">
+          {products.map((product) => {
+            const selected = product.id === selectedId;
+            const meta = [product.brand, product.sku].filter(Boolean).join(" · ");
+            const formattedPrice = currency.format(product.priceVnd ?? 0);
+            const ariaLabel = `${product.name}${meta ? ` · ${meta}` : ""}${formattedPrice ? ` · ${formattedPrice}` : ""}`;
+            const isInStock = product.inStock !== false;
+            const stockQty = product.stockQuantity;
+            const specs = product.keySpecs || [];
+
+            return (
+              <button
                 className="product-row"
                 data-selected={selected || undefined}
                 aria-pressed={selected}
@@ -317,11 +426,48 @@ export function VideoStudio() {
                 onClick={() => dispatch({ type: "select", productId: product.id })}
               >
                 <span className="product-row__marker" aria-hidden="true" />
-                <span className="product-row__copy"><strong>{product.name}</strong><small>{meta || "Không có mã SKU"}</small></span>
-                <span className="product-row__price">{formattedPrice}</span>
-              </button>;
-            })}
-          </div><nav className="catalog-pagination" aria-label="Phân trang danh mục">
+
+                <div className="product-row__thumb">
+                  {product.primaryImageUrl ? (
+                    <img
+                      src={product.primaryImageUrl}
+                      alt=""
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  ) : (
+                    <span className="product-row__thumb-fallback">{product.brand || "PC"}</span>
+                  )}
+                </div>
+
+                <div className="product-row__copy">
+                  <div className="product-row__header">
+                    <strong className="product-row__title">{product.name}</strong>
+                    <span className={`stock-badge ${isInStock ? "stock-badge--in" : "stock-badge--out"}`}>
+                      <span className="stock-badge__dot" aria-hidden="true" />
+                      {isInStock ? (stockQty ? `Còn hàng (${stockQty})` : "Còn hàng") : "Hết hàng"}
+                    </span>
+                  </div>
+
+                  {specs.length > 0 && (
+                    <div className="spec-pills" aria-label="Thông số nổi bật">
+                      {specs.map((spec, i) => (
+                        <span key={i} className="spec-pill">{spec}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="product-row__footer">
+                    <span className="product-row__price">{formattedPrice}</span>
+                    <span className="product-row__sku">{meta || "Chưa có SKU"}</span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div><nav className="catalog-pagination" aria-label="Phân trang danh mục">
             <button className="text-action" type="button" disabled={page <= 1 || desk.status === "creating"} onClick={() => goToPage(page - 1)}>Trước</button>
             <span aria-live="polite">Trang {page}/{totalPages} · Tổng {totalCount}</span>
             <button className="text-action" type="button" disabled={page >= totalPages || desk.status === "creating"} onClick={() => goToPage(page + 1)}>Sau</button>
@@ -331,13 +477,34 @@ export function VideoStudio() {
         <section className="desk-panel script-panel" aria-labelledby="script-title">
           <div className="panel-heading"><div><p className="panel-index">02</p><h2 id="script-title">Kịch bản</h2></div></div>
           {!selectedProduct ? <p className="state-note">Chọn một sản phẩm để mở bàn biên tập.</p> : <>
-            <div className="selected-product"><span>Sản phẩm đang chọn</span><strong>{selectedProduct.name}</strong><p>{currency.format(selectedProduct.priceVnd ?? 0)}{selectedProduct.sku ? ` · ${selectedProduct.sku}` : ""}</p><small>{formatSnapshotLabel(selectedProduct.collectedAt)}</small></div>
+            <div className="selected-product">
+              <span>Sản phẩm đang chọn</span>
+              <div className="selected-product__layout">
+                {selectedProduct.primaryImageUrl && (
+                  <div className="selected-product__thumb">
+                    <img src={selectedProduct.primaryImageUrl} alt={selectedProduct.name} />
+                  </div>
+                )}
+                <div className="selected-product__details">
+                  <strong>{selectedProduct.name}</strong>
+                  <p>{currency.format(selectedProduct.priceVnd ?? 0)}{selectedProduct.sku ? ` · ${selectedProduct.sku}` : ""}</p>
+                  {selectedProduct.keySpecs && selectedProduct.keySpecs.length > 0 && (
+                    <div className="spec-pills" style={{ marginTop: "4px" }}>
+                      {selectedProduct.keySpecs.map((spec, idx) => (
+                        <span key={idx} className="spec-pill">{spec}</span>
+                      ))}
+                    </div>
+                  )}
+                  <small>{formatSnapshotLabel(selectedProduct.collectedAt)}</small>
+                </div>
+              </div>
+            </div>
             {desk.status === "ready" ? <dl className="campaign-copy">
               <div><dt>Mở đầu</dt><dd>{desk.result.content.hook}</dd></div>
               <div><dt>Chú thích</dt><dd>{desk.result.content.caption}</dd></div>
               <div><dt>Kêu gọi</dt><dd>{desk.result.content.cta}</dd></div>
             </dl> : <p className="script-guidance">Nội dung chỉ dùng giá, SKU và thông tin trong bản chụp catalog công khai đã chọn.</p>}
-            <button className="primary-action" type="button" disabled={desk.status === "creating"} onClick={() => void createVideo()}>{desk.status === "creating" ? "Đang tạo video…" : desk.status === "error" ? "Thử tạo lại" : desk.status === "artifact_error" ? "Tạo lại video" : "Tạo video 12 giây"}</button>
+            <button className="primary-action" type="button" disabled={desk.status === "creating"} onClick={() => void createVideo()}>{desk.status === "creating" ? "Đang tạo video…" : desk.status === "error" ? "Thử tạo lại" : desk.status === "artifact_error" ? "Tạo lại video" : "Tạo video"}</button>
             {desk.status === "creating" && <p className="operation-note" role="status">{desk.stage ? stageLabels[desk.stage] : "Đang chờ máy chủ ghi nhận tác vụ."}</p>}
             {desk.status === "error" && <p className="operation-note operation-note--error" role="alert">{desk.message}</p>}
             {desk.status === "artifact_error" && <p className="operation-note operation-note--error" role="alert">Không thể mở thành phẩm đã lưu. Hãy tạo lại video.</p>}
@@ -348,7 +515,7 @@ export function VideoStudio() {
           <div className="panel-heading"><div><p className="panel-index">03</p><h2 id="output-title">Thành phẩm</h2></div></div>
           {desk.status === "ready" ? <div className="video-result">
             <video controls preload="metadata" src={desk.result.urls.video} onError={() => dispatch({ type: "artifact_failure", token: desk.operation.token })}>Trình duyệt của bạn không hỗ trợ phát video.</video>
-            <div className="video-result__footer"><div><strong>Video dọc · 12 giây</strong><span>MP4 đã lưu cục bộ</span></div><button className="download-action" type="button" onClick={() => void downloadVideo()}>Tải video</button></div>
+            <div className="video-result__footer"><div><strong>Video dọc{desk.status === "ready" && desk.result.durationSeconds ? ` · ${desk.result.durationSeconds} giây` : ""}</strong><span>MP4 đã lưu cục bộ</span></div><button className="download-action" type="button" onClick={() => void downloadVideo()}>Tải video</button></div>
           </div> : <div className="output-placeholder" aria-hidden="true"><span className="frame-corner frame-corner--top" /><span>1080 × 1920</span><i /><p>Video hoàn chỉnh sẽ xuất hiện tại đây.</p><span className="frame-corner frame-corner--bottom" /></div>}
         </section>
       </div>

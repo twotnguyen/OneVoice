@@ -14,6 +14,7 @@ import type {
   ProductFact,
   ProductSnapshot,
   StudioProduct,
+  StudioProductFilters,
 } from "./types";
 
 const MAX_PRODUCT_FACTS = 8;
@@ -43,6 +44,48 @@ export function sanitizePostgrestSearchTerm(term: string): string {
   return term.replace(/[,()\\%*"]/g, "").trim();
 }
 
+export function extractKeySpecs(raw: unknown): string[] {
+  if (typeof raw !== "object" || raw === null) return [];
+  const attrs = raw as Record<string, unknown>;
+  const specs: string[] = [];
+
+  if (typeof attrs.gpu === "string" && attrs.gpu.trim()) {
+    specs.push(attrs.gpu.trim());
+  }
+  if (typeof attrs.ram === "string" && attrs.ram.trim()) {
+    const ram = attrs.ram.trim();
+    if (/^\d+$/.test(ram)) {
+      specs.push(`${ram}GB RAM`);
+    } else {
+      specs.push(ram.toUpperCase().includes("RAM") ? ram : `${ram} RAM`);
+    }
+  }
+  if (typeof attrs.storage === "string" && attrs.storage.trim()) {
+    const s = attrs.storage.trim();
+    if (/^\d+$/.test(s)) {
+      const num = Number(s);
+      specs.push(num >= 1000 ? `${Math.round(num / 1024)}TB SSD` : `${num}GB SSD`);
+    } else {
+      specs.push(s);
+    }
+  }
+  if (typeof attrs.refreshRate === "string" && attrs.refreshRate.trim() && specs.length < 3) {
+    specs.push(attrs.refreshRate.trim());
+  }
+  if (typeof attrs.resolution === "string" && attrs.resolution.trim() && specs.length < 3) {
+    specs.push(attrs.resolution.trim());
+  }
+  if (typeof attrs.cpu === "string" && attrs.cpu.trim() && specs.length < 3) {
+    const cpu = attrs.cpu.trim().split(/[\(\/]/)[0].trim();
+    specs.push(cpu);
+  }
+  if (typeof attrs.size === "string" && attrs.size.trim() && specs.length < 3) {
+    specs.push(attrs.size.trim());
+  }
+
+  return specs.slice(0, 3);
+}
+
 export interface CatalogRepositoryOptions {
   client: SupabaseClient<Database>;
   defaultOrganizationId?: string;
@@ -62,7 +105,7 @@ export class CatalogRepository {
     scope: OrganizationScope,
     pagination: CatalogPagination = {},
     productType: string = "laptop",
-    filters?: { brand?: string; search?: string }
+    filters?: StudioProductFilters
   ): Promise<Readonly<{
     items: readonly StudioProduct[];
     total: number;
@@ -77,17 +120,28 @@ export class CatalogRepository {
     let query = this.client
       .from("content_ready_products")
       .select(
-        "id, name, sku, brand, price_vnd, currency, stock_quantity, collected_at",
+        "id, name, sku, brand, price_vnd, currency, in_stock, stock_quantity, collected_at, normalized_attributes, product_images(source_url, is_primary, position)",
         { count: "exact" }
       )
       .eq("organization_id", scope.organizationId)
       .eq("product_type", productType)
       .eq("quality", "usable")
-      .eq("in_stock", true)
       .gt("price_vnd", 0);
+
+    if (filters?.inStockOnly !== false) {
+      query = query.eq("in_stock", true);
+    }
 
     if (filters?.brand) {
       query = query.ilike("brand", filters.brand);
+    }
+
+    if (typeof filters?.minPrice === "number" && filters.minPrice >= 0) {
+      query = query.gte("price_vnd", filters.minPrice);
+    }
+
+    if (typeof filters?.maxPrice === "number" && filters.maxPrice > 0) {
+      query = query.lte("price_vnd", filters.maxPrice);
     }
 
     if (filters?.search) {
@@ -110,6 +164,13 @@ export class CatalogRepository {
         return [];
       }
 
+      type ProductImageRow = { source_url?: string; is_primary?: boolean; position?: number };
+      const rawImages = (product as { product_images?: ProductImageRow[] }).product_images;
+      const images: ProductImageRow[] = Array.isArray(rawImages) ? rawImages : [];
+      const primaryImg = images.find((img) => img.is_primary) ?? images[0];
+      const primaryImageUrl = primaryImg?.source_url ? String(primaryImg.source_url) : null;
+      const keySpecs = extractKeySpecs((product as { normalized_attributes?: unknown }).normalized_attributes);
+
       return [{
         id: product.id,
         name: product.name,
@@ -118,6 +179,9 @@ export class CatalogRepository {
         priceVnd: product.price_vnd,
         currency: product.currency ?? "VND",
         stockQuantity: product.stock_quantity,
+        inStock: Boolean(product.in_stock),
+        primaryImageUrl,
+        keySpecs,
         collectedAt: product.collected_at,
       }];
     });

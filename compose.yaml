@@ -7,6 +7,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runner
     env_file:
       - path: .env
         required: true
@@ -43,6 +44,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: worker
     command:
       - node
       - dist/worker.js
@@ -52,14 +54,19 @@ services:
     environment:
       NODE_ENV: production
       ONEVOICE_MEDIA_ROOT: /app/renders
+      ONEVOICE_QUEUE_ROOT: /app/renders/queue
+      ONEVOICE_TEMPLATES_ROOT: /app/templates
+      ONEVOICE_AUDIO_ROOT: /app/assets/audio
+      ONEVOICE_TTS_ENDPOINT: http://tts:8123
+      ONEVOICE_HYPERFRAMES_PATH: hyperframes
       FFMPEG_PATH: ffmpeg
       FFPROBE_PATH: ffprobe
       ONEVOICE_FONT_PATH: /usr/share/fonts/dejavu/DejaVuSans.ttf
-      ONEVOICE_TTS_ENDPOINT: http://tts:8123
     volumes:
       - onevoice-renders:/app/renders
+    shm_size: 1gb
+    stop_grace_period: 300s
     restart: unless-stopped
-
   # VieNeu-TTS sidecar. Nặng (model weights trong HF_HOME) nên nằm sau
   # profile `tts`: `docker compose --profile tts up -d`. Healthcheck trỏ
   # GET /health, trả 503 cho tới khi model load xong (MODEL_NOT_READY) nên
@@ -70,17 +77,15 @@ services:
       dockerfile: Dockerfile
     profiles:
       - tts
-    env_file:
-      - path: .env
-        required: true
     environment:
+      VIENEU_MODE: v3turbo
+      VIENEU_VOICE: "female-north-1"
       HF_HOME: /models
       HF_HUB_OFFLINE: "1"
+      TTS_MAX_CHARS: "400"
       TTS_PORT: "8123"
-    ports:
-      - "127.0.0.1:8123:8123"
     volumes:
-      - tts-models:/models
+      - onevoice-tts-models:/models
     restart: unless-stopped
     healthcheck:
       test:
@@ -93,4 +98,4 @@ services:
 
 volumes:
   onevoice-renders:
-  tts-models:
+  onevoice-tts-models:

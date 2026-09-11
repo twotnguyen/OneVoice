@@ -10,6 +10,13 @@ export type RenderResponse = Readonly<{
   renderId: string;
   status: "succeeded";
   content: { hook: string; caption: string; cta: string };
+  durationSeconds?: number;
+  urls: { status: string; video: string; download: string };
+}>;
+
+export type QueuedRenderResponse = Readonly<{
+  renderId: string;
+  status: "queued";
   urls: { status: string; video: string; download: string };
 }>;
 export type RenderOperation = Readonly<{ token: string; renderId: string; productId: string }>;
@@ -75,11 +82,40 @@ export async function checkDownloadArtifact(
 }
 
 export function parseRunningStage(value: unknown): RenderStage | null {
-  if (typeof value !== "object" || value === null || !("status" in value) || !("stage" in value)) return null;
-  if (value.status !== "running" || typeof value.stage !== "string") return null;
-  return (["loading_product", "generating_content", "resolving_asset", "synthesizing_voice", "composing_scenes", "rendering_video", "storing_artifact"] as const).includes(value.stage as RenderStage)
-    ? value.stage as RenderStage
+  if (typeof value !== "object" || value === null || !("status" in value)) return null;
+  if (value.status !== "running" && value.status !== "queued") return null;
+  if (!("stage" in value)) return null;
+  const stage = value.stage;
+  if (typeof stage !== "string") return null;
+  return (
+    [
+      "loading_product",
+      "generating_content",
+      "resolving_asset",
+      "synthesizing_voice",
+      "composing_scenes",
+      "rendering_video",
+      "storing_artifact",
+    ] as const
+  ).includes(stage as RenderStage)
+    ? (stage as RenderStage)
     : null;
+}
+
+export function safeRenderMessage(code?: string): string {
+  if (code === "RENDER_ID_IN_USE") return "Yêu cầu này đang được xử lý. Vui lòng chờ trong giây lát rồi thử lại.";
+  if (code === "PRODUCT_NOT_FOUND") return "Sản phẩm không còn sẵn sàng. Hãy chọn sản phẩm khác.";
+  if (code === "AI_GENERATION_FAILED") return "Dịch vụ viết nội dung chưa phản hồi. Bạn có thể thử lại.";
+  if (code === "SCRIPT_SCHEMA_INVALID") return "Kịch bản tạo ra chưa đúng chuẩn. Hãy thử tạo lại.";
+  if (code === "SCRIPT_TRUTH_VIOLATION") return "Nội dung video chứa thông tin chưa được kiểm chứng từ catalog. Hãy thử lại.";
+  if (code === "SCRIPT_DURATION_EXCEEDED") return "Thời lượng kịch bản vượt quá giới hạn cho phép. Hãy thử lại.";
+  if (code === "TTS_UNAVAILABLE" || code === "TTS_TIMEOUT") return "Dịch vụ lồng tiếng chưa sẵn sàng hoặc phản hồi chậm. Hãy thử lại sau ít phút.";
+  if (code === "NARRATION_OVERRUNS_SCENE") return "Giọng đọc dài hơn thời lượng cảnh video. Hãy thử tạo lại.";
+  if (code === "IMAGE_RESOLUTION_FAILED") return "Máy xử lý ảnh chưa sẵn sàng. Kiểm tra hệ thống rồi thử lại.";
+  if (code === "VIDEO_RENDER_FAILED") return "Máy dựng chưa thể hoàn thành video. Bạn có thể thử lại.";
+  if (code === "WORKER_LOST") return "Tiến trình dựng video bị gián đoạn bất ngờ. Hãy thử tạo lại.";
+  if (code === "STORAGE_FAILED" || code === "STORAGE_UNAVAILABLE") return "Không thể lưu trữ tệp video. Kiểm tra dung lượng đĩa rồi thử lại.";
+  return "Chưa thể tạo video lúc này. Hãy thử lại sau ít phút.";
 }
 
 export class StudioOperationController {
@@ -149,6 +185,16 @@ export function isSucceededRenderResponse(value: unknown): value is RenderRespon
   if (!("urls" in value) || typeof value.urls !== "object" || value.urls === null) return false;
   return true;
 }
+
+export function isQueuedRenderResponse(value: unknown): value is QueuedRenderResponse {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("status" in value) || value.status !== "queued") return false;
+  if (!("renderId" in value) || !isValidRenderId(value.renderId)) return false;
+  if (!("urls" in value) || typeof value.urls !== "object" || value.urls === null) return false;
+  return true;
+}
+
+export const STUDIO_POLL_INTERVAL_MS = 2000;
 
 export const STUDIO_POLL_INITIAL_DELAY_MS = 500;
 export const STUDIO_POLL_MAX_DELAY_MS = 2000;
