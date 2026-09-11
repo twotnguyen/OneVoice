@@ -185,6 +185,36 @@ describe("CatalogRepository", () => {
     expect(query.or).not.toHaveBeenCalled();
   });
 
+  it("does not filter by product_type when productType is 'all'", async () => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({
+        data: [],
+        count: 0,
+        error: null,
+      }),
+    };
+    const client = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient<Database>;
+    const repository = new CatalogRepository({ client });
+
+    await repository.listStudioProducts(
+      { organizationId: "org-1" },
+      { page: 1, pageSize: 18 },
+      "all",
+    );
+
+    expect(client.from).toHaveBeenCalledWith("content_ready_products");
+    expect(query.eq).toHaveBeenCalledWith("organization_id", "org-1");
+    expect(query.eq).toHaveBeenCalledWith("quality", "usable");
+    expect(query.eq).not.toHaveBeenCalledWith("product_type", "all");
+    expect(query.eq).not.toHaveBeenCalledWith("product_type", "laptop");
+  });
+
   it("returns an organization-scoped snapshot with only allow-listed facts", async () => {
     const specifications = Array.from({ length: 10 }, (_, index) => ({
       name: `Specification ${index + 1}`,

@@ -184,4 +184,37 @@ describe("GET /api/products", () => {
       ],
     ]);
   });
+
+  it("passes productType to repository when specified in query", async () => {
+    const calls: unknown[] = [];
+    const route = createProductsRoute({
+      scope,
+      catalog: {
+        async listStudioProducts(receivedScope, pagination, productType, filters) {
+          calls.push([receivedScope, pagination, productType, filters]);
+          return {
+            items: [],
+            total: 0,
+            page: 1,
+            pageSize: 18,
+            totalPages: 0,
+          };
+        },
+      },
+    });
+
+    const response = await route.GET(new Request(
+      "http://localhost/api/products?productType=all",
+    ));
+
+    expect(response.status).toBe(200);
+    expect(calls).toEqual([
+      [
+        scope,
+        { page: 1, pageSize: 18 },
+        "all",
+        { productType: "all" },
+      ],
+    ]);
+  });
 });

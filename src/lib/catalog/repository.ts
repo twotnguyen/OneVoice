@@ -124,10 +124,13 @@ export class CatalogRepository {
         { count: "exact" }
       )
       .eq("organization_id", scope.organizationId)
-      .eq("product_type", productType)
       .eq("quality", "usable")
       .gt("price_vnd", 0);
 
+    const effectiveType = productType ?? filters?.productType;
+    if (effectiveType && effectiveType !== "all") {
+      query = query.eq("product_type", effectiveType);
+    }
     if (filters?.inStockOnly !== false) {
       query = query.eq("in_stock", true);
     }
