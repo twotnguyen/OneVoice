@@ -93,17 +93,71 @@ def _synthesize_mp3(text: str) -> bytes:
             return fh.read()
 
 
+EDGE_TTS_VOICES = {
+    "vi-vn-hoaimyneural": "vi-VN-HoaiMyNeural",
+    "hoaimy": "vi-VN-HoaiMyNeural",
+    "female": "vi-VN-HoaiMyNeural",
+    "vi-vn-namminhneural": "vi-VN-NamMinhNeural",
+    "namminh": "vi-VN-NamMinhNeural",
+    "male": "vi-VN-NamMinhNeural",
+}
+
+
+async def _synthesize_edge_tts(text: str, voice_name: str, rate_val: Any = None) -> bytes:
+    import edge_tts
+
+    rate_str = "+0%"
+    if rate_val is not None:
+        try:
+            p = round((float(rate_val) - 1.0) * 100)
+            rate_str = f"+{p}%" if p >= 0 else f"{p}%"
+        except (TypeError, ValueError):
+            rate_str = "+0%"
+
+    communicate = edge_tts.Communicate(text, voice_name, rate=rate_str)
+    with tempfile.TemporaryDirectory(prefix="edge-tts-") as tmp:
+        raw_mp3 = os.path.join(tmp, "raw.mp3")
+        out_mp3 = os.path.join(tmp, "out.mp3")
+        await communicate.save(raw_mp3)
+        proc = subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", raw_mp3,
+             "-ar", "44100", "-ac", "1", "-codec:a", "libmp3lame", "-q:a", "4", out_mp3],
+            capture_output=True,
+            timeout=FFMPEG_TIMEOUT_S,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(proc.stderr.decode("utf-8", "replace")[-500:])
+        with open(out_mp3, "rb") as fh:
+            return fh.read()
+
+
 @app.post("/tts")
 async def tts(request: Request):
     try:
         body = await request.json()
     except Exception:
         body = None
-    text = body.get("text") if isinstance(body, dict) else None
+    body_dict = body if isinstance(body, dict) else {}
+    text = body_dict.get("text")
+    voice_param = body_dict.get("voice")
+    rate_param = body_dict.get("rate")
+
     if not isinstance(text, str) or not text.strip():
         return JSONResponse({"error": "TEXT_EMPTY"}, status_code=400)
     if len(text) > MAX_CHARS:
         return JSONResponse({"error": "TEXT_TOO_LONG"}, status_code=400)
+
+    # Route to Edge-TTS if an Edge voice is requested
+    edge_voice_key = str(voice_param or "").strip().lower()
+    if edge_voice_key in EDGE_TTS_VOICES or edge_voice_key.startswith("vi-vn-"):
+        edge_voice_name = EDGE_TTS_VOICES.get(edge_voice_key, str(voice_param))
+        try:
+            mp3 = await _synthesize_edge_tts(text, edge_voice_name, rate_param)
+            return Response(content=mp3, media_type="audio/mpeg")
+        except Exception as exc:
+            return JSONResponse({"error": "TTS_FAILED", "detail": str(exc)}, status_code=500)
+
+    # Fallback to local VieNeu-TTS
     if not _ready or _engine is None:
         return JSONResponse({"error": "MODEL_NOT_READY"}, status_code=503)
     if _lock.locked():
@@ -114,7 +168,6 @@ async def tts(request: Request):
         except Exception:
             return JSONResponse({"error": "TTS_FAILED"}, status_code=500)
     return Response(content=mp3, media_type="audio/mpeg")
-
 
 @app.get("/health")
 def health():

@@ -196,7 +196,10 @@ export class TemplateVideoRenderer {
         script.scenes.map((scene, index) =>
           ttsLimit(async () => {
             const rawAudio = path.join(workDirectory, `scene-${index}-raw.mp3`);
-            await this.options.tts.synthesize(scene.voiceText, rawAudio);
+            await this.options.tts.synthesize(scene.voiceText, rawAudio, {
+              voice: script.voice.voiceId,
+              rate: script.voice.speed,
+            });
             const measuredSec = await this.measureAudio(rawAudio);
             if (measuredSec * 1000 > scene.durationMs) {
               throw new Error("NARRATION_OVERRUNS_SCENE");
