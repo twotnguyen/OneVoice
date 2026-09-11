@@ -9,9 +9,9 @@ export type NavEntry = Readonly<{
 export const NAV_SECTIONS: readonly NavEntry[] = [
   { href: "/", label: "Studio", status: "active" },
   { href: "/dashboard", label: "Tổng quan", status: "active" },
-  { href: "/history", label: "Lịch sử", status: "disabled" },
-  { href: "/catalog", label: "Khám phá catalog", status: "disabled" },
-  { href: "/funnel", label: "Funnel", status: "disabled" },
+  { href: "/history", label: "Lịch sử video", status: "active" },
+  { href: "/catalog", label: "Khám phá catalog", status: "active" },
+  { href: "/funnel", label: "Marketing Funnel", status: "active" },
 ];
 
 export function isActiveSection(pathname: string, href: string): boolean {
