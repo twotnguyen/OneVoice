@@ -86,6 +86,68 @@ describe("CatalogRepository", () => {
     expect(result).toMatchObject({ total: 1, page: 1, pageSize: 18, totalPages: 1 });
   });
 
+  it("filters studio products by brand and sanitized search term", async () => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockReturnThis(),
+      ilike: vi.fn().mockReturnThis(),
+      or: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({
+        data: [],
+        count: 0,
+        error: null,
+      }),
+    };
+    const client = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient<Database>;
+    const repository = new CatalogRepository({ client });
+
+    await repository.listStudioProducts(
+      { organizationId: "org-1" },
+      { page: 1, pageSize: 18 },
+      "laptop",
+      { brand: "ACER", search: 'Nitro 16", (pro)%' },
+    );
+
+    expect(client.from).toHaveBeenCalledWith("content_ready_products");
+    expect(query.eq).toHaveBeenCalledWith("organization_id", "org-1");
+    expect(query.eq).toHaveBeenCalledWith("product_type", "laptop");
+    expect(query.ilike).toHaveBeenCalledWith("brand", "ACER");
+    expect(query.or).toHaveBeenCalledWith("name.ilike.%Nitro 16 pro%,sku.ilike.%Nitro 16 pro%");
+  });
+
+  it("does not apply or filter when search term sanitizes to empty string", async () => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockReturnThis(),
+      ilike: vi.fn().mockReturnThis(),
+      or: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({
+        data: [],
+        count: 0,
+        error: null,
+      }),
+    };
+    const client = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient<Database>;
+    const repository = new CatalogRepository({ client });
+
+    await repository.listStudioProducts(
+      { organizationId: "org-1" },
+      { page: 1, pageSize: 18 },
+      "laptop",
+      { search: '",()\\%*"' },
+    );
+
+    expect(query.or).not.toHaveBeenCalled();
+  });
+
   it("returns an organization-scoped snapshot with only allow-listed facts", async () => {
     const specifications = Array.from({ length: 10 }, (_, index) => ({
       name: `Specification ${index + 1}`,

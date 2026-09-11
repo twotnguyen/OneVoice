@@ -32,6 +32,7 @@ type ProductsResponse = Readonly<{
   totalPages: number;
 }>;
 const PAGE_SIZE = 18;
+const BRANDS = ["ACER", "ASUS", "DELL", "GIGABYTE", "HP", "LENOVO", "LG", "MSI"] as const;
 const currency = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 const stageLabels: Record<RenderStage, string> = {
   loading_product: "Đang tải bản chụp sản phẩm",
@@ -58,12 +59,41 @@ export function VideoStudio() {
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [studio, dispatch] = useReducer(studioReducer, initialStudioState);
   const operationController = useRef(new StudioOperationController());
   const { selectedId, desk } = studio;
 
-  const loadProducts = useCallback((pageToLoad: number, signal?: AbortSignal) => {
-    return fetch(`/api/products?page=${pageToLoad}&pageSize=${PAGE_SIZE}`, signal ? { signal } : undefined)
+  const searchRef = useRef(search);
+  searchRef.current = search;
+  const brandRef = useRef(selectedBrand);
+  brandRef.current = selectedBrand;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const loadProducts = useCallback((
+    pageToLoad: number,
+    signal?: AbortSignal,
+    currentSearch?: string,
+    currentBrand?: string | null,
+  ) => {
+    const brand = currentBrand !== undefined ? currentBrand : brandRef.current;
+    const s = currentSearch !== undefined ? currentSearch : searchRef.current;
+    let url = `/api/products?page=${pageToLoad}&pageSize=${PAGE_SIZE}`;
+    if (brand) {
+      url += `&brand=${encodeURIComponent(brand)}`;
+    }
+    if (s && s.trim()) {
+      url += `&search=${encodeURIComponent(s.trim())}`;
+    }
+    return fetch(url, signal ? { signal } : undefined)
       .then(async (response) => {
         if (!response.ok) throw new Error("catalog unavailable");
         const payload = (await readJsonBody(response)) as ProductsResponse | null;
@@ -88,20 +118,33 @@ export function VideoStudio() {
 
   const reloadProducts = useCallback(() => {
     setCatalogState("loading");
-    void loadProducts(page);
-  }, [loadProducts, page]);
+    void loadProducts(page, undefined, debouncedSearch, selectedBrand);
+  }, [loadProducts, page, debouncedSearch, selectedBrand]);
 
   const goToPage = useCallback((nextPage: number) => {
     if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
     setCatalogState("loading");
-    void loadProducts(nextPage);
-  }, [loadProducts, page, totalPages]);
+    void loadProducts(nextPage, undefined, debouncedSearch, selectedBrand);
+  }, [loadProducts, page, totalPages, debouncedSearch, selectedBrand]);
+
+  const handleBrandClick = useCallback((brand: string | null) => {
+    const nextBrand = brand === null ? null : selectedBrand === brand ? null : brand;
+    if (nextBrand === selectedBrand) {
+      if (page !== 1) {
+        setCatalogState("loading");
+        void loadProducts(1, undefined, debouncedSearch, nextBrand);
+      }
+      return;
+    }
+    setSelectedBrand(nextBrand);
+  }, [selectedBrand, page, loadProducts, debouncedSearch]);
 
   useEffect(() => {
+    setCatalogState("loading");
     const controller = new AbortController();
-    void loadProducts(1, controller.signal);
+    void loadProducts(1, controller.signal, debouncedSearch, selectedBrand);
     return () => controller.abort();
-  }, [loadProducts]);
+  }, [debouncedSearch, selectedBrand, loadProducts]);
 
   useEffect(() => {
     const operations = operationController.current;
@@ -216,16 +259,66 @@ export function VideoStudio() {
       <div className="production-desk">
         <section className="desk-panel catalog-panel" aria-labelledby="catalog-title">
           <div className="panel-heading"><div><p className="panel-index">01</p><h2 id="catalog-title">Sản phẩm</h2></div>{catalogState === "ready" && <span>{totalCount} lựa chọn</span>}</div>
+          <div className="catalog-controls">
+            <input
+              type="search"
+              className="catalog-search-input"
+              placeholder="Tìm theo tên máy, mã SKU..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              disabled={desk.status === "creating"}
+              aria-label="Tìm theo tên máy, mã SKU"
+            />
+            <div className="brand-pills" role="toolbar" aria-label="Lọc theo thương hiệu">
+              <button
+                type="button"
+                className={selectedBrand === null ? "brand-pill brand-pill--active" : "brand-pill"}
+                onClick={() => handleBrandClick(null)}
+                aria-pressed={selectedBrand === null}
+                disabled={desk.status === "creating"}
+              >
+                Tất cả
+              </button>
+              {BRANDS.map((brand) => {
+                const active = selectedBrand === brand;
+                return (
+                  <button
+                    key={brand}
+                    type="button"
+                    className={active ? "brand-pill brand-pill--active" : "brand-pill"}
+                    onClick={() => handleBrandClick(brand)}
+                    aria-pressed={active}
+                    disabled={desk.status === "creating"}
+                  >
+                    {brand}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           {catalogState === "loading" && <p className="state-note" role="status">Đang đọc danh mục sản phẩm…</p>}
           {catalogState === "error" && <div className="state-note state-note--error" role="alert"><p>Không thể tải danh mục.</p><button className="text-action" type="button" onClick={reloadProducts}>Tải lại</button></div>}
           {catalogState === "empty" && <p className="state-note">Chưa có laptop đủ dữ liệu để sản xuất.</p>}
           {catalogState === "ready" && <><div className="product-list" aria-label="Danh sách sản phẩm">
             {products.map((product) => {
               const selected = product.id === selectedId;
-              return <button className="product-row" data-selected={selected || undefined} aria-pressed={selected} disabled={desk.status === "creating"} key={product.id} type="button" onClick={() => dispatch({ type: "select", productId: product.id })}>
+              const meta = [product.brand, product.sku].filter(Boolean).join(" · ");
+              const formattedPrice = currency.format(product.priceVnd ?? 0);
+              const ariaLabel = `${product.name}${meta ? ` · ${meta}` : ""}${formattedPrice ? ` · ${formattedPrice}` : ""}`;
+              return <button
+                className="product-row"
+                data-selected={selected || undefined}
+                aria-pressed={selected}
+                aria-label={ariaLabel}
+                title={product.name}
+                disabled={desk.status === "creating"}
+                key={product.id}
+                type="button"
+                onClick={() => dispatch({ type: "select", productId: product.id })}
+              >
                 <span className="product-row__marker" aria-hidden="true" />
-                <span className="product-row__copy"><strong>{product.name}</strong><small>{[product.brand, product.sku].filter(Boolean).join(" · ") || "Không có mã SKU"}</small></span>
-                <span className="product-row__price">{currency.format(product.priceVnd ?? 0)}</span>
+                <span className="product-row__copy"><strong>{product.name}</strong><small>{meta || "Không có mã SKU"}</small></span>
+                <span className="product-row__price">{formattedPrice}</span>
               </button>;
             })}
           </div><nav className="catalog-pagination" aria-label="Phân trang danh mục">

@@ -16,6 +16,7 @@ export function AppNav() {
             <li key={entry.href}>
               <span aria-disabled="true" className="app-nav__link app-nav__link--disabled">
                 {entry.label}
+                <span className="app-nav__badge">Sắp ra mắt</span>
               </span>
             </li>
           ) : (

@@ -69,4 +69,80 @@ describe("GET /api/products", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: { code: "INVALID_REQUEST" } });
   });
+
+  it("passes brand and search filter to catalog repository when provided", async () => {
+    const calls: unknown[] = [];
+    const route = createProductsRoute({
+      scope,
+      catalog: {
+        async listStudioProducts(receivedScope, pagination, productType, filters) {
+          calls.push([receivedScope, pagination, productType, filters]);
+          return {
+            items: [{
+              id: "b0000000-0000-4000-8000-000000000003",
+              name: "Acer Predator Helios",
+              sku: "PH16",
+              brand: "ACER",
+              priceVnd: 45_000_000,
+              currency: "VND",
+              stockQuantity: 5,
+              collectedAt: null,
+            }],
+            total: 1,
+            page: 1,
+            pageSize: 18,
+            totalPages: 1,
+          };
+        },
+      },
+    });
+
+    const response = await route.GET(new Request(
+      "http://localhost/api/products?page=1&pageSize=18&brand=ACER&search=helios",
+    ));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ total: 1, page: 1, pageSize: 18 });
+    expect(calls).toEqual([
+      [
+        scope,
+        { page: 1, pageSize: 18 },
+        "laptop",
+        { brand: "ACER", search: "helios" },
+      ],
+    ]);
+  });
+
+  it("sanitizes search term without error", async () => {
+    const calls: unknown[] = [];
+    const route = createProductsRoute({
+      scope,
+      catalog: {
+        async listStudioProducts(receivedScope, pagination, productType, filters) {
+          calls.push([receivedScope, pagination, productType, filters]);
+          return {
+            items: [],
+            total: 0,
+            page: 1,
+            pageSize: 18,
+            totalPages: 0,
+          };
+        },
+      },
+    });
+
+    const response = await route.GET(new Request(
+      'http://localhost/api/products?search=%20%20helios%2C%2816%29%5C%25%2A%22pro%22%20%20',
+    ));
+
+    expect(response.status).toBe(200);
+    expect(calls).toEqual([
+      [
+        scope,
+        { page: 1, pageSize: 18 },
+        "laptop",
+        { search: 'helios,(16)\\%*"pro"' },
+      ],
+    ]);
+  });
 });

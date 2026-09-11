@@ -39,7 +39,7 @@ function isOrganizationScope(value: unknown): value is OrganizationScope {
 // 400 "failed to parse filter"). `%` / `*` would act as `ilike` wildcards. Strip
 // all of them so the term can only ever be a literal contains-match fragment
 // (a leading/trailing `"` from an inch spec like `14"` is simply dropped).
-function sanitizePostgrestSearchTerm(term: string): string {
+export function sanitizePostgrestSearchTerm(term: string): string {
   return term.replace(/[,()\\%*"]/g, "").trim();
 }
 
@@ -61,7 +61,8 @@ export class CatalogRepository {
   async listStudioProducts(
     scope: OrganizationScope,
     pagination: CatalogPagination = {},
-    productType: string = "laptop"
+    productType: string = "laptop",
+    filters?: { brand?: string; search?: string }
   ): Promise<Readonly<{
     items: readonly StudioProduct[];
     total: number;
@@ -73,7 +74,7 @@ export class CatalogRepository {
     const pageSize = Math.max(1, Math.min(100, pagination.pageSize ?? 20));
     const offset = (page - 1) * pageSize;
 
-    const { data, count, error } = await this.client
+    let query = this.client
       .from("content_ready_products")
       .select(
         "id, name, sku, brand, price_vnd, currency, stock_quantity, collected_at",
@@ -83,7 +84,20 @@ export class CatalogRepository {
       .eq("product_type", productType)
       .eq("quality", "usable")
       .eq("in_stock", true)
-      .gt("price_vnd", 0)
+      .gt("price_vnd", 0);
+
+    if (filters?.brand) {
+      query = query.ilike("brand", filters.brand);
+    }
+
+    if (filters?.search) {
+      const term = sanitizePostgrestSearchTerm(filters.search);
+      if (term) {
+        query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%`);
+      }
+    }
+
+    const { data, count, error } = await query
       .order("price_vnd", { ascending: false, nullsFirst: false })
       .range(offset, offset + pageSize - 1);
 
