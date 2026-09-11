@@ -1,12 +1,20 @@
 """VieNeu-TTS FastAPI sidecar (v3turbo, fixed server-side voice).
 
 Contract:
-  POST /tts  {"text": "<vietnamese>"} -> 200 audio/mpeg | 400 TEXT_EMPTY/TEXT_TOO_LONG | 503 MODEL_NOT_READY
+  POST /tts  {"text": "<vietnamese>"} -> 200 audio/mpeg | 400 TEXT_EMPTY/TEXT_TOO_LONG | 429 TTS_BUSY | 503 MODEL_NOT_READY
   GET  /health -> {"status": "ok", "mode": "v3turbo", "voice": "<VIENEU_VOICE>"}
+              | 503 {"error": "MODEL_NOT_READY", "load_error": "<...>"}
 
 Inference is serialised behind an asyncio lock (ONNX session not
-concurrency-safe). VieNeu emits 48 kHz; output downsampled to 44.1 kHz
+concurrency-safe). A request arriving while another inference holds the lock
+gets 429 TTS_BUSY (the Node client retries it) instead of queueing behind an
+unbounded wait. VieNeu emits 48 kHz; output downsampled to 44.1 kHz
 mono mp3 here so the whole mix chain runs at one rate.
+
+Timeout budget: the ffmpeg subprocess timeout (TTS_FFMPEG_TIMEOUT_S, 50 s)
+must stay below the Node client's total timeout (ONEVOICE_TTS_TIMEOUT_MS,
+60 s) so the client — not a hung subprocess — owns the deadline.
+MAX_CHARS must match the Node client's maxChars (both default 400).
 """
 
 from __future__ import annotations
@@ -26,6 +34,8 @@ from fastapi.responses import JSONResponse, Response
 MODE = os.environ.get("VIENEU_MODE", "v3turbo")
 VOICE = os.environ.get("VIENEU_VOICE", "")
 MAX_CHARS = int(os.environ.get("TTS_MAX_CHARS", "400"))
+# Must stay below the Node client's total timeout (ONEVOICE_TTS_TIMEOUT_MS).
+FFMPEG_TIMEOUT_S = int(os.environ.get("TTS_FFMPEG_TIMEOUT_S", "50"))
 
 _engine: Any = None
 _ready = False
@@ -67,7 +77,7 @@ def _transcode_to_mp3(wav_path: str, mp3_path: str) -> None:
         ["ffmpeg", "-v", "error", "-y", "-i", wav_path,
          "-ar", "44100", "-ac", "1", "-codec:a", "libmp3lame", "-q:a", "4", mp3_path],
         capture_output=True,
-        timeout=120,
+        timeout=FFMPEG_TIMEOUT_S,
     )
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.decode("utf-8", "replace")[-500:])
@@ -96,6 +106,8 @@ async def tts(request: Request):
         return JSONResponse({"error": "TEXT_TOO_LONG"}, status_code=400)
     if not _ready or _engine is None:
         return JSONResponse({"error": "MODEL_NOT_READY"}, status_code=503)
+    if _lock.locked():
+        return JSONResponse({"error": "TTS_BUSY"}, status_code=429)
     async with _lock:
         try:
             mp3 = await asyncio.to_thread(_synthesize_mp3, text)
@@ -107,5 +119,8 @@ async def tts(request: Request):
 @app.get("/health")
 def health():
     if not _ready or _engine is None:
-        return JSONResponse({"error": "MODEL_NOT_READY"}, status_code=503)
+        body: dict[str, str] = {"error": "MODEL_NOT_READY"}
+        if _load_error is not None:
+            body["load_error"] = _load_error
+        return JSONResponse(body, status_code=503)
     return {"status": "ok", "mode": MODE, "voice": VOICE}

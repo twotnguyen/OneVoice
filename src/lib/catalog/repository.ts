@@ -18,6 +18,21 @@ import type {
 
 const MAX_PRODUCT_FACTS = 8;
 
+const ALLOWED_PRODUCT_SORT_FIELDS: ReadonlySet<string> = new Set([
+  "price_vnd",
+  "stock_quantity",
+  "created_at",
+  "name",
+]);
+
+function isOrganizationScope(value: unknown): value is OrganizationScope {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { organizationId?: unknown }).organizationId === "string"
+  );
+}
+
 // PostgREST parses `or=(a,b)` filter lists structurally: an unescaped comma,
 // parenthesis, backslash or double quote in an interpolated value breaks out of
 // the intended expression and injects arbitrary filters (a bare `"` also yields a
@@ -45,7 +60,8 @@ export class CatalogRepository {
 
   async listStudioProducts(
     scope: OrganizationScope,
-    pagination: CatalogPagination = {}
+    pagination: CatalogPagination = {},
+    productType: string = "laptop"
   ): Promise<Readonly<{
     items: readonly StudioProduct[];
     total: number;
@@ -64,7 +80,7 @@ export class CatalogRepository {
         { count: "exact" }
       )
       .eq("organization_id", scope.organizationId)
-      .eq("product_type", "laptop")
+      .eq("product_type", productType)
       .eq("quality", "usable")
       .eq("in_stock", true)
       .gt("price_vnd", 0)
@@ -104,7 +120,8 @@ export class CatalogRepository {
 
   async getProductSnapshot(
     scope: OrganizationScope,
-    productId: string
+    productId: string,
+    productType: string = "laptop"
   ): Promise<ProductSnapshot | null> {
     const { data, error } = await this.client
       .from("product_content_context")
@@ -113,7 +130,7 @@ export class CatalogRepository {
       )
       .eq("product_id", productId)
       .eq("organization_id", scope.organizationId)
-      .eq("product_type", "laptop")
+      .eq("product_type", productType)
       .eq("quality", "usable")
       .eq("in_stock", true)
       .maybeSingle();
@@ -126,7 +143,7 @@ export class CatalogRepository {
       !data?.name ||
       !data.current_price ||
       data.current_price <= 0 ||
-      data.product_type !== "laptop" ||
+      data.product_type !== productType ||
       data.quality !== "usable" ||
       data.in_stock !== true
     ) {
@@ -203,7 +220,7 @@ export class CatalogRepository {
     sort: CatalogQuerySort = {},
     pagination: CatalogPagination = {}
   ): Promise<PaginatedResult<Database["public"]["Tables"]["products"]["Row"]>> {
-    const page = Math.max(1, pagination.page ?? 1);
+    const page = Math.min(100, Math.max(1, pagination.page ?? 1));
     const pageSize = Math.max(1, Math.min(100, pagination.pageSize ?? 20));
     const offset = (page - 1) * pageSize;
 
@@ -245,7 +262,10 @@ export class CatalogRepository {
       query = query.lte("price_vnd", filters.maxPrice);
     }
 
-    const sortField = sort.field ?? "created_at";
+    const requestedSortField = sort.field ?? "created_at";
+    const sortField = ALLOWED_PRODUCT_SORT_FIELDS.has(requestedSortField)
+      ? requestedSortField
+      : "created_at";
     const ascending = sort.direction === "asc";
     query = query.order(sortField, { ascending, nullsFirst: false });
 
@@ -266,14 +286,41 @@ export class CatalogRepository {
     };
   }
 
-  async getProductDetail(id: string): Promise<ProductDetail | null> {
-    const { data: product, error: prodErr } = await this.client
-      .from("products")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
+  async getProductDetail(
+    scope: OrganizationScope,
+    id: string
+  ): Promise<ProductDetail | null>;
+  async getProductDetail(
+    id: string,
+    scope?: OrganizationScope
+  ): Promise<ProductDetail | null>;
+  async getProductDetail(
+    scopeOrId: OrganizationScope | string,
+    idOrScope?: string | OrganizationScope
+  ): Promise<ProductDetail | null> {
+    let scope: OrganizationScope | undefined;
+    let id: string;
+    if (isOrganizationScope(scopeOrId) && typeof idOrScope === "string") {
+      scope = scopeOrId;
+      id = idOrScope;
+    } else if (typeof scopeOrId === "string") {
+      id = scopeOrId;
+      scope = isOrganizationScope(idOrScope) ? idOrScope : undefined;
+    } else {
+      return null;
+    }
+
+    let productQuery = this.client.from("products").select("*").eq("id", id);
+    if (scope) {
+      productQuery = productQuery.eq("organization_id", scope.organizationId);
+    }
+    const { data: product, error: prodErr } = await productQuery.maybeSingle();
 
     if (prodErr || !product) {
+      return null;
+    }
+
+    if (scope && product.organization_id !== scope.organizationId) {
       return null;
     }
 
@@ -376,16 +423,46 @@ export class CatalogRepository {
   }
 
   async getContentReadyProducts(
-    pagination: CatalogPagination = {}
+    scope: OrganizationScope,
+    pagination?: CatalogPagination
+  ): Promise<PaginatedResult<Database["public"]["Views"]["content_ready_products"]["Row"]>>;
+  async getContentReadyProducts(
+    pagination?: CatalogPagination
+  ): Promise<PaginatedResult<Database["public"]["Views"]["content_ready_products"]["Row"]>>;
+  async getContentReadyProducts(
+    scopeOrPagination?: OrganizationScope | CatalogPagination,
+    paginationOrScope?: CatalogPagination | OrganizationScope
   ): Promise<PaginatedResult<Database["public"]["Views"]["content_ready_products"]["Row"]>> {
+    let scope: OrganizationScope | undefined;
+    let pagination: CatalogPagination = {};
+    if (isOrganizationScope(scopeOrPagination)) {
+      scope = scopeOrPagination;
+      pagination = isOrganizationScope(paginationOrScope)
+        ? {}
+        : (paginationOrScope ?? {});
+    } else {
+      pagination = scopeOrPagination ?? {};
+      scope = isOrganizationScope(paginationOrScope)
+        ? paginationOrScope
+        : undefined;
+    }
     const page = Math.max(1, pagination.page ?? 1);
     const pageSize = Math.max(1, Math.min(100, pagination.pageSize ?? 20));
     const offset = (page - 1) * pageSize;
 
-    const { data, count, error } = await this.client
+    let contentReadyQuery = this.client
       .from("content_ready_products")
-      .select("*", { count: "exact" })
-      .range(offset, offset + pageSize - 1);
+      .select("*", { count: "exact" });
+    if (scope) {
+      contentReadyQuery = contentReadyQuery.eq(
+        "organization_id",
+        scope.organizationId
+      );
+    }
+    const { data, count, error } = await contentReadyQuery.range(
+      offset,
+      offset + pageSize - 1
+    );
 
     if (error) {
       throw new Error(`Failed to get content-ready products: ${error.message}`);
@@ -401,19 +478,27 @@ export class CatalogRepository {
     };
   }
 
-  async getRandomContentReadyProduct(): Promise<Database["public"]["Views"]["content_ready_products"]["Row"] | null> {
-    const { count, error: countErr } = await this.client
+  async getRandomContentReadyProduct(
+    scope?: OrganizationScope
+  ): Promise<Database["public"]["Views"]["content_ready_products"]["Row"] | null> {
+    let countQuery = this.client
       .from("content_ready_products")
       .select("*", { count: "exact", head: true });
+    if (scope) {
+      countQuery = countQuery.eq("organization_id", scope.organizationId);
+    }
+    const { count, error: countErr } = await countQuery;
 
     if (countErr || !count || count === 0) {
       return null;
     }
 
     const randomIndex = Math.floor(Math.random() * count);
-    const { data, error } = await this.client
-      .from("content_ready_products")
-      .select("*")
+    let dataQuery = this.client.from("content_ready_products").select("*");
+    if (scope) {
+      dataQuery = dataQuery.eq("organization_id", scope.organizationId);
+    }
+    const { data, error } = await dataQuery
       .range(randomIndex, randomIndex)
       .limit(1);
 
@@ -424,14 +509,49 @@ export class CatalogRepository {
     return data[0];
   }
 
-  async getProductContentContext(productId: string): Promise<ProductContentContext | null> {
-    const { data, error } = await this.client
+  async getProductContentContext(
+    scope: OrganizationScope,
+    productId: string
+  ): Promise<ProductContentContext | null>;
+  async getProductContentContext(
+    productId: string,
+    scope?: OrganizationScope
+  ): Promise<ProductContentContext | null>;
+  async getProductContentContext(
+    scopeOrProductId: OrganizationScope | string,
+    productIdOrScope?: string | OrganizationScope
+  ): Promise<ProductContentContext | null> {
+    let scope: OrganizationScope | undefined;
+    let productId: string;
+    if (
+      isOrganizationScope(scopeOrProductId) &&
+      typeof productIdOrScope === "string"
+    ) {
+      scope = scopeOrProductId;
+      productId = productIdOrScope;
+    } else if (typeof scopeOrProductId === "string") {
+      productId = scopeOrProductId;
+      scope = isOrganizationScope(productIdOrScope)
+        ? productIdOrScope
+        : undefined;
+    } else {
+      return null;
+    }
+
+    let contextQuery = this.client
       .from("product_content_context")
       .select("*")
-      .eq("product_id", productId)
-      .maybeSingle();
+      .eq("product_id", productId);
+    if (scope) {
+      contextQuery = contextQuery.eq("organization_id", scope.organizationId);
+    }
+    const { data, error } = await contextQuery.maybeSingle();
 
     if (error || !data) {
+      return null;
+    }
+
+    if (scope && data.organization_id !== scope.organizationId) {
       return null;
     }
 

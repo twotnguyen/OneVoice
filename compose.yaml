@@ -9,13 +9,14 @@ services:
       dockerfile: Dockerfile
     env_file:
       - path: .env
-        required: false
+        required: true
     environment:
       NODE_ENV: production
       ONEVOICE_MEDIA_ROOT: /app/renders
       FFMPEG_PATH: ffmpeg
       FFPROBE_PATH: ffprobe
       ONEVOICE_FONT_PATH: /usr/share/fonts/dejavu/DejaVuSans.ttf
+      ONEVOICE_TTS_ENDPOINT: http://tts:8123
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
@@ -32,5 +33,64 @@ services:
       retries: 12
       start_period: 10s
 
+  # Render worker riêng: poll -> claim -> render -> release, một job tại một
+  # thời điểm. Chạy cùng image với app (dist/worker.js được build trong
+  # Dockerfile). Không bind port, không healthcheck HTTP — tiến trình loop
+  # không bao giờ crash, job dở được recoverStale nhặt lại sau restart.
+  # Lưu ý: không depends_on tts vì tts nằm sau profile; khi profile tts chưa
+  # bật, các job template-renderer cần TTS sẽ fail rõ ràng thay vì treo.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - node
+      - dist/worker.js
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      NODE_ENV: production
+      ONEVOICE_MEDIA_ROOT: /app/renders
+      FFMPEG_PATH: ffmpeg
+      FFPROBE_PATH: ffprobe
+      ONEVOICE_FONT_PATH: /usr/share/fonts/dejavu/DejaVuSans.ttf
+      ONEVOICE_TTS_ENDPOINT: http://tts:8123
+    volumes:
+      - onevoice-renders:/app/renders
+    restart: unless-stopped
+
+  # VieNeu-TTS sidecar. Nặng (model weights trong HF_HOME) nên nằm sau
+  # profile `tts`: `docker compose --profile tts up -d`. Healthcheck trỏ
+  # GET /health, trả 503 cho tới khi model load xong (MODEL_NOT_READY) nên
+  # start_period để rộng.
+  tts:
+    build:
+      context: ./services/tts
+      dockerfile: Dockerfile
+    profiles:
+      - tts
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      HF_HOME: /models
+      HF_HUB_OFFLINE: "1"
+      TTS_PORT: "8123"
+    ports:
+      - "127.0.0.1:8123:8123"
+    volumes:
+      - tts-models:/models
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8123/health')"
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+
 volumes:
   onevoice-renders:
+  tts-models:

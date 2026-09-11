@@ -179,12 +179,23 @@ export interface ImportSummary {
   validationErrors: number;
   insertedCount: number;
   updatedCount: number;
+  skippedNoProductId: number;
+  deletedStaleImages: number;
+  deletedStaleVariants: number;
   qualities: Record<string, number>;
   inStockCount: number;
   outOfStockCount: number;
   usableInStockCount: number;
   dryRun: boolean;
   durationMs: number;
+}
+
+export interface BatchResult {
+  inserted: number;
+  updated: number;
+  skippedNoProductId: number;
+  deletedStaleImages: number;
+  deletedStaleVariants: number;
 }
 
 export async function importProducts(options: ImportOptions): Promise<ImportSummary> {
@@ -251,6 +262,11 @@ export async function importProducts(options: ImportOptions): Promise<ImportSumm
 
   let currentBatch: RawProduct[] = [];
   let batchIndex = 0;
+  let insertedCount = 0;
+  let updatedCount = 0;
+  let skippedNoProductId = 0;
+  let deletedStaleImages = 0;
+  let deletedStaleVariants = 0;
 
   for await (const line of rl) {
     lineNum++;
@@ -292,7 +308,12 @@ export async function importProducts(options: ImportOptions): Promise<ImportSumm
     if (currentBatch.length >= batchSize) {
       batchIndex++;
       if (!dryRun && client) {
-        await processBatch(client, organizationId, currentBatch, batchIndex);
+        const result = await processBatch(client, organizationId, currentBatch, batchIndex);
+        insertedCount += result.inserted;
+        updatedCount += result.updated;
+        skippedNoProductId += result.skippedNoProductId;
+        deletedStaleImages += result.deletedStaleImages;
+        deletedStaleVariants += result.deletedStaleVariants;
       }
       console.log(
         `[BATCH ${batchIndex}] Processed ${validCount} items (Batch size: ${currentBatch.length})${
@@ -307,7 +328,12 @@ export async function importProducts(options: ImportOptions): Promise<ImportSumm
   if (currentBatch.length > 0) {
     batchIndex++;
     if (!dryRun && client) {
-      await processBatch(client, organizationId, currentBatch, batchIndex);
+      const result = await processBatch(client, organizationId, currentBatch, batchIndex);
+      insertedCount += result.inserted;
+      updatedCount += result.updated;
+      skippedNoProductId += result.skippedNoProductId;
+      deletedStaleImages += result.deletedStaleImages;
+      deletedStaleVariants += result.deletedStaleVariants;
     }
     console.log(
       `[BATCH ${batchIndex}] Processed ${validCount} items (Batch size: ${currentBatch.length})${
@@ -339,8 +365,11 @@ export async function importProducts(options: ImportOptions): Promise<ImportSumm
     totalLines: lineNum,
     validRecords: validCount,
     validationErrors: validationErrorCount,
-    insertedCount: validCount,
-    updatedCount: 0,
+    insertedCount,
+    updatedCount,
+    skippedNoProductId,
+    deletedStaleImages,
+    deletedStaleVariants,
     qualities,
     inStockCount,
     outOfStockCount,
@@ -355,6 +384,9 @@ export async function importProducts(options: ImportOptions): Promise<ImportSumm
   console.log(`- Total lines read: ${lineNum}`);
   console.log(`- Valid records: ${validCount}`);
   console.log(`- Validation errors: ${validationErrorCount}`);
+  console.log(`- Inserted: ${insertedCount} | Updated: ${updatedCount}`);
+  console.log(`- Skipped (no product id after upsert): ${skippedNoProductId}`);
+  console.log(`- Deleted stale images: ${deletedStaleImages} | Deleted stale variants: ${deletedStaleVariants}`);
   console.log(`- Qualities:`, qualities);
   console.log(`- InStock: ${inStockCount} | OutOfStock: ${outOfStockCount}`);
   console.log(`- usable + InStock: ${usableInStockCount}`);
@@ -368,7 +400,7 @@ async function processBatch(
   organizationId: string,
   batch: RawProduct[],
   batchIndex: number
-): Promise<void> {
+): Promise<BatchResult> {
   // A. Collect and Upsert Categories
   const categoryMap = new Map<string, { name: string; slug: string | null; source_category_id: string | null }>();
   for (const doc of batch) {
@@ -490,6 +522,25 @@ async function processBatch(
     );
   }
 
+  // C.0 Pre-select existing canonical_urls để tách inserted vs updated.
+  // Conflict target của products là (organization_id, canonical_url).
+  const batchCanonicals = [...new Set(batch.map((doc) => doc.canonicalUrl))];
+  const preExistingCanonicals = new Set<string>();
+  await withRetry(
+    async () => {
+      const { data, error } = await client
+        .from("products")
+        .select("canonical_url")
+        .eq("organization_id", organizationId)
+        .in("canonical_url", batchCanonicals);
+      if (error) throw new Error(error.message);
+      for (const row of data ?? []) {
+        preExistingCanonicals.add(row.canonical_url);
+      }
+    },
+    `Select existing canonical_urls for batch ${batchIndex}`
+  );
+
   // C. Prepare Products
   const productRows = batch.map((doc) => {
     const inStock = doc.offer?.availability === "https://schema.org/InStock";
@@ -554,12 +605,25 @@ async function processBatch(
   const variantRows: Array<Database["public"]["Tables"]["product_variants"]["Insert"]> = [];
   const prodCatRows: Array<Database["public"]["Tables"]["product_categories"]["Insert"]> = [];
   const prodPromoRows: Array<Database["public"]["Tables"]["product_promotions"]["Insert"]> = [];
+  // Nguồn kỳ vọng cho mỗi product: dùng để xóa stale rows không còn trong source.
+  const desiredImageUrls = new Map<string, Set<string>>();
+  const desiredVariantIds = new Map<string, Set<string>>();
+  let skippedNoProductId = 0;
 
   for (const doc of batch) {
     const productId = productIdByCanonical.get(doc.canonicalUrl);
-    if (!productId) continue;
+    if (!productId) {
+      skippedNoProductId++;
+      console.warn(
+        `[BATCH ${batchIndex}] Skipped relations for canonical_url without product id (${doc.canonicalUrl.slice(0, 120)})`
+      );
+      continue;
+    }
 
-    // Images
+    // Images (luôn ghi nhận tập kỳ vọng, kể cả [] = source xác nhận không còn ảnh nào)
+    const desiredImages = desiredImageUrls.get(productId) ?? new Set<string>();
+    for (const url of doc.imageUrls ?? []) desiredImages.add(url);
+    desiredImageUrls.set(productId, desiredImages);
     if (doc.imageUrls && doc.imageUrls.length > 0) {
       doc.imageUrls.forEach((url, idx) => {
         imageRows.push({
@@ -571,12 +635,16 @@ async function processBatch(
       });
     }
 
-    // Variants
+    // Variants (luôn ghi nhận tập kỳ vọng, kể cả [] = source xác nhận không còn variant nào)
+    const desiredVariants = desiredVariantIds.get(productId) ?? new Set<string>();
+    for (const [vIdx, v] of (doc.variants ?? []).entries()) desiredVariants.add(v.id ?? `var-${vIdx}`);
+    desiredVariantIds.set(productId, desiredVariants);
     if (doc.variants && doc.variants.length > 0) {
       doc.variants.forEach((v, vIdx) => {
+        const sourceVariantId = v.id ?? `var-${vIdx}`;
         variantRows.push({
           product_id: productId,
-          source_variant_id: v.id ?? `var-${vIdx}`,
+          source_variant_id: sourceVariantId,
           sku: v.sku ?? null,
           name: v.name ?? doc.name,
           price_vnd: v.price != null ? Math.round(v.price) : null,
@@ -667,16 +735,173 @@ async function processBatch(
       `Upsert ${prodPromoRows.length} product-promotions for batch ${batchIndex}`
     );
   }
+
+  // E. Xóa stale images/variants: rows trong DB nhưng không còn trong source batch này.
+  // Đọc existing theo từng batch (1 query/bảng, phân trang range), so trong JS rồi
+  // xóa đúng các rows stale theo từng product — tránh NOT IN với URL chứa ký tự đặc biệt.
+  const productIds = [...productIdByCanonical.values()];
+  const deleted = await deleteStaleRelations(client, productIds, desiredImageUrls, desiredVariantIds, batchIndex);
+
+  // inserted = canonical chưa tồn tại trước upsert; updated = đã tồn tại.
+  // Đếm theo distinct canonical trong batch (không double-count trùng lặp nội batch).
+  const distinctBatchCanonicals = new Set(batch.map((doc) => doc.canonicalUrl));
+  let updated = 0;
+  for (const canonical of distinctBatchCanonicals) {
+    if (preExistingCanonicals.has(canonical)) updated++;
+  }
+  const inserted = distinctBatchCanonicals.size - updated;
+
+  return {
+    inserted,
+    updated,
+    skippedNoProductId,
+    deletedStaleImages: deleted.deletedImages,
+    deletedStaleVariants: deleted.deletedVariants,
+  };
+}
+
+/** Phân trang select theo range (Supabase giới hạn ~1000 rows/query mặc định). */
+async function selectAllPaged<T>(
+  client: SupabaseClient<Database>,
+  table: "product_images" | "product_variants",
+  productIds: string[],
+  columns: string,
+  batchIndex: number
+): Promise<T[]> {
+  const rows: T[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < productIds.length; offset += pageSize) {
+    const chunk = productIds.slice(offset, offset + pageSize);
+    let page = 0;
+    while (true) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      const result = await withRetry(
+        async () => {
+          if (table === "product_images") {
+            return await client.from("product_images").select(columns).in("product_id", chunk).range(from, to);
+          }
+          return await client.from("product_variants").select(columns).in("product_id", chunk).range(from, to);
+        },
+        `Select existing ${table} for batch ${batchIndex}`
+      );
+      const data = (result.data ?? []) as unknown as T[];
+      rows.push(...data);
+      if (result.error) throw new Error(result.error.message);
+      if (data.length < pageSize) break;
+      page++;
+    }
+  }
+  return rows;
+}
+
+async function deleteStaleRelations(
+  client: SupabaseClient<Database>,
+  productIds: string[],
+  desiredImageUrls: Map<string, Set<string>>,
+  desiredVariantIds: Map<string, Set<string>>,
+  batchIndex: number
+): Promise<{ deletedImages: number; deletedVariants: number }> {
+  let deletedImages = 0;
+  let deletedVariants = 0;
+  if (productIds.length === 0) return { deletedImages, deletedVariants };
+
+  const existingImages = await selectAllPaged<{ product_id: string; source_url: string }>(
+    client, "product_images", productIds, "product_id,source_url", batchIndex
+  );
+  const staleImagesByProduct = new Map<string, string[]>();
+  for (const row of existingImages) {
+    // Mọi product trong batch đều có tập kỳ vọng (kể cả rỗng) — không còn thì xóa.
+    const desired = desiredImageUrls.get(row.product_id) ?? new Set<string>();
+    if (!desired.has(row.source_url)) {
+      const list = staleImagesByProduct.get(row.product_id) ?? [];
+      list.push(row.source_url);
+      staleImagesByProduct.set(row.product_id, list);
+    }
+  }
+  for (const [productId, staleUrls] of staleImagesByProduct) {
+    const deleted = await withRetry(
+      async () => {
+        const { data, error } = await client
+          .from("product_images")
+          .delete({ count: "exact" })
+          .eq("product_id", productId)
+          .in("source_url", staleUrls)
+          .select("product_id");
+        if (error) throw new Error(error.message);
+        return data?.length ?? 0;
+      },
+      `Delete ${staleUrls.length} stale images for batch ${batchIndex}`
+    );
+    deletedImages += deleted;
+  }
+
+  const existingVariants = await selectAllPaged<{ product_id: string; source_variant_id: string | null }>(
+    client, "product_variants", productIds, "product_id,source_variant_id", batchIndex
+  );
+  const staleVariantsByProduct = new Map<string, Array<string | null>>();
+  for (const row of existingVariants) {
+    const desired = desiredVariantIds.get(row.product_id) ?? new Set<string>();
+    if (row.source_variant_id === null || !desired.has(row.source_variant_id)) {
+      const list = staleVariantsByProduct.get(row.product_id) ?? [];
+      list.push(row.source_variant_id);
+      staleVariantsByProduct.set(row.product_id, list);
+    }
+  }
+  for (const [productId, staleIds] of staleVariantsByProduct) {
+    const nonNull = staleIds.filter((id): id is string => id !== null);
+    const hasNull = staleIds.length !== nonNull.length;
+    const deleted = await withRetry(
+      async () => {
+        let query = client.from("product_variants").delete({ count: "exact" }).eq("product_id", productId);
+        if (nonNull.length > 0 && hasNull) {
+          query = query.or(
+            `source_variant_id.in.(${nonNull.map((id) => `"${id.replace(/"/g, "")}"`).join(",")}),source_variant_id.is.null`
+          );
+        } else if (nonNull.length > 0) {
+          query = query.in("source_variant_id", nonNull);
+        } else {
+          query = query.is("source_variant_id", null);
+        }
+        const { data, error } = await query.select("product_id");
+        if (error) throw new Error(error.message);
+        return data?.length ?? 0;
+      },
+      `Delete ${staleIds.length} stale variants for batch ${batchIndex}`
+    );
+    deletedVariants += deleted;
+  }
+
+  if (deletedImages > 0 || deletedVariants > 0) {
+    console.log(
+      `[BATCH ${batchIndex}] Deleted stale rows: ${deletedImages} images, ${deletedVariants} variants`
+    );
+  }
+  return { deletedImages, deletedVariants };
 }
 
 // CLI entry point
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
-  const sourceFile = path.resolve(
+  const DEFAULT_SOURCE_FILE = path.resolve(
     process.cwd(),
     "data/normalized/products-2026-08-31T05-34-42-944Z.jsonl"
   );
+  const fileFlagIndex = args.findIndex((arg) => arg === "--file" || arg.startsWith("--file="));
+  let fileFlagValue: string | null = null;
+  if (fileFlagIndex !== -1) {
+    const flag = args[fileFlagIndex];
+    fileFlagValue = flag.includes("=") ? flag.slice("--file=".length) : args[fileFlagIndex + 1] ?? null;
+  }
+  if (fileFlagValue === null || fileFlagValue.trim() === "" || fileFlagValue.startsWith("--")) {
+    if (fileFlagIndex !== -1) {
+      console.error("Usage: data:import [--dry-run] [--file <path-to-jsonl>]");
+      process.exit(1);
+    }
+  }
+  const sourceFile = fileFlagValue ? path.resolve(process.cwd(), fileFlagValue) : DEFAULT_SOURCE_FILE;
+  const isDefaultFile = path.resolve(sourceFile) === DEFAULT_SOURCE_FILE;
 
   console.log(`Starting OneVoice Product Catalog Importer...`);
   console.log(`- Target File: ${sourceFile}`);
@@ -684,17 +909,25 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   importProducts({ sourceFile, dryRun })
     .then((summary) => {
-      if (summary.validationErrors > 0 || summary.validRecords !== 4109) {
+      // Gate 4109 records chỉ áp dụng cho file snapshot mặc định; file custom
+      // (qua --file) chỉ cần import được > 0 record và không có lỗi validation.
+      const countGate = isDefaultFile ? summary.validRecords !== 4109 : summary.validRecords === 0;
+      if (summary.validationErrors > 0 || countGate) {
         console.error(
-          `[FAIL] Importer did not match validation criteria! Valid: ${summary.validRecords}/4109, Errors: ${summary.validationErrors}`
+          `[FAIL] Importer did not match validation criteria! Valid: ${summary.validRecords}${
+            isDefaultFile ? "/4109" : ""
+          }, Errors: ${summary.validationErrors}`
         );
         process.exit(1);
       }
       console.log(`[SUCCESS] Importer finished successfully.`);
+      console.log(`- Inserted: ${summary.insertedCount} | Updated: ${summary.updatedCount}`);
+      console.log(`- Skipped (no product id): ${summary.skippedNoProductId}`);
+      console.log(`- Deleted stale: ${summary.deletedStaleImages} images, ${summary.deletedStaleVariants} variants`);
       process.exit(0);
     })
     .catch((err) => {
-      console.error(`[FATAL] Importer failed: ${err.message}`);
+      console.error(`[FATAL] Importer failed: ${(err as Error).message}`);
       process.exit(1);
     });
 }

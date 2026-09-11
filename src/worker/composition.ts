@@ -92,16 +92,14 @@ export function composeWorker(
           generateVideoScript(provider, snapshot, scriptOptions);
   // Terminal-failure effect for recoverStale (N12/M1): writes a failed
   // WORKER_LOST manifest so the job is visible on the wire. The queue stays
-  // storage-only and never imports the library.
-  // NOTE: library.save rejects WORKER_LOST until T9 widens errorSchema — the
-  // rejection propagates to the caller; T9 flips this path green. The cast
-  // keeps this wiring compilable without widening the schema here (T9 owns it).
+  // storage-only and never imports the library. WORKER_LOST is a member of
+  // errorSchema (rendering_video), so no cast is needed.
   const onJobLost = async (renderId: string): Promise<void> => {
     await library.save(renderId, {
       renderId,
       status: "failed",
       error: { stage: "rendering_video", code: "WORKER_LOST" },
-    } as unknown as Parameters<typeof library.save>[1]);
+    });
   };
   const queue = new FileJobQueue({ root: paths.queueRoot, onJobLost });
   return {

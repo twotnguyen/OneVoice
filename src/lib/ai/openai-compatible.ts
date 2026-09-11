@@ -52,62 +52,139 @@ function getResponseText(response: z.infer<typeof responseSchema>): string | und
     ?.text;
 }
 
+const MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 150;
+const ERROR_BODY_LIMIT = 300;
+
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || (status >= 500 && status <= 599);
+}
+
+function sanitizeErrorBody(body: string, apiKey: string): string {
+  const collapsed = body.replace(/\s+/g, " ").trim().slice(0, ERROR_BODY_LIMIT);
+  if (!collapsed || !apiKey) return collapsed;
+  return collapsed.split(apiKey).join("[REDACTED]");
+}
+
+async function readErrorDetail(response: Response, apiKey: string): Promise<string> {
+  try {
+    const body = await response.text();
+    return sanitizeErrorBody(body, apiKey);
+  } catch {
+    return "";
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTimeoutError(error: unknown): boolean {
+  if (error instanceof DOMException) return error.name === "TimeoutError" || error.name === "AbortError";
+  if (error instanceof Error) return error.name === "TimeoutError" || error.name === "AbortError";
+  return false;
+}
+
 export class OpenAICompatibleProvider implements AiProvider {
   private readonly responsesUrl: string;
+  private readonly config: OpenAICompatibleConfig;
+  private readonly fetchImplementation: typeof fetch;
 
-  constructor(
-    private readonly config: OpenAICompatibleConfig,
-    private readonly fetchImplementation: typeof fetch = fetch,
-  ) {
+  constructor(config: OpenAICompatibleConfig, fetchImplementation: typeof fetch = fetch) {
+    this.config = config;
+    this.fetchImplementation = fetchImplementation;
     const baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.responsesUrl = baseUrl.endsWith("/responses") ? baseUrl : `${baseUrl}/responses`;
   }
 
   async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
-    const response = await this.fetchImplementation(
-      this.responsesUrl,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
-          "Content-Type": "application/json",
-          "x-session-id": randomUUID(),
-        },
-        body: JSON.stringify({
-          model: input.model ?? this.config.model,
-          input: input.prompt,
-        }),
-        signal: AbortSignal.timeout(input.timeoutMs ?? 30_000),
-      },
-    );
+    const timeoutMs = input.timeoutMs ?? 30_000;
+    const model = input.model ?? this.config.model;
+    let lastDetail = "";
 
-    if (!response.ok) {
-      throw new Error(`AI provider request failed with status ${response.status}`);
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      let response: Response;
+      try {
+        response = await this.fetchImplementation(this.responsesUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.config.apiKey}`,
+            "Content-Type": "application/json",
+            "x-session-id": randomUUID(),
+          },
+          body: JSON.stringify({
+            model,
+            input: input.prompt,
+          }),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+      } catch (error) {
+        if (isTimeoutError(error)) {
+          throw new Error(`AI provider request timed out after ${timeoutMs}ms (TIMEOUT)`, {
+            cause: error,
+          });
+        }
+        throw new Error(
+          `AI provider request failed (HTTP): ${error instanceof Error ? error.message : "network error"}`,
+          { cause: error },
+        );
+      }
+
+      if (!response.ok) {
+        lastDetail = await readErrorDetail(response, this.config.apiKey);
+        const retryable = isRetryableStatus(response.status);
+        if (retryable && attempt < MAX_ATTEMPTS) {
+          await sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+          continue;
+        }
+        throw new Error(`AI provider request failed with status ${response.status} (HTTP)`, {
+          cause: lastDetail || undefined,
+        });
+      }
+
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        throw new Error("AI provider returned invalid response (SCHEMA): body is not JSON", {
+          cause: error,
+        });
+      }
+
+      const parsed = responseSchema.safeParse(payload);
+      if (!parsed.success) {
+        throw new Error("AI provider returned invalid response (SCHEMA): schema mismatch", {
+          cause: parsed.error,
+        });
+      }
+
+      const text = getResponseText(parsed.data);
+      if (!text) throw new Error("AI provider returned no output text");
+
+      const usage = parsed.data.usage
+        ? {
+            ...(parsed.data.usage.input_tokens === undefined
+              ? {}
+              : { inputTokens: parsed.data.usage.input_tokens }),
+            ...(parsed.data.usage.output_tokens === undefined
+              ? {}
+              : { outputTokens: parsed.data.usage.output_tokens }),
+            ...(parsed.data.usage.total_tokens === undefined
+              ? {}
+              : { totalTokens: parsed.data.usage.total_tokens }),
+          }
+        : undefined;
+
+      return {
+        text,
+        model: parsed.data.model ?? this.config.model,
+        ...(parsed.data.id ? { responseId: parsed.data.id } : {}),
+        ...(usage ? { usage } : {}),
+      };
     }
 
-    const result = responseSchema.parse(await response.json());
-    const text = getResponseText(result);
-    if (!text) throw new Error("AI provider returned no output text");
-
-    const usage = result.usage
-      ? {
-          ...(result.usage.input_tokens === undefined
-            ? {}
-            : { inputTokens: result.usage.input_tokens }),
-          ...(result.usage.output_tokens === undefined
-            ? {}
-            : { outputTokens: result.usage.output_tokens }),
-          ...(result.usage.total_tokens === undefined
-            ? {}
-            : { totalTokens: result.usage.total_tokens }),
-        }
-      : undefined;
-
-    return {
-      text,
-      model: result.model ?? this.config.model,
-      ...(result.id ? { responseId: result.id } : {}),
-      ...(usage ? { usage } : {}),
-    };
+    throw new Error("AI provider request failed (HTTP): retries exhausted", {
+      cause: lastDetail || undefined,
+    });
   }
 }

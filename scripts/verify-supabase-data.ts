@@ -35,6 +35,118 @@ const client = createClient<Database>(url, key, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
+const DEFAULT_EXPECTED_PATH = path.resolve(process.cwd(), "data/reports/dataset-summary.json");
+
+function parseExpectedFlag(argv: string[]): string | null {
+  const index = argv.findIndex((arg) => arg === "--expected" || arg.startsWith("--expected="));
+  if (index === -1) return null;
+  const flag = argv[index];
+  return flag.includes("=") ? flag.slice("--expected=".length) : (argv[index + 1] ?? null);
+}
+
+export interface ExpectedCounts {
+  source: string;
+  total: number;
+  usable: number;
+  partial: number;
+  identityOnly: number;
+  inStock: number;
+  outOfStock: number;
+  contentReady: number;
+  missingPrice: number;
+  missingImages: number;
+  negativeStock: number;
+}
+
+const FALLBACK_EXPECTED: ExpectedCounts = {
+  source: "built-in fallback",
+  total: 4109,
+  usable: 3977,
+  partial: 82,
+  identityOnly: 50,
+  inStock: 1506,
+  outOfStock: 2603,
+  contentReady: 1455,
+  missingPrice: 0,
+  missingImages: 0,
+  negativeStock: 0,
+};
+
+function finiteCount(value: unknown): number | null {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(number) && number >= 0 ? number : null;
+}
+
+/**
+ * Đọc kỳ vọng từ data/reports/dataset-summary.json (hoặc file --expected trỏ tới).
+ * contentReady = usable còn hàng (qualityByAvailability.inStock.usable).
+ * File thiếu/sai schema thì fallback về hằng số built-in và cảnh báo rõ.
+ */
+export function loadExpectedCounts(expectedPath: string = DEFAULT_EXPECTED_PATH): ExpectedCounts {
+  try {
+    const raw = fs.readFileSync(expectedPath, "utf8");
+    const summary = JSON.parse(raw) as {
+      rows?: unknown;
+      quality?: { usable?: unknown; partial?: unknown; identity_only?: unknown };
+      qualityByAvailability?: { inStock?: { usable?: unknown } };
+      availability?: { [key: string]: unknown };
+      price?: { missingOrZero?: unknown };
+      issues?: { missingImages?: unknown };
+    };
+    const total = finiteCount(summary.rows);
+    const usable = finiteCount(summary.quality?.usable);
+    const partial = finiteCount(summary.quality?.partial);
+    const identityOnly = finiteCount(summary.quality?.identity_only);
+    const contentReady = finiteCount(summary.qualityByAvailability?.inStock?.usable);
+    const inStock = finiteCount(summary.availability?.["https://schema.org/InStock"]);
+    const outOfStock = finiteCount(summary.availability?.["https://schema.org/OutOfStock"]);
+    const missingPrice = finiteCount(summary.price?.missingOrZero);
+    const missingImages = finiteCount(summary.issues?.missingImages);
+    if (
+      total === null || usable === null || partial === null || identityOnly === null ||
+      contentReady === null || inStock === null || outOfStock === null ||
+      missingPrice === null || missingImages === null
+    ) {
+      throw new Error("dataset-summary schema mismatch");
+    }
+    return {
+      source: expectedPath,
+      total, usable, partial, identityOnly, inStock, outOfStock,
+      contentReady, missingPrice, missingImages, negativeStock: 0,
+    };
+  } catch (error) {
+    console.warn(
+      `[WARN] Cannot load expected counts from ${expectedPath} (${(error as Error).message}); using built-in fallback.`
+    );
+    return { ...FALLBACK_EXPECTED };
+  }
+}
+
+/** Phân trang range để vượt giới hạn ~1000 rows/query của Supabase. */
+async function selectColumnPaged(
+  table: "products" | "product_images",
+  columns: string,
+  pageSize = 1000
+): Promise<Array<Record<string, unknown>>> {
+  const rows: Array<Record<string, unknown>> = [];
+  let page = 0;
+  while (true) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const query =
+      table === "products"
+        ? client.from("products").select(columns).range(from, to)
+        : client.from("product_images").select(columns).range(from, to);
+    const { data, error } = await query;
+    if (error) throw new Error(`Paged select on ${table} failed: ${error.message}`);
+    const batch = (data ?? []) as unknown as Array<Record<string, unknown>>;
+    rows.push(...batch);
+    if (batch.length < pageSize) break;
+    page++;
+  }
+  return rows;
+}
+
 export interface VerificationReport {
   totalProducts: number;
   usableProducts: number;
@@ -57,18 +169,20 @@ export interface VerificationReport {
   failures: string[];
 }
 
-export async function runVerification(): Promise<VerificationReport> {
+export async function runVerification(expected?: ExpectedCounts): Promise<VerificationReport> {
+  const counts = expected ?? loadExpectedCounts();
   const failures: string[] = [];
 
   console.log("=== ONEVOICE CATALOG VERIFICATION ===");
+  console.log(`[INFO] Expected counts source: ${counts.source}`);
 
   // 1. Total Products
   const { count: totalProducts } = await client
     .from("products")
     .select("*", { count: "exact", head: true });
 
-  if (totalProducts !== 4109) {
-    failures.push(`Expected total products to be 4109, got ${totalProducts}`);
+  if (totalProducts !== counts.total) {
+    failures.push(`Expected total products to be ${counts.total}, got ${totalProducts}`);
   }
 
   // 2. Qualities
@@ -77,8 +191,8 @@ export async function runVerification(): Promise<VerificationReport> {
     .select("*", { count: "exact", head: true })
     .eq("quality", "usable");
 
-  if (usableProducts !== 3977) {
-    failures.push(`Expected usable products to be 3977, got ${usableProducts}`);
+  if (usableProducts !== counts.usable) {
+    failures.push(`Expected usable products to be ${counts.usable}, got ${usableProducts}`);
   }
 
   const { count: partialProducts } = await client
@@ -86,8 +200,8 @@ export async function runVerification(): Promise<VerificationReport> {
     .select("*", { count: "exact", head: true })
     .eq("quality", "partial");
 
-  if (partialProducts !== 82) {
-    failures.push(`Expected partial products to be 82, got ${partialProducts}`);
+  if (partialProducts !== counts.partial) {
+    failures.push(`Expected partial products to be ${counts.partial}, got ${partialProducts}`);
   }
 
   const { count: identityOnlyProducts } = await client
@@ -95,8 +209,8 @@ export async function runVerification(): Promise<VerificationReport> {
     .select("*", { count: "exact", head: true })
     .eq("quality", "identity_only");
 
-  if (identityOnlyProducts !== 50) {
-    failures.push(`Expected identity_only products to be 50, got ${identityOnlyProducts}`);
+  if (identityOnlyProducts !== counts.identityOnly) {
+    failures.push(`Expected identity_only products to be ${counts.identityOnly}, got ${identityOnlyProducts}`);
   }
 
   // 3. Stock Status
@@ -105,8 +219,8 @@ export async function runVerification(): Promise<VerificationReport> {
     .select("*", { count: "exact", head: true })
     .eq("in_stock", true);
 
-  if (inStockProducts !== 1506) {
-    failures.push(`Expected InStock products to be 1506, got ${inStockProducts}`);
+  if (inStockProducts !== counts.inStock) {
+    failures.push(`Expected InStock products to be ${counts.inStock}, got ${inStockProducts}`);
   }
 
   const { count: outOfStockProducts } = await client
@@ -114,8 +228,8 @@ export async function runVerification(): Promise<VerificationReport> {
     .select("*", { count: "exact", head: true })
     .eq("in_stock", false);
 
-  if (outOfStockProducts !== 2603) {
-    failures.push(`Expected OutOfStock products to be 2603, got ${outOfStockProducts}`);
+  if (outOfStockProducts !== counts.outOfStock) {
+    failures.push(`Expected OutOfStock products to be ${counts.outOfStock}, got ${outOfStockProducts}`);
   }
 
   // 4. Content Ready View
@@ -123,8 +237,8 @@ export async function runVerification(): Promise<VerificationReport> {
     .from("content_ready_products")
     .select("*", { count: "exact", head: true });
 
-  if (contentReadyProducts !== 1455) {
-    failures.push(`Expected content_ready_products view to have 1455 items, got ${contentReadyProducts}`);
+  if (contentReadyProducts !== counts.contentReady) {
+    failures.push(`Expected content_ready_products view to have ${counts.contentReady} items, got ${contentReadyProducts}`);
   }
 
   // 5. Missing price check (price_vnd is null or <= 0)
@@ -133,8 +247,8 @@ export async function runVerification(): Promise<VerificationReport> {
     .select("*", { count: "exact", head: true })
     .or("price_vnd.is.null,price_vnd.lte.0");
 
-  if (missingPriceProducts !== 0) {
-    failures.push(`Expected 0 products with missing price, got ${missingPriceProducts}`);
+  if (missingPriceProducts !== counts.missingPrice) {
+    failures.push(`Expected ${counts.missingPrice} products with missing price, got ${missingPriceProducts}`);
   }
 
   // 6. Negative stock check
@@ -143,8 +257,8 @@ export async function runVerification(): Promise<VerificationReport> {
     .select("*", { count: "exact", head: true })
     .lt("stock_quantity", 0);
 
-  if (negativeStockProducts !== 0) {
-    failures.push(`Expected 0 products with negative stock, got ${negativeStockProducts}`);
+  if (negativeStockProducts !== counts.negativeStock) {
+    failures.push(`Expected ${counts.negativeStock} products with negative stock, got ${negativeStockProducts}`);
   }
 
   // 7. Relational Counts
@@ -164,15 +278,28 @@ export async function runVerification(): Promise<VerificationReport> {
     .from("promotions")
     .select("*", { count: "exact", head: true });
 
-  // 8. Products without images (check via left join / count check)
-  const { count: imagesCountByDistinctProduct } = await client
-    .from("product_images")
-    .select("product_id", { count: "exact", head: true })
-    .eq("is_primary", true);
+  // 8. Products without images: total - count(distinct product_id trên product_images).
+  // Phân trang toàn bộ product_id rồi distinct trong JS (tương đương count(distinct ...)).
+  const imageProductRows = await selectColumnPaged("product_images", "product_id");
+  const distinctImageProducts = new Set<string>();
+  for (const row of imageProductRows) {
+    if (typeof row.product_id === "string") distinctImageProducts.add(row.product_id);
+  }
 
-  const productsWithoutImages = (totalProducts ?? 0) - (imagesCountByDistinctProduct ?? 0);
-  if (productsWithoutImages !== 0) {
-    failures.push(`Expected 0 products without images, got ${productsWithoutImages}`);
+  const productsWithoutImages = (totalProducts ?? 0) - distinctImageProducts.size;
+  if (productsWithoutImages !== counts.missingImages) {
+    failures.push(`Expected ${counts.missingImages} products without images, got ${productsWithoutImages}`);
+  }
+
+  // 8b. Duplicate canonical_url thật: phân trang canonical_url, đếm rows dư (total - distinct).
+  const canonicalRows = await selectColumnPaged("products", "canonical_url");
+  const distinctCanonicals = new Set<string>();
+  for (const row of canonicalRows) {
+    if (typeof row.canonical_url === "string") distinctCanonicals.add(row.canonical_url);
+  }
+  const duplicateCanonicalUrls = canonicalRows.length - distinctCanonicals.size;
+  if (duplicateCanonicalUrls !== 0) {
+    failures.push(`Expected 0 duplicate canonical_url rows, got ${duplicateCanonicalUrls}`);
   }
 
   // 9. Duplicate SKU check (ensure duplicate SKU group KB-LEOPOLD-FC750RBT-BLUEGREY-BROWN has 2 rows)
@@ -208,7 +335,7 @@ export async function runVerification(): Promise<VerificationReport> {
     contentReadyProducts: contentReadyProducts ?? 0,
     missingPriceProducts: missingPriceProducts ?? 0,
     productsWithoutImages,
-    duplicateCanonicalUrls: 0,
+    duplicateCanonicalUrls,
     negativeStockProducts: negativeStockProducts ?? 0,
     totalImages: totalImages ?? 0,
     totalVariants: totalVariants ?? 0,
@@ -220,16 +347,17 @@ export async function runVerification(): Promise<VerificationReport> {
     failures,
   };
 
-  console.log(`- Total Products: ${report.totalProducts} (Expected: 4109)`);
-  console.log(`  * Usable: ${report.usableProducts} (Expected: 3977)`);
-  console.log(`  * Partial: ${report.partialProducts} (Expected: 82)`);
-  console.log(`  * Identity Only: ${report.identityOnlyProducts} (Expected: 50)`);
-  console.log(`- InStock: ${report.inStockProducts} (Expected: 1506)`);
-  console.log(`- OutOfStock: ${report.outOfStockProducts} (Expected: 2603)`);
-  console.log(`- Content-Ready Products: ${report.contentReadyProducts} (Expected: 1455)`);
-  console.log(`- Missing Price: ${report.missingPriceProducts} (Expected: 0)`);
-  console.log(`- Products Without Images: ${report.productsWithoutImages} (Expected: 0)`);
-  console.log(`- Negative Stock Count: ${report.negativeStockProducts} (Expected: 0)`);
+  console.log(`- Total Products: ${report.totalProducts} (Expected: ${counts.total})`);
+  console.log(`  * Usable: ${report.usableProducts} (Expected: ${counts.usable})`);
+  console.log(`  * Partial: ${report.partialProducts} (Expected: ${counts.partial})`);
+  console.log(`  * Identity Only: ${report.identityOnlyProducts} (Expected: ${counts.identityOnly})`);
+  console.log(`- InStock: ${report.inStockProducts} (Expected: ${counts.inStock})`);
+  console.log(`- OutOfStock: ${report.outOfStockProducts} (Expected: ${counts.outOfStock})`);
+  console.log(`- Content-Ready Products: ${report.contentReadyProducts} (Expected: ${counts.contentReady})`);
+  console.log(`- Missing Price: ${report.missingPriceProducts} (Expected: ${counts.missingPrice})`);
+  console.log(`- Products Without Images: ${report.productsWithoutImages} (Expected: ${counts.missingImages})`);
+  console.log(`- Duplicate Canonical URLs: ${report.duplicateCanonicalUrls} (Expected: 0)`);
+  console.log(`- Negative Stock Count: ${report.negativeStockProducts} (Expected: ${counts.negativeStock})`);
   console.log(`- Total Images: ${report.totalImages}`);
   console.log(`- Total Variants: ${report.totalVariants}`);
   console.log(`- Total Categories: ${report.totalCategories}`);
@@ -250,12 +378,20 @@ export async function runVerification(): Promise<VerificationReport> {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runVerification()
+  const flagValue = parseExpectedFlag(process.argv.slice(2));
+  if (flagValue !== null && (flagValue.trim() === "" || flagValue.startsWith("--"))) {
+    console.error("Usage: data:verify [--expected <path-to-dataset-summary.json>]");
+    process.exit(1);
+  }
+  const expected = loadExpectedCounts(
+    flagValue ? path.resolve(process.cwd(), flagValue) : DEFAULT_EXPECTED_PATH
+  );
+  runVerification(expected)
     .then((report) => {
       process.exit(report.passed ? 0 : 1);
     })
     .catch((err) => {
-      console.error(`Verification crashed: ${err.message}`);
+      console.error(`Verification crashed: ${(err as Error).message}`);
       process.exit(1);
     });
 }

@@ -2,7 +2,13 @@
 
 import { z } from "zod";
 
+const DEMO_ORGANIZATION_ID = "a0000000-0000-0000-0000-000000000001";
+
+const emptyToUndefined = (value: unknown): unknown =>
+  typeof value === "string" && value.trim() === "" ? undefined : value;
+
 const serverEnvironmentSchema = z.object({
+  NODE_ENV: z.string().optional(),
   NEXT_PUBLIC_SUPABASE_URL: z.url(),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
   SUPABASE_SECRET_KEY: z.string().min(1),
@@ -10,10 +16,13 @@ const serverEnvironmentSchema = z.object({
   AI_BASE_URL: z.url().transform((value) => value.replace(/\/+$/, "")),
   AI_API_KEY: z.string().min(1),
   AI_MODEL: z.string().min(1),
-  ONEVOICE_ORGANIZATION_ID: z.string().regex(
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-    "ONEVOICE_ORGANIZATION_ID must be a canonical UUID",
-  ).default("a0000000-0000-0000-0000-000000000001"),
+  ONEVOICE_ORGANIZATION_ID: z.preprocess(
+    emptyToUndefined,
+    z.string().regex(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      "ONEVOICE_ORGANIZATION_ID must be a canonical UUID",
+    ).optional(),
+  ),
   ONEVOICE_MEDIA_ROOT: z.string().min(1).default("renders"),
   ONEVOICE_IMAGE_HOSTS: z.string().default("product.hstatic.net").transform((value, context) => {
     const hosts = value.split(",").map((host) => host.trim().toLowerCase()).filter(Boolean);
@@ -35,8 +44,14 @@ const serverEnvironmentSchema = z.object({
   ONEVOICE_MUSIC_GAIN: z.coerce.number().min(0).max(1).default(0.35),
   ONEVOICE_TEMPLATES_ROOT: z.string().min(1).default("src/lib/video/template-pipeline/templates"),
   ONEVOICE_AUDIO_ROOT: z.string().min(1).default("assets/audio"),
-  ONEVOICE_QUEUE_ROOT: z.string().min(1).optional(),
-  ONEVOICE_WORKER_ID: z.string().min(1).optional().transform((value) => value?.trim() || undefined),
+  ONEVOICE_QUEUE_ROOT: z.preprocess(
+    emptyToUndefined,
+    z.string().min(1).optional(),
+  ),
+  ONEVOICE_WORKER_ID: z.preprocess(
+    emptyToUndefined,
+    z.string().min(1).optional().transform((value) => value?.trim() || undefined),
+  ),
   ONEVOICE_WORKER_POLL_MS: z.coerce.number().int().positive().default(1000),
   ONEVOICE_JOB_STALE_MS: z.coerce.number().int().positive().default(600_000),
 });
@@ -78,9 +93,37 @@ export type ServerEnv = {
   };
 };
 
+export type ReadServerEnvOptions = Readonly<{
+  /** Set when called from the worker entrypoint: ONEVOICE_QUEUE_ROOT becomes required. */
+  worker?: boolean;
+}>;
+
 export function readServerEnv(
   source: NodeJS.ProcessEnv = process.env,
+  options: ReadServerEnvOptions = {},
 ): ServerEnv {
+  const rawOrganizationId =
+    typeof source.ONEVOICE_ORGANIZATION_ID === "string"
+      ? source.ONEVOICE_ORGANIZATION_ID.trim()
+      : "";
+  if (source.NODE_ENV === "production" && rawOrganizationId === "") {
+    throw new Error(
+      "ONEVOICE_ORGANIZATION_ID is required when NODE_ENV=production " +
+        "(the demo default is dev/test only)",
+    );
+  }
+
+  const rawWorkerId =
+    typeof source.ONEVOICE_WORKER_ID === "string" ? source.ONEVOICE_WORKER_ID.trim() : "";
+  const rawQueueRoot =
+    typeof source.ONEVOICE_QUEUE_ROOT === "string" ? source.ONEVOICE_QUEUE_ROOT.trim() : "";
+  if ((options.worker === true || rawWorkerId !== "") && rawQueueRoot === "") {
+    throw new Error(
+      "ONEVOICE_QUEUE_ROOT is required when running a worker " +
+        "(set ONEVOICE_QUEUE_ROOT to the shared file-queue directory)",
+    );
+  }
+
   const environment = serverEnvironmentSchema.parse(source);
 
   return {
@@ -96,7 +139,7 @@ export function readServerEnv(
       model: environment.AI_MODEL,
     },
     runtime: {
-      organizationId: environment.ONEVOICE_ORGANIZATION_ID,
+      organizationId: environment.ONEVOICE_ORGANIZATION_ID ?? DEMO_ORGANIZATION_ID,
       mediaRoot: environment.ONEVOICE_MEDIA_ROOT,
       imageHosts: environment.ONEVOICE_IMAGE_HOSTS,
       ffmpegPath: environment.FFMPEG_PATH,
