@@ -1,12 +1,26 @@
 # OneVoice — quyết định sản phẩm sau phỏng vấn
 
-Nguồn chuẩn mới cho kế hoạch trong thư mục này. Không tự suy các câu trả lời đồng ý ngắn thành chức năng ngoài câu hỏi. Phỏng vấn đã kết thúc; các lựa chọn kỹ thuật còn lại do người triển khai quyết định và ghi lại.
+Nguồn chuẩn mới cho kế hoạch trong thư mục này. Mục **Website-first (2026-09-13)** có ưu tiên cao hơn phỏng vấn khi mâu thuẫn. Không tự suy các câu trả lời đồng ý ngắn thành chức năng ngoài câu hỏi. Phỏng vấn đã kết thúc; các lựa chọn kỹ thuật còn lại do người triển khai quyết định và ghi lại.
+
+## Website-first (2026-09-13)
+
+**Ưu tiên cao hơn phỏng vấn.** Khi mâu thuẫn với mục 1–7 bên dưới, mục này thắng. Giữ nguyên văn bản phỏng vấn; đánh dấu superseded, không xóa.
+
+Website là kênh khách hàng chính cho tới khi có credentials Meta. Chat website ẩn danh (không đăng nhập). AI tư vấn catalog/chính sách, so sánh, checkout, tra cứu trạng thái. Yêu cầu gặp người / thực hiện đổi trả / bảo hành dừng AI (`WAITING_STAFF`). Staff claim và trả lời trong OneVoice. Khách thấy tin staff trên chat website. Marketing vẫn sinh caption/script/video, Truth Guard, phiên bản, lịch sử, calendar. Nội dung tới hạn mà chưa có publishing provider → `WAITING_CHANNEL` (không mất, không retry vô hạn, không `PUBLISHED`). Facebook chỉ là adapter kênh tương lai.
+
+Route chat công khai: `/chat` (hàng đợi staff đã chiếm `/support`). Người dùng từng muốn `/support` cho chat công khai; mặc định kỹ thuật giữ staff `/support` và public `/chat` để tránh đụng login-gate.
+
+Composer staff bắt buộc cho WEB (ghi đè “không composer” của phỏng vấn và OV-015). Composer chỉ WEB; không gửi Graph/Messenger từ OneVoice.
+
+OV-027 lõi trung lập kênh: phiên website + mã đơn + điện thoại. Facebook PSID chỉ adapter, không chặn website. OV-018 không còn dependency cứng của OV-027; thêm OV-054.
+
+Fulfilment trong code là `DELIVERING`, không phải `SHIPPING`. OV-025 dùng `PREPARING→DELIVERING→DELIVERED`.
 
 ## 1. Sản phẩm và triển khai
 
 **Đã xác nhận:** Một bản cài đặt phục vụ một doanh nghiệp; trước mắt một Facebook Fanpage và CSDL Supabase hiện có, ngành máy tính/phụ kiện. Doanh nghiệp khác nhận mã nguồn và triển khai trên máy chủ riêng, cấu hình dữ liệu/thương hiệu của họ. Không dùng một máy chủ SaaS cho nhiều doanh nghiệp đăng ký. Khả năng áp dụng nhiều nơi là portability/configurability, không bắt buộc multi-tenancy. Bản đầu gồm cả chăm sóc khách và marketing, không chỉ video desk.
 
-Facebook Messenger hỗ trợ riêng tư; comment quan tâm hỏi mua hoặc yêu cầu sau bán chỉ mời inbox. Lời khen chung không trả lời. Fanpage đã có, Meta app permissions chưa được kiểm chứng. Website/Gmail/Zalo/TikTok là định hướng tương lai; website bản đầu phục vụ quản lý, link xác nhận và tra cứu, chưa thêm website-chat channel.
+Facebook Messenger hỗ trợ riêng tư; comment quan tâm hỏi mua hoặc yêu cầu sau bán chỉ mời inbox. Lời khen chung không trả lời. Fanpage đã có, Meta app permissions chưa được kiểm chứng. Website/Gmail/Zalo/TikTok là định hướng tương lai; website bản đầu phục vụ quản lý, link xác nhận và tra cứu, chưa thêm website-chat channel. **[SUPERSEDED 2026-09-13 — câu “chưa thêm website-chat channel”:]** website là kênh khách chính, chat ẩn danh tại `/chat`; Gmail/Zalo/TikTok vẫn hoãn. Xem mục Website-first.
 
 ## 2. Nhân sự và nguồn dữ liệu
 
@@ -22,7 +36,7 @@ Supabase thực tế hiện chứa ảnh dưới dạng URLs, không Storage obj
 
 **Đã xác nhận:** AI hỏi nhu cầu, tư vấn/so sánh chi tiết, trả lời chính sách và tra cứu trạng thái khi đúng khách. Khách hỏi chính sách đổi trả/bảo hành -> AI trả lời. Khách yêu cầu thực hiện đổi trả/bảo hành hoặc muốn gặp người -> tạo handoff.
 
-Yêu cầu được lưu qua đêm và hiển thị số lượng trên web. Staff nhận xử lý rồi mở ứng dụng gốc để trả lời; OneVoice không có staff reply composer. AI dừng toàn cuộc hội thoại từ lúc request WAITING_STAFF, không đợi claim, không trả lời câu khác. Staff hoàn tất trong OneVoice mới cho AI tiếp tục.
+Yêu cầu được lưu qua đêm và hiển thị số lượng trên web. Staff nhận xử lý rồi mở ứng dụng gốc để trả lời; OneVoice không có staff reply composer. **[SUPERSEDED 2026-09-13 cho WEB:]** staff trả lời trong OneVoice trên hội thoại WEB; Facebook vẫn không Graph-send từ composer. Xem mục Website-first và OV-059.
 
 Chưa rõ nhu cầu -> hỏi thêm. Thiếu facts doanh nghiệp -> giải thích cần kiểm tra, handoff và dừng. Lookup lỗi -> thử lại có giới hạn, không thành công thì handoff. Ghi knowledge gaps cho manager bổ sung; không bịa/cam kết.
 
@@ -62,4 +76,4 @@ Các mục dưới đây KHÔNG phải câu trả lời trực tiếp của ngư
 
 ## 7. Hoãn sau bản đầu
 
-Nhiều Page, các channel TikTok/Zalo/Gmail/web-chat; phần mềm ERP ngoài; SaaS multi-tenancy/self-signup/subscription; nhân viên reply trong OneVoice; approvals marketing nhiều tầng; paid stock/ads; full video editor, avatar/lip-sync/livestream; logistics provider integration. Không tự đưa các mục này vào implementation.
+Nhiều Page, các channel TikTok/Zalo/Gmail/web-chat; phần mềm ERP ngoài; SaaS multi-tenancy/self-signup/subscription; nhân viên reply trong OneVoice; approvals marketing nhiều tầng; paid stock/ads; full video editor, avatar/lip-sync/livestream; logistics provider integration. Không tự đưa các mục này vào implementation. **[SUPERSEDED 2026-09-13 — “web-chat” và “nhân viên reply trong OneVoice”:]** cả hai thuộc website-first MVP. Nhiều Page, TikTok/Zalo/Gmail, ERP, SaaS, approvals nhiều tầng, paid stock/ads, full editor, logistics vẫn hoãn.

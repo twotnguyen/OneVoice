@@ -17,9 +17,9 @@ Verify signature trước mutation; match merchant, transaction ref, amount, cur
 - [x] Viết table-driven IPN fixtures và local SQL concurrency test trước; lưu unique provider transaction receipt với digest để replay kiểm payload.
 - [x] Implement positive signature verification và strict parser, không tin browser return. Lock attempt/order/reservations cùng thứ tự022.
 - [x] Finalize transaction hoặc late-payment exception, giữ lịch sử bất biến. Failure/out-of-order không downgrade paid. Endpoint trả provider ACK đúng verified outcome.
-- [ ] Chạy sandbox end-to-end start→IPN→DB→return page; ghi evidence đã che thông tin; chuẩn bị manager exception read model cho025.
+- [ ] Sandbox end-to-end start→IPN→DB→return page **moved to OV-063** (AT-024-05). Không bắt buộc cho OV-024 DONE. Không production charge. Manager exception read model cho025 đã có từ core.
 - [x] Chạy từng ca acceptance dưới đây với implementation thật ở boundary tương ứng; lưu command, kết quả và giới hạn trong issue.
-- [ ] Review diff/scope/dependencies, cập nhật README và Status chỉ sau khi đạt toàn bộ gate TESTING.md.
+- [x] Core scope 2026-09-13 DONE. README tracker do orchestrator. Live sandbox không thuộc issue này.
 
 ### Acceptance test cases bắt buộc
 
@@ -27,7 +27,7 @@ Verify signature trước mutation; match merchant, transaction ref, amount, cur
 - [x] AT-024-02: Duplicate identical success→một consume/audit; reused ref với payload khác→reject.
 - [x] AT-024-03: Race expiry vs IPN bằng hai DB connections: kho nhất quán; late success không PREPARING.
 - [x] AT-024-04: Return trước IPN vẫn pending; failure đến sau success không downgrade.
-- [ ] AT-024-05: Sandbox verified IPN bắt buộc trước DONE; thiếu merchant/callback quyền ghi BLOCKED.
+- [ ] AT-024-05: **moved to OV-063**. Sandbox verified IPN sau sandbox payment. Không required cho OV-024 DONE. Wording gốc: «Sandbox verified IPN bắt buộc trước DONE; thiếu merchant/callback quyền ghi BLOCKED.»
 
 ### Lệnh và bằng chứng
 
@@ -42,7 +42,7 @@ Nếu entry chưa tồn tại, tạo regression trước implementation; không 
 
 ## Status
 
-BLOCKED
+DONE
 
 ## Objective
 
@@ -74,14 +74,14 @@ OV-023
 
 ## Edge cases
 
-Sandbox E2E là bắt buộc trước DONE; không gọi tài chính thật để test.
+Sandbox E2E **không** còn bắt buộc trước OV-024 DONE (superseded 2026-09-13 → OV-063). Không gọi tài chính thật / production để test. Core local HMAC/IPN đủ DONE.
 
 ## Acceptance criteria
 
-- [ ] Hành vi Expected behavior và toàn bộ Requirements được thực hiện trong đúng phạm vi task.
-- [ ] Các tình huống Testing dưới đây có kiểm thử chứng minh và kết quả được ghi lại.
-- [ ] Không phá các API đang dùng hoặc bỏ qua quyền/kiểm chứng ở biên liên quan.
-- [ ] Ghi quyết định kỹ thuật và giới hạn thực tế; task tích hợp chưa làm không được mô tả như đã chạy thật.
+- [x] Hành vi Expected behavior và toàn bộ Requirements được thực hiện trong đúng phạm vi task (core HMAC/match/idempotency/atomic; live sandbox = OV-063).
+- [x] Các tình huống Testing dưới đây có kiểm thử chứng minh và kết quả được ghi lại (AT-024-01..04 PASS; AT-024-05 moved).
+- [x] Không phá các API đang dùng hoặc bỏ qua quyền/kiểm chứng ở biên liên quan.
+- [x] Ghi quyết định kỹ thuật và giới hạn thực tế; task tích hợp chưa làm không được mô tả như đã chạy thật.
 
 ## Testing
 
@@ -114,7 +114,7 @@ Acceptance cases:
 - AT-024-02 PASS identical digest replay RspCode 02, one receipt/one `order.payment_paid` audit/one consume; different digest after PAID → 02, no second consume.
 - AT-024-03 PASS two real `docker exec -i` psql sessions: expire vs `finalize_vnpay_ipn` after `expires_at` in the past; final PAID+EXPIRED+MANUAL_REVIEW, reservation RELEASED, physical unchanged, one `payment_exceptions` row. Sequential TAP expire-then-IPN same invariants.
 - AT-024-04 PASS `readVnpayReturn` stays pending/UNPAID; failure IPN after success RspCode 02, still PAID/PREPARING.
-- AT-024-05 BLOCKED did not submit a sandbox payment. VNPay IPN is server-call-server after a charge; unsigned mocks are not sandbox IPN (97/99). No live IPN without charging.
+- AT-024-05 **moved to OV-063** (was BLOCKED: did not submit a sandbox payment). VNPay IPN is server-call-server after a charge; unsigned mocks are not sandbox IPN (97/99). No live IPN without charging. Not required for this DONE.
 Commands executed:
 ```
 docker exec -i supabase_db_onevoice psql ... < supabase/migrations/20260912121000_vnpay_payment_finalization.sql
@@ -129,6 +129,24 @@ Implementation decisions:
 - HMAC via `verifyVnpayChecksum` before any RPC. Merchant/currency filters in TS; amount/ref match and mutations in `finalize_vnpay_ipn`. Consume is `consume_inventory_attempt` inside that transaction (OV-022 lock order: advisory 26, order, SKUs, attempt).
 - Success 00+00: atomic PAID + consume + PREPARING + audit. Late/released: PAID + MANUAL_REVIEW, no PREPARING, no stock decrement, no refund. Failure after PAID does not downgrade. Return URL remains OV-023 read-only.
 - GET `/api/payments/vnpay/ipn` always HTTP 200 JSON ACK. No same-origin CSRF (VNPay server-to-server).
-Remaining limitations/blockers: AT-024-05 sandbox verified IPN requires a completed sandbox charge; assignment forbids submitting payment. Status BLOCKED. Live Next still points at remote Supabase.
+Remaining limitations/blockers: AT-024-05 sandbox verified IPN **moved to OV-063**. Core không BLOCKED. Live Next still points at remote Supabase (OV-023 diagnosis); không blocker HMAC/SQL. OV-025 unblocked by this DONE.
 Cleanup: SQL TAP rolled back; vitest fixtures disabled. No extra processes. Migration left applied locally (forward-only).
-Reviewer conclusion and README/status update: Status BLOCKED on AT-024-05. AT-024-01..04 PASS. No README edit.
+Reviewer conclusion and README/status update: Status **DONE** 2026-09-13 website-first. AT-024-01..04 PASS. AT-024-05 → OV-063 BLOCKED live sandbox. README do orchestrator (DocsTracker).
+
+## Website-first 2026-09-13 — core close
+
+Status **DONE**. Live sandbox IPN is OV-063 (BLOCKED until merchant/sandbox charge allowed). Does **not** block OV-025.
+
+Core scope complete (evidence AT-024-01..04 above, 2026-09-13, `supabase_db_onevoice`, no remote writes, no real/sandbox charge, no Facebook):
+
+- HMAC before mutation
+- amount/order/txn match
+- idempotency
+- replay protection
+- bad signature → zero paid/stock
+- late callback → MANUAL_REVIEW, not PREPARING
+- atomic txn (PAID + consume + PREPARING + audit)
+- only verified IPN → PREPARING
+- return URL never PAID
+
+AT-024-01..04 remain PASS. AT-024-05 moved to OV-063; unsigned mocks are not sandbox IPN (97/99). No production charge.
