@@ -15,7 +15,7 @@ type Dependencies = Readonly<{
   gate?: RenderGate;
 }>;
 
-const commandSchema = z.object({ renderId: z.uuid(), productId: z.uuid() });
+const commandSchema = z.object({ renderId: z.uuid(), productId: z.uuid(), voiceId: z.string().trim().max(64).optional() });
 
 export function createRendersRoute(dependencies: Dependencies) {
   const gate = dependencies.gate ?? sharedRenderGate;

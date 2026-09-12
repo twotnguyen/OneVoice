@@ -4,11 +4,14 @@ import { postgresUuid, type BusinessJob } from "@/lib/jobs/types";
 import type { HandoffReason } from "./handoff";
 const reasonSchema = z.enum(["return_request", "warranty_request", "customer_requested", "missing_evidence", "lookup_failed"]);
 export const conversationSnapshotSchema = z.object({
- id: postgresUuid, organizationId: postgresUuid, pageId: z.string(), psid: z.string(), revision: z.number().int().nonnegative(),
+ id: postgresUuid, organizationId: postgresUuid, channel: z.enum(["FACEBOOK", "WEB"]), channelUserKey: z.string().min(1).max(256),
+ pageId: z.string().nullable(), psid: z.string().nullable(), revision: z.number().int().nonnegative(),
  status: z.enum(["AI_ACTIVE", "WAITING_STAFF", "STAFF_ACTIVE"]), activeHandoffId: postgresUuid.nullable(), reason: reasonSchema.nullable(), claimedBy: postgresUuid.nullable(), lastEventTimeMs: z.number().nullable(),
 }).superRefine((value, context) => {
  const valid = value.status === "AI_ACTIVE" ? value.activeHandoffId === null && value.reason === null && value.claimedBy === null : value.activeHandoffId !== null && value.reason !== null && (value.status === "WAITING_STAFF" ? value.claimedBy === null : value.claimedBy !== null);
  if (!valid) context.addIssue({ code: "custom", message: "INVALID_CONVERSATION_STATE" });
+ const identity = value.channel === "FACEBOOK" ? Boolean(value.pageId && value.psid) : value.pageId === null && value.psid === null;
+ if (!identity) context.addIssue({ code: "custom", message: "INVALID_CONVERSATION_IDENTITY" });
 });
 export type ConversationSnapshot = z.infer<typeof conversationSnapshotSchema>;
 const projectionSchema = z.discriminatedUnion("ignored", [z.object({ ignored: z.literal(true) }), z.object({ ignored: z.literal(false), inserted: z.boolean(), aiEligible: z.boolean(), conversation: conversationSnapshotSchema })]);

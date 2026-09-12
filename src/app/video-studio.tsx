@@ -19,6 +19,7 @@ import {
   safeRenderMessage,
   STUDIO_POLL_TOTAL_TIMEOUT_MS,
   StudioOperationController,
+  studioQueryString,
   studioReducer,
 } from "./video-studio-state";
 
@@ -106,14 +107,24 @@ export function VideoStudio() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => {
+    if (typeof window === "undefined") return "all";
+    const category = new URLSearchParams(window.location.search).get("category");
+    return category && CATEGORY_TABS.some((item) => item.id === category) ? category : "all";
+  });
   const [selectedPriceRange, setSelectedPriceRange] = useState<PriceRange>("all");
   const [inStockOnly, setInStockOnly] = useState<boolean>(true);
   const [selectedVoice, setSelectedVoice] = useState<string>("vi-VN-HoaiMyNeural");
   const [copiedSocial, setCopiedSocial] = useState<boolean>(false);
+  const [campaignFormat, setCampaignFormat] = useState<"post" | "video">("video");
+  const [campaignRevision, setCampaignRevision] = useState(0);
+  const [campaignPost, setCampaignPost] = useState<{ hook: string; caption: string; cta: string } | null>(null);
+  const [campaignNotice, setCampaignNotice] = useState("");
+  const [campaignHistory, setCampaignHistory] = useState<readonly unknown[]>([]);
+  const [slotStatus, setSlotStatus] = useState("");
   const [studio, dispatch] = useReducer(studioReducer, initialStudioState);
   const operationController = useRef(new StudioOperationController());
-  const { selectedId, desk } = studio;
+  const { selectedId, slotId, desk } = studio;
 
   const categoryScrollRef = useRef<HTMLDivElement>(null);
   const categoryScrollId = useId();
@@ -339,6 +350,79 @@ export function VideoStudio() {
     return () => operations.dispose();
   }, []);
 
+  const persistLocation = useCallback((next: { selectedId?: string | null; slotId?: string | null; renderId?: string | null }) => {
+    if (typeof window === "undefined") return;
+    window.history.replaceState(null, "", `${window.location.pathname}${studioQueryString({ ...next, category: selectedCategory })}`);
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const selected = params.get("selectedId");
+    const slot = params.get("slotId");
+    const render = params.get("renderId");
+    const controller = new AbortController();
+    if (slot && isValidRenderId(slot)) {
+      dispatch({ type: "select_slot", slotId: slot });
+      void (async () => {
+        try {
+          const query = render && isValidRenderId(render) ? `slotId=${slot}&renderId=${render}` : `slotId=${slot}`;
+          const response = await fetch(`/api/studio?${query}`, { cache: "no-store", signal: controller.signal });
+          const payload = await readJsonBody(response);
+          if (!response.ok || !payload || typeof payload !== "object") return;
+          const revision = "contentRevision" in payload && typeof payload.contentRevision === "number" ? payload.contentRevision : 0;
+          setCampaignRevision(revision);
+          let post = { hook: "", caption: "", cta: "" };
+          if ("post" in payload && payload.post && typeof payload.post === "object") {
+            const value = payload.post as { hook?: unknown; caption?: unknown; cta?: unknown };
+            if (typeof value.hook === "string" && typeof value.caption === "string" && typeof value.cta === "string") {
+              post = { hook: value.hook, caption: value.caption, cta: value.cta };
+              setCampaignPost(post);
+            }
+          }
+          if ("voiceId" in payload && typeof payload.voiceId === "string" && payload.voiceId) setSelectedVoice(payload.voiceId);
+          if ("slotStatus" in payload && typeof payload.slotStatus === "string") setSlotStatus(payload.slotStatus);
+          if ("history" in payload && Array.isArray(payload.history)) setCampaignHistory(payload.history);
+          const urls = "urls" in payload && payload.urls && typeof payload.urls === "object" ? payload.urls as { status?: unknown; video?: unknown; download?: unknown } : null;
+          const renderId = "artifactRenderId" in payload && typeof payload.artifactRenderId === "string" ? payload.artifactRenderId : null;
+          if (renderId && isValidRenderId(renderId) && urls && typeof urls.status === "string" && typeof urls.video === "string" && typeof urls.download === "string") {
+            dispatch({
+              type: "resume",
+              slotId: slot,
+              operation: { token: "resume", renderId, productId: slot, slotId: slot },
+              result: { renderId, status: "succeeded", content: post, urls: { status: urls.status, video: urls.video, download: urls.download } },
+            });
+          }
+        } catch {
+          if (!controller.signal.aborted) setCampaignNotice("Không tải được nội dung đã lưu. Hãy thử lại.");
+        }
+      })();
+      return () => controller.abort();
+    }
+    if (selected && isValidRenderId(selected)) {
+      dispatch({ type: "select", productId: selected });
+      if (render && isValidRenderId(render)) {
+        void (async () => {
+          try {
+            const response = await fetch(`/api/renders/${render}`, { cache: "no-store", signal: controller.signal });
+            const payload = await readJsonBody(response);
+            if (response.ok && isSucceededRenderResponse(payload) && payload.renderId === render) {
+              dispatch({
+                type: "resume",
+                selectedId: selected,
+                operation: { token: "resume", renderId: payload.renderId, productId: selected },
+                result: payload,
+              });
+            }
+          } catch {
+            if (!controller.signal.aborted) return;
+          }
+        })();
+      }
+    }
+    return () => controller.abort();
+  }, []);
+
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedId) ?? null,
     [products, selectedId],
@@ -359,7 +443,7 @@ export function VideoStudio() {
       const response = await fetch("/api/renders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ renderId: operation.renderId, productId: operation.productId }),
+        body: JSON.stringify({ renderId: operation.renderId, productId: operation.productId, voiceId: selectedVoice }),
         signal: controller.signal,
       });
       const payload = await readJsonBody(response);
@@ -387,6 +471,7 @@ export function VideoStudio() {
     }
 
     dispatch({ type: "start", operation });
+    persistLocation({ selectedId, renderId: operation.renderId });
     let settled = false;
     const pollStartedAt = Date.now();
     void (async () => {
@@ -444,8 +529,143 @@ export function VideoStudio() {
     })();
   }
 
+  async function generateCampaignSlot() {
+    if (!slotId || desk.status === "creating") return;
+    const requestId = newStudioUuid();
+    const operation = { token: newStudioUuid(), renderId: newStudioUuid(), productId: slotId, slotId, requestId, voiceId: selectedVoice };
+    const controller = operationController.current.start();
+    if (!controller) return;
+    setCampaignNotice("");
+    try {
+      const response = await fetch("/api/studio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "generate",
+          slotId,
+          requestId,
+          expectedContentRevision: campaignRevision,
+          format: campaignFormat,
+          voiceId: selectedVoice,
+        }),
+        signal: controller.signal,
+      });
+      const payload = await readJsonBody(response);
+      if (!response.ok || !payload || typeof payload !== "object") {
+        const code = payload && typeof payload === "object" && "error" in payload && payload.error && typeof payload.error === "object" && "code" in payload.error && typeof payload.error.code === "string" ? payload.error.code : undefined;
+        setCampaignNotice(code === "VALIDATION" ? "Nội dung có giá hoặc thông tin không khớp dữ liệu đã xác thực. Hãy sửa rồi thử lại." : safeRenderMessage(code));
+        controller.abort();
+        operationController.current.finish(controller);
+        return;
+      }
+      const post = "post" in payload && payload.post && typeof payload.post === "object" ? payload.post as { hook?: unknown; caption?: unknown; cta?: unknown } : null;
+      if (post && typeof post.hook === "string" && typeof post.caption === "string" && typeof post.cta === "string") setCampaignPost({ hook: post.hook, caption: post.caption, cta: post.cta });
+      if ("version" in payload && typeof payload.version === "number") setCampaignRevision(payload.version);
+      const renderId = "renderId" in payload && typeof payload.renderId === "string" && isValidRenderId(payload.renderId) ? payload.renderId : null;
+      persistLocation({ slotId, renderId });
+      if (!renderId || campaignFormat === "post") {
+        controller.abort();
+        operationController.current.finish(controller);
+        return;
+      }
+      const queued = { ...operation, renderId };
+      dispatch({ type: "start", operation: queued });
+      let settled = false;
+      const pollStartedAt = Date.now();
+      void (async () => {
+        let attempt = 0;
+        try {
+          while (!settled && !controller.signal.aborted) {
+            if (Date.now() - pollStartedAt > STUDIO_POLL_TOTAL_TIMEOUT_MS) {
+              dispatch({ type: "failure", token: queued.token, message: "Quá thời gian dựng video. Kiểm tra hệ thống rồi thử lại." });
+              settled = true;
+              return;
+            }
+            const delay = nextPollDelayMs(attempt);
+            attempt += 1;
+            await new Promise<void>((resolve) => {
+              const timer = window.setTimeout(resolve, delay);
+              controller.signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve(); }, { once: true });
+            });
+            if (settled || controller.signal.aborted) return;
+            try {
+              const status = await fetch(`/api/renders/${queued.renderId}`, { signal: controller.signal, cache: "no-store" });
+              if (!status.ok) continue;
+              const body = await readJsonBody(status);
+              if (body !== null && typeof body === "object" && "status" in body) {
+                if (body.status === "succeeded" && isSucceededRenderResponse(body)) {
+                  dispatch({ type: "success", token: queued.token, result: body });
+                  persistLocation({ slotId, renderId: body.renderId });
+                  settled = true;
+                  return;
+                }
+                if (body.status === "failed") {
+                  dispatch({ type: "failure", token: queued.token, message: safeRenderMessage("error" in body && body.error && typeof body.error === "object" && "code" in body.error && typeof body.error.code === "string" ? body.error.code : undefined) });
+                  settled = true;
+                  return;
+                }
+                const stage = parseRunningStage(body);
+                if (stage) dispatch({ type: "progress", token: queued.token, stage });
+              }
+            } catch {
+              if (controller.signal.aborted) return;
+            }
+          }
+        } finally {
+          settled = true;
+          controller.abort();
+          operationController.current.finish(controller);
+        }
+      })();
+    } catch {
+      if (!controller.signal.aborted) setCampaignNotice("Mất kết nối khi sinh nội dung. Hãy thử lại.");
+      controller.abort();
+      operationController.current.finish(controller);
+    }
+  }
+
+  async function saveCampaignEdit() {
+    if (!slotId || !campaignPost || desk.status === "creating") return;
+    setCampaignNotice("");
+    const response = await fetch("/api/studio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "edit",
+        slotId,
+        requestId: newStudioUuid(),
+        expectedContentRevision: campaignRevision,
+        post: campaignPost,
+        voiceId: selectedVoice,
+      }),
+    });
+    const payload = await readJsonBody(response);
+    if (!response.ok) {
+      const code = payload && typeof payload === "object" && "error" in payload && payload.error && typeof payload.error === "object" && "code" in payload.error && typeof payload.error.code === "string" ? payload.error.code : undefined;
+      setCampaignNotice(code === "VALIDATION" ? "Nội dung có giá hoặc thông tin không khớp dữ liệu đã xác thực. Hãy sửa rồi thử lại." : "Không lưu được bản chỉnh sửa.");
+      return;
+    }
+    if (payload && typeof payload === "object" && "version" in payload && typeof payload.version === "number") setCampaignRevision(payload.version);
+    setCampaignNotice("Đã lưu bản chỉnh sửa.");
+  }
+
+  async function unscheduleCampaignSlot() {
+    if (!slotId || desk.status === "creating") return;
+    setCampaignNotice("");
+    const response = await fetch("/api/campaigns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slotId, requestId: newStudioUuid() }),
+    });
+    if (!response.ok) {
+      setCampaignNotice("Không gỡ được lịch. Nội dung vẫn giữ.");
+      return;
+    }
+    setCampaignNotice("Đã gỡ khung giờ. Nội dung vẫn giữ, chưa đăng.");
+  }
+
   async function downloadVideo() {
-    if (desk.status !== "ready") return;
+    if (desk.status !== "ready" || !desk.result.urls.download) return;
     try {
       if (!(await checkDownloadArtifact(desk.result.urls.download))) throw new Error("artifact unavailable");
       const link = document.createElement("a");
@@ -716,7 +936,10 @@ export function VideoStudio() {
                       disabled={desk.status === "creating"}
                       key={product.id}
                       type="button"
-                      onClick={() => dispatch({ type: "select", productId: product.id })}
+                      onClick={() => {
+                        dispatch({ type: "select", productId: product.id });
+                        persistLocation({ selectedId: product.id });
+                      }}
                     >
                       <div className="product-card-marker" aria-hidden="true" />
 
@@ -794,6 +1017,58 @@ export function VideoStudio() {
         {/* CỘT PHẢI: Bàn biên tập & Preview Player (58%) */}
         <div className="studio-canvas-deck">
           {/* Section 1: Hero Selected Product */}
+          {slotId && (
+            <div className="script-canvas-card" style={{ marginBottom: "16px" }}>
+              <div className="script-canvas-header">
+                <h3>Chiến dịch · khung nội dung</h3>
+                <span style={{ fontSize: "0.75rem", color: "var(--ink-muted)" }}>Bản {campaignRevision}</span>
+              </div>
+              <p style={{ fontSize: "0.82rem", color: "var(--ink-muted)", marginBottom: "12px" }}>Sinh bài viết hoặc kịch bản từ slot đã lưu. Không duyệt từng bài. Tải lại giữ slot/render đã persist.</p>
+              <div className="voice-selector-row">
+                <span className="filter-row-label">Định dạng:</span>
+                <select className="voice-select" aria-label="Định dạng nội dung" value={campaignFormat} disabled={desk.status === "creating"} onChange={(e) => setCampaignFormat(e.target.value === "post" ? "post" : "video")}>
+                  <option value="video">Video</option>
+                  <option value="post">Bài viết</option>
+                </select>
+              </div>
+              <label style={{ display: "block", fontSize: "0.8rem", marginBottom: "8px" }}>Hook
+                <textarea aria-label="Hook" value={campaignPost?.hook ?? ""} onChange={(e) => setCampaignPost({ hook: e.target.value, caption: campaignPost?.caption ?? "", cta: campaignPost?.cta ?? "" })} rows={2} style={{ width: "100%" }} />
+              </label>
+              <label style={{ display: "block", fontSize: "0.8rem", marginBottom: "8px" }}>Caption
+                <textarea aria-label="Caption" value={campaignPost?.caption ?? ""} onChange={(e) => setCampaignPost({ hook: campaignPost?.hook ?? "", caption: e.target.value, cta: campaignPost?.cta ?? "" })} rows={4} style={{ width: "100%" }} />
+              </label>
+              <label style={{ display: "block", fontSize: "0.8rem", marginBottom: "8px" }}>CTA
+                <textarea aria-label="CTA" value={campaignPost?.cta ?? ""} onChange={(e) => setCampaignPost({ hook: campaignPost?.hook ?? "", caption: campaignPost?.caption ?? "", cta: e.target.value })} rows={2} style={{ width: "100%" }} />
+              </label>
+              {campaignNotice && <p role="status" style={{ color: "var(--danger)", fontSize: "0.82rem" }}>{campaignNotice}</p>}
+              <div className="canvas-action-row">
+                <button className="btn-create-video" type="button" disabled={desk.status === "creating"} onClick={() => void generateCampaignSlot()}>Sinh nội dung</button>
+                <button className="btn" type="button" disabled={desk.status === "creating" || !campaignPost} onClick={() => void saveCampaignEdit()}>Lưu chỉnh sửa</button>
+                <button className="btn" type="button" disabled={desk.status === "creating"} onClick={() => void unscheduleCampaignSlot()}>Gỡ lịch</button>
+              </div>
+              {slotStatus ? <p style={{ fontSize: "0.82rem", marginTop: "8px" }}>Trạng thái khung: {slotStatus === "WAITING_CHANNEL" ? "Chờ kênh đăng" : slotStatus}</p> : null}
+              {campaignHistory.length > 0 && (
+                <div style={{ marginTop: "12px" }}>
+                  <h4 style={{ fontSize: "0.85rem" }}>Lịch sử phiên bản</h4>
+                  {campaignHistory.map((row, index) => {
+                    if (!row || typeof row !== "object") return null;
+                    const version = "version" in row && typeof row.version === "number" ? row.version : index + 1;
+                    const caption = "caption" in row && typeof row.caption === "string" ? row.caption : "";
+                    const hook = "hook" in row && typeof row.hook === "string" ? row.hook : "";
+                    const hash = "artifactHash" in row && typeof row.artifactHash === "string" ? row.artifactHash : "";
+                    const validation = "validation" in row && row.validation && typeof row.validation === "object" && "status" in row.validation && typeof row.validation.status === "string" ? row.validation.status : "";
+                    const id = "id" in row && typeof row.id === "string" ? row.id : String(index);
+                    return (
+                      <p key={id} style={{ fontSize: "0.78rem" }}>
+                        v{version} · {hook} · {caption} · Truth Guard {validation || "—"} · {hash ? `hash ${hash.slice(0, 12)}` : "chưa render"}
+                        {hash ? <> · <a href={`/api/renders/${id}/download`}>Tải thành phẩm</a></> : null}
+                      </p>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           {selectedProduct ? (
             <div className="selected-hero-card">
               <div className="selected-hero-card__thumb">
@@ -882,10 +1157,14 @@ export function VideoStudio() {
                   className="btn-copy-social"
                   type="button"
                   onClick={() => {
+                    if (desk.status !== "ready") return;
                     const copyText = `${desk.result.content.hook}\n\n${desk.result.content.caption}\n\n👉 ${desk.result.content.cta}\n\n#OneVoice #${selectedProduct?.brand || "CongNghe"} #VideoMarketing #Review`;
-                    void navigator.clipboard.writeText(copyText);
-                    setCopiedSocial(true);
-                    setTimeout(() => setCopiedSocial(false), 2000);
+                    void navigator.clipboard.writeText(copyText).then(() => {
+                      setCopiedSocial(true);
+                      window.setTimeout(() => setCopiedSocial(false), 2000);
+                    }).catch(() => {
+                      setCampaignNotice("Không sao chép được. Hãy thử lại sau khi nội dung sẵn sàng.");
+                    });
                   }}
                 >
                   {copiedSocial ? "✓ Đã sao chép kịch bản & hashtags!" : "📋 Sao chép Caption & Hashtags TikTok"}

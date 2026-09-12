@@ -67,3 +67,7 @@ The native Meta inbox URL is optional and not invented from PSID. Live operator 
 
 
 OV-015 implementation choice (2026-09-12): retain `/support` and `/api/support`. Manager reassignment is a distinct audited operation, never a takeover through the staff claim RPC. A bounded migration adds assignment history and a service-only reassignment RPC with conversation revision CAS, idempotency receipt, fresh manager/assignee scope checks, and unchanged paused status. Previous claimant and claim timestamp are retained in assignment history. This supports recovery from disabled claimants without granting staff reassignment rights.
+
+## Website-first 2026-09-13 — composer supersession
+
+OV-059 supersedes “no composer” / «Không editor trả lời trong OneVoice» for **WEB** channel only. Facebook conversations still have no OneVoice send (no Graph). Historical requirement remains in force for FACEBOOK.

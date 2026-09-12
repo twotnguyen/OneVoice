@@ -61,3 +61,21 @@ OV-052 extracted before transport implementation:028 and050 share a neutral publ
 Current execution checkpoint:52issues validated again for all required headings, tracker/status agreement, dependency readiness and completeOV-044 release closure;28DONE/2IN_PROGRESS/21TODO/1BLOCKED. OV-016 independent review resolved invalidstock and specification-truncation conflicts before unlockingOV-017. OV-030 review found recent-pick concurrency and same-version program-import drift; both must pass regressions before completion. OV-043 now owns proven request-level SQL deadlines and production filesystem-tracing verification, avoiding unrelated scope expansion.
 
 OV-053 extracted before generation implementation: one shared campaign post/script generation service for Studio and scheduler. OV-032 remains version/truth storage, OV-034 scene/media composition, OV-046 rendering, OV-035 UI andOV-036 timing. OV-053 depends032/034;035 depends053; no cycle or duplicate generator. This fills previously unowned work within confirmed MVP, not a new user requirement.
+
+## Website-first self-review (2026-09-13)
+
+Đối chiếu DECISIONS mục Website-first, DAG, tracker OV-054..OV-063. Không thêm SaaS, nhiều Page, COD, approval từng bài, stock trả phí, Graph, hay production charge.
+
+| Check | Result |
+|---|---|
+| Cycles | PASS — Docs → (024 core→025→027), 063 blocked, (034→053→035→036→061), (054→055→056→057 và 056→058→059); 060 sau 054/021/025/027/058; 062 sau 057/059/060/035/036/061. Stop before 037. Mọi dep tồn tại. |
+| Duplicate engines | PASS — WEB tái sử dụng consult()/planner/worker/finish_consultation; không copy planner; không competing conversation/order/campaign tables. 053 vẫn một generator. |
+| Facebook không khóa website | PASS — 051 BLOCKED và 037 TODO không nằm trên đường 054–062 hay 025. Composer WEB-only; không Graph. |
+| Live VNPay không khóa OV-025 | PASS — 024 core DONE mở 025; 063 BLOCKED riêng, no code. |
+| OV-034 Docker | PASS — blocker installable (`libnss3` + Puppeteer deps + shm + audio); không credential. AT-034-04 vẫn TODO tới impl. |
+| Acceptance testable | PASS — mọi AT website-first kiểm được không Facebook/live VNPay, trừ OV-063. |
+| Live provider split | PASS — 051 Meta ingress, 063 VNPay sandbox IPN, 037 Facebook publish. Không gộp vào website MVP. |
+
+Counts sau docs: 39 DONE / 21 TODO / 3 BLOCKED (034, 051, 063) / 63 issue. OV-025 TODO unblocked. OV-037 remains TODO, not this round.
+
+**Kết luận: PASS.** Không cycle, không duplicate engine, Facebook không khóa website, live VNPay không khóa orders UI, OV-034 là impl Docker không phải credential, live provider tách 051/063/037. Được mở Wave A: OV-034 + OV-054 + OV-025.

@@ -11,6 +11,7 @@ export const BUSINESS_ACTIONS = Object.freeze([
   "update_order",
   "update_shipping",
   "update_warranty",
+  "reply_customer",
   "manage_catalog",
   "manage_policies",
   "manage_ai",
@@ -28,6 +29,7 @@ const staffActions: ReadonlySet<string> = new Set<BusinessAction>([
   "update_order",
   "update_shipping",
   "update_warranty",
+  "reply_customer",
 ]);
 const knownActions: ReadonlySet<string> = new Set(BUSINESS_ACTIONS);
 

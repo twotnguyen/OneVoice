@@ -3,10 +3,11 @@ import type { AiProvider } from "@/lib/ai/provider";
 import { evidenceQuerySchema, type EvidenceQuery, type createEvidenceLookup } from "./evidence";
 import {isSafeDescriptiveQuote} from "@/lib/knowledge/descriptive-policy";
 import {collectCheckoutRoute} from "@/lib/orders/confirmation";
+import {collectOrderStatusRoute,type StatusVerifyResult} from "./status-lookup";
 type LookupEvidence=Awaited<ReturnType<ReturnType<typeof createEvidenceLookup>["lookup"]>>;
 export type Evidence={asOf:string|null;products:LookupEvidence["products"][number][];policies:LookupEvidence["policies"][number][];promotions:LookupEvidence["promotions"][number][];knowledge:LookupEvidence["knowledge"][number][];missing:string[];truncated:boolean};
 export type ConsultationContext={organizationId:string;text:string;history:Array<{text:string;decision?:unknown}>;introduce:boolean;conversationId?:string;revision?:number};
-export type Outcome={type:"reply"|"handoff"|"gap"|"route";intent:string;text?:string;claims?:Array<Record<string,unknown>>;reason?:string;field?:string;productId?:string|null;route?:"checkout"|"order_status";query?:EvidenceQuery;confirmationUrl?:string};
+export type Outcome={type:"reply"|"handoff"|"gap"|"route";intent:string;text?:string;claims?:Array<Record<string,unknown>>;reason?:string;field?:string;productId?:string|null;route?:"checkout"|"order_status";query?:EvidenceQuery;confirmationUrl?:string;statusUrl?:string};
 const planSchema=z.union([
  z.strictObject({intent:z.enum(["praise","checkout","order_status"])}),
  z.strictObject({intent:z.literal("handoff"),reason:z.enum(["customer_requested","return_request","warranty_request"])}),
@@ -34,7 +35,7 @@ export function abortable<T>(task:PromiseLike<T>,signal:AbortSignal):Promise<T>{
 function parse(text:string){if(text.length>16000)throw Error("model_output_invalid");return JSON.parse(text);}
 function gap(reason:"missing_evidence"|"lookup_failed",field="specification",query?:EvidenceQuery):Outcome{return {type:"gap",intent:"needs",reason,field,productId:query?.operation==="read_guidance"?query.productId??null:null,...(query?{query}:{})};}
 const specFamilies=[{match:/\bram\b|bộ nhớ|\bmemory\b/iu,names:["ram","bộ nhớ","memory"]},{match:/\bssd\b|\bhdd\b|ổ cứng|lưu trữ|\bstorage\b/iu,names:["ssd","hdd","storage","ổ cứng","lưu trữ"]},{match:/màn hình|\bdisplay\b|\bscreen\b/iu,names:["display","màn hình","screen"]},{match:/\bpin\b|\bbattery\b/iu,names:["pin","battery"]},{match:/công suất|\bpower\b/iu,names:["power","công suất"]}];
-export async function consult(context:ConsultationContext,ports:{ai:AiProvider;lookup:(org:string,query:EvidenceQuery)=>Promise<Evidence>;checkout?:{collect:(input:unknown,requestId:string)=>Promise<{ok:false;field:"items"|"variant"|"quantity"|"buyerName"|"phone"|"address"}|{ok:true;url:string}>}},signal:AbortSignal):Promise<Outcome>{
+export async function consult(context:ConsultationContext,ports:{ai:AiProvider;lookup:(org:string,query:EvidenceQuery)=>Promise<Evidence>;checkout?:{collect:(input:unknown,requestId:string)=>Promise<{ok:false;field:"items"|"variant"|"quantity"|"buyerName"|"phone"|"address"}|{ok:true;url:string}>};status?:{verify:(input:unknown)=>Promise<StatusVerifyResult>}},signal:AbortSignal):Promise<Outcome>{
  signal.throwIfAborted();const direct=explicitHandoff(context.text);if(direct)return {type:"handoff",intent:"handoff",reason:direct};
  const prefix=context.introduce?intro:"";
  try{
@@ -45,7 +46,10 @@ export async function consult(context:ConsultationContext,ports:{ai:AiProvider;l
    if(ports.checkout)return collectCheckoutRoute(context,ports.checkout);
    return {type:"route" as const,intent:plan.intent,route:plan.intent};
   }
-  if(plan.intent==="order_status")return {type:"route" as const,intent:plan.intent,route:plan.intent};
+  if(plan.intent==="order_status"){
+   if(ports.status)return collectOrderStatusRoute(context,ports.status);
+   return {type:"route" as const,intent:plan.intent,route:plan.intent};
+  }
   if(plan.intent==="praise")return {type:"reply",intent:plan.intent,text:prefix+"Cảm ơn bạn!",claims:[]};
   if("question" in plan)return {type:"reply",intent:plan.intent,text:prefix+questions[plan.question],claims:[]};
   if(!("query" in plan))throw Error("invalid_plan");

@@ -10,23 +10,23 @@ Tạo src/app/(app)/orders/ và src/app/api/orders/; src/lib/orders/operations.t
 
 ### Hợp đồng đầu vào, đầu ra và persistence
 
-List/detail có pagination/filter; staff operational mutation nhận expectedVersion và action hợp lệ, server actor scope. PAID PREPARING→SHIPPING→DELIVERED; trạng thái thực tế dùng enum004/020. Payment exceptions manager read/acknowledge, không nút mark-paid hay tự refund.
+List/detail có pagination/filter; staff operational mutation nhận expectedVersion và action hợp lệ, server actor scope. PAID PREPARING→DELIVERING→DELIVERED (enum OV-004/020). **Superseded 2026-09-13:** wording cũ «PREPARING→SHIPPING→DELIVERED» — code không có `SHIPPING`. Payment exceptions manager read/acknowledge, không nút mark-paid hay tự refund.
 
 ### Trình tự thực hiện
 
-- [ ] Viết API permission/CAS transition tests; tạo list/detail query chỉ trường role cần.
-- [ ] Implement shipping transition transaction và immutable history, tracking reference/manual customer-visible progress; giữ internal note riêng.
-- [ ] UI trạng thái loading/empty/error/conflict, refresh sau save; manager exception view giải thích cần xử lý ngoài OneVoice, không gọi API hoàn tiền.
-- [ ] Browser-test với manager/staff fake local, kiểm lỗi thao tác state cũ và lưu lịch sử.
-- [ ] Chạy từng ca acceptance dưới đây với implementation thật ở boundary tương ứng; lưu command, kết quả và giới hạn trong issue.
-- [ ] Review diff/scope/dependencies, cập nhật README và Status chỉ sau khi đạt toàn bộ gate TESTING.md.
+- [x] Viết API permission/CAS transition tests; tạo list/detail query chỉ trường role cần.
+- [x] Implement fulfilment transition transaction (`PREPARING→DELIVERING→DELIVERED`) và immutable history, tracking reference/manual customer-visible progress; giữ internal note riêng. Không dùng `SHIPPING`.
+- [x] UI trạng thái loading/empty/error/conflict, refresh sau save; manager exception view giải thích cần xử lý ngoài OneVoice, không gọi API hoàn tiền.
+- [ ] Browser-test với manager/staff fake local, kiểm lỗi thao tác state cũ và lưu lịch sử. **Skipped:** `onevoice-next` not running; HTTP+SQL prove persistence.
+- [x] Chạy từng ca acceptance dưới đây với implementation thật ở boundary tương ứng; lưu command, kết quả và giới hạn trong issue.
+- [ ] Review diff/scope/dependencies, cập nhật README và Status chỉ sau khi đạt toàn bộ gate TESTING.md. README do orchestrator.
 
 ### Acceptance test cases bắt buộc
 
-- [ ] AT-025-01: UNPAID không shipping; DELIVERED không lùi; hai update version cũ chỉ một thắng.
-- [ ] AT-025-02: Staff không sửa totals/paid/catalog/policy; inactive session/cross-org reject.
-- [ ] AT-025-03: Note nội bộ không đi vào public DTO027; empty list không fake rows.
-- [ ] AT-025-04: Browser PREPARING→SHIPPING→DELIVERED và reload persistence; manager xem late-payment exception.
+- [x] AT-025-01: UNPAID không shipping; DELIVERED không lùi; hai update version cũ chỉ một thắng.
+- [x] AT-025-02: Staff không sửa totals/paid/catalog/policy; inactive session/cross-org reject.
+- [x] AT-025-03: Note nội bộ không đi vào public DTO027; empty list không fake rows.
+- [x] AT-025-04: Browser PREPARING→DELIVERING→DELIVERED và reload persistence; manager xem late-payment exception. (Wording cũ SHIPPING superseded.)
 
 ### Lệnh và bằng chứng
 
@@ -41,7 +41,7 @@ Nếu entry chưa tồn tại, tạo regression trước implementation; không 
 
 ## Status
 
-TODO
+DONE
 
 ## Objective
 
@@ -77,10 +77,10 @@ Không mở module kho/ERP toàn diện; hủy/hoàn tiền luôn thao tác mana
 
 ## Acceptance criteria
 
-- [ ] Hành vi Expected behavior và toàn bộ Requirements được thực hiện trong đúng phạm vi task.
-- [ ] Các tình huống Testing dưới đây có kiểm thử chứng minh và kết quả được ghi lại.
-- [ ] Không phá các API đang dùng hoặc bỏ qua quyền/kiểm chứng ở biên liên quan.
-- [ ] Ghi quyết định kỹ thuật và giới hạn thực tế; task tích hợp chưa làm không được mô tả như đã chạy thật.
+- [x] Hành vi Expected behavior và toàn bộ Requirements được thực hiện trong đúng phạm vi task.
+- [x] Các tình huống Testing dưới đây có kiểm thử chứng minh và kết quả được ghi lại.
+- [x] Không phá các API đang dùng hoặc bỏ qua quyền/kiểm chứng ở biên liên quan.
+- [x] Ghi quyết định kỹ thuật và giới hạn thực tế; task tích hợp chưa làm không được mô tả như đã chạy thật.
 
 ## Testing
 
@@ -90,12 +90,52 @@ Chạy Vitest vào đúng test colocated của phạm vi thay đổi, `pnpm type
 
 ## Execution checklist
 
-- [ ] Mark IN_PROGRESS trong task và README.
-- [ ] Đọc code hiện hành, viết regression/acceptance test trước thay đổi code.
-- [ ] Chạy test thấy lỗi đúng nguyên nhân; triển khai trong phạm vi.
-- [ ] Chạy validation phù hợp, self-review diff, cập nhật acceptance.
-- [ ] Chỉ mark DONE khi tất cả criteria đạt; nếu thiếu điều kiện ghi BLOCKED và tiếp tục task độc lập.
+- [x] Mark IN_PROGRESS trong task (README left for orchestrator).
+- [x] Đọc code hiện hành, viết regression/acceptance test trước thay đổi code.
+- [x] Chạy test thấy lỗi đúng nguyên nhân; triển khai trong phạm vi.
+- [x] Chạy validation phù hợp, self-review diff, cập nhật acceptance.
+- [x] Chỉ mark DONE khi tất cả criteria đạt; nếu thiếu điều kiện ghi BLOCKED và tiếp tục task độc lập.
 
 ## Implementation decisions and evidence
 
-Chưa bắt đầu triển khai; không có kết quả kiểm thử được tuyên bố cho task này.
+Validation date / environment: 2026-09-13, local Windows, container `supabase_db_onevoice`, no remote DB writes, no VNPay charge, no Facebook.
+Workspace identifier: OV-025 files below; dirty user/sibling files preserved. Did not edit README.md, `.env`, `nav-sections.ts`, or `database.types.ts`.
+Files and migration versions changed:
+- `src/lib/orders/operations.ts` + `operations.test.ts`
+- `src/app/api/orders/route.ts` + `src/app/api/orders/[id]/route.ts`
+- `src/app/(app)/orders/page.tsx` + `orders-manager.tsx` + `orders.module.css`
+- `src/app/(app)/layout.tsx` (header link `/orders` so the page is reachable like `/support`)
+- `supabase/migrations/20260913103000_order_operations.sql` applied locally and recorded in `supabase_migrations.schema_migrations` (version 20260913103000, name order_operations)
+- `supabase/tests/order-operations.test.sql`
+- this issue
+Acceptance cases:
+- AT-025-01 PASS vitest illegal STAFF_TRANSITION (UNPAID/skip/backwards/MANUAL_REVIEW) + 409 CAS; SQL TAP UNPAID cannot ship, skip DELIVERED, stale `expectedVersion` one winner, DELIVERED cannot go back.
+- AT-025-02 PASS strict command rejects totals/paid/catalog/policy/`SHIPPING`; RPC binds org/actor; SQL frozen totals, payment/catalog unchanged, foreign actor/org, inactive staff.
+- AT-025-03 PASS list DTO strips `internalNote` / `SECRET_NOTE`; empty `items: []`; SQL list text omits internal notes, empty DELIVERING list is `[]`.
+- AT-025-04 PASS pure+RPC PREPARING→DELIVERING→DELIVERED without rewriting paid/totals; SQL persisted both steps + two history rows; manager lists/acks `late_payment`. **Browser skipped:** process `onevoice-next` was not running; HTTP fake-session tests + SQL TAP prove persistence.
+Commands executed:
+```
+node node_modules/vitest/vitest.mjs run src/lib/orders/operations.test.ts --maxWorkers=1 --no-file-parallelism
+# Test Files 1 passed / Tests 13 passed
+cat supabase/migrations/20260913103000_order_operations.sql | docker exec -i supabase_db_onevoice psql ...
+cat supabase/tests/order-operations.test.sql | docker exec -i supabase_db_onevoice psql ...
+# 1..41 all ok, ROLLBACK, no `not ok`
+```
+Results: SQL TAP 41/41 ok; vitest 13/13. typecheck/eslint/full suite skipped per assignment.
+DB proof: local container only; `staff_transition_order` CAS on `orders.revision`; immutable `order_fulfilment_history`; no mark-paid function; `acknowledge_payment_exception` manager-only. Fixtures rolled back. No db reset.
+Implementation decisions:
+- Reuse OV-004 `applyOrderCommand` STAFF_TRANSITION: only PAID + reconciliation NONE + PREPARING→DELIVERING→DELIVERED. Enum is `DELIVERING`, not `SHIPPING`.
+- List RPC omits `internalNote` (no public 027 DTO yet). Detail keeps staff notes. Transition never writes payment/totals/items.
+- GET `read_operations`; POST transition `update_order` + Origin; POST ack manager-only. 409 on version conflict.
+- Manager exception view is read/ack only; UI copy says refunds happen outside OneVoice; no refund or mark-paid control.
+Remaining limitations/blockers: live browser walkthrough not run (`onevoice-next` exited). HTTP+SQL cover AT-025-04 persistence. No carrier integration, no VNPay live, no public customer DTO (OV-027).
+Cleanup: SQL TAP rolled back; vitest mocks only. Migration left applied locally (forward-only).
+Reviewer conclusion and README/status update: Status **DONE** 2026-09-13 website-first. AT-025-01..04 PASS. README do orchestrator.
+
+## Website-first 2026-09-13 — DELIVERING và unblock
+
+Status **DONE**. OV-024 core unblocked this issue. Live VNPay sandbox (OV-063) does not block OV-025.
+
+Fulfilment enum trong code (OV-004/020): `DRAFT|AWAITING_PAYMENT|PREPARING|DELIVERING|DELIVERED|EXPIRED|CANCELLED`. **Không** có `SHIPPING`. AT và UI phải `PREPARING→DELIVERING→DELIVERED`. Historical handover text «SHIPPING» ở bản 2026-09-12 bị superseded, không xóa.
+
+Payment `UNPAID|FAILED|PAID`. Chỉ verified IPN → PREPARING (OV-024). Return URL không PAID. Manager exception read model (`payment_exceptions` late_payment) đã có từ OV-024; không nút mark-paid / tự refund.

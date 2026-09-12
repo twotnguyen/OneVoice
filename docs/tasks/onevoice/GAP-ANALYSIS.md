@@ -22,6 +22,23 @@
 | Đăng Fanpage và đo business outcome | No publishing; render metrics chủ yếu | 037,039–041 |
 | Build/test/deploy evidence | Baseline có lỗi môi trường và code | 042–044 |
 
+## Website-first gaps (2026-09-13)
+
+Bản đầu chuyển kênh khách sang website. Các hàng dưới đây là gap đã kiểm chứng từ code/plan; không invent table/service cạnh tranh.
+
+| Desired | Current verified | Issues |
+|---|---|---|
+| Hội thoại trung lập kênh `(organization_id, channel, channel_user_key)`; channel `FACEBOOK\|WEB` | `UNIQUE(organization_id,page_id,psid)`; không channel enum; messages gắn `facebook_inbound_events` | OV-054 |
+| Phiên khách ẩn danh (token hash, cookie HttpOnly) | Auth cookie chỉ staff; không website session | OV-055 |
+| Public messaging API + UI `/chat` (không login, không staff chrome) | Public: `/login`, `/order-confirmation/[token]`; staff queue đã chiếm `/support` | OV-056, OV-057 |
+| AI consult trên WEB; outbound không Graph; `WAITING_STAFF` dừng AI | `consult()` đã channel-agnostic; `claim_consultation_job` và outbox Messenger-specific | OV-058 |
+| Staff composer WEB trong OneVoice; `reply_customer` staff+manager | `/support` chỉ claim/complete/reassign; không composer, không private notes | OV-059 |
+| Checkout/status/handoff trong chat website | Có confirmation URL (OV-021); chưa orders UI; chưa status-lookup; chưa wire WEB | OV-025, OV-027, OV-060 |
+| Due content không Facebook → `WAITING_CHANNEL`, không `PUBLISHED`, không retry vô hạn | Slot `PLANNED\|READY\|CLAIMED\|PUBLISHED\|SKIPPED\|FAILED`; chưa `WAITING_CHANNEL` | OV-061 |
+| Website-first E2E (Orca, không Graph trong network log) | Chưa evidence dir/flow website | OV-062 |
+| Live VNPay sandbox IPN sau thanh toán sandbox | Core HMAC/amount/idempotency/replay (OV-024) DONE; AT-024-05 chuyển sang live | OV-063 BLOCKED |
+| Docker test image có Chrome/libnss3 + shm + audio thật cho MP4 | `Dockerfile.test`: node:24.13.0-bookworm-slim + ffmpeg + fonts-dejavu; thiếu Chrome/libnss3; AT-034-04 fail `libnss3.so`; không dùng lavfi black làm proof | OV-034 BLOCKED (installable, không phải credential) |
+
 ## Conflicts resolved by interview
 
 | Tài liệu/hướng cũ | Quyết định mới có ưu tiên |
@@ -39,13 +56,17 @@ Các conflict này đã có quyết định trực tiếp; không hỏi lại, k
 
 ## Uncommitted work to preserve
 
+Ghi chú lịch sử khi lập kế hoạch (5 file user dirty lúc đó; không xóa):
+
 - src/app/(app)/dashboard/trend-chart.tsx
 - src/app/(app)/layout.tsx
 - src/app/(app)/nav-sections.test.ts
 - src/app/(app)/nav-sections.ts
 - src/app/globals.css
 
-Không stage/commit/overwrite các file trên. Nếu task tương lai cần sửa, đọc diff trước và giữ hunks hiện tại.
+**Hiện tại (2026-09-13, branch `codex/onevoice-website-first`):** dirty chỉ `next-env.d.ts` (Next dev types path). Không commit. Không reset/stash/clean. Không stage `.env`, secrets, runtime logs, large media, customer data.
+
+Không stage/commit/overwrite các file trên nếu chúng lại dirty. Nếu task tương lai cần sửa, đọc diff trước và giữ hunks hiện tại.
 
 ## Validation baseline limitations
 
@@ -53,7 +74,7 @@ Nghiên cứu trước ghi typecheck pass; pnpm check fail lint (6 errors/10 war
 
 ## External completion gates
 
-Meta app/permissions/token/webhook HTTPS và quyền insights/publish chưa kiểm chứng; VNPay merchant sandbox credentials chưa kiểm chứng. Một số tests local cần Docker/Supabase và FFmpeg/font/TTS. Triển khai code/test doubles được phép, nhưng integration không DONE nếu thiếu proof bắt buộc; ghi BLOCKED gate rõ và làm task khác.
+Meta app/permissions/token/webhook HTTPS và quyền insights/publish chưa kiểm chứng; VNPay merchant sandbox credentials chưa kiểm chứng. Live VNPay tách OV-063 (không chặn OV-025). Facebook live vẫn OV-051/OV-037, không khóa website. Một số tests local cần Docker/Supabase và FFmpeg/font/TTS. Triển khai code/test doubles được phép, nhưng integration không DONE nếu thiếu proof bắt buộc; ghi BLOCKED gate rõ và làm task khác.
 
 
 Kiểm tra tên biến .env khi lập kế hoạch: chưa có biến chứa FACEBOOK/META_/PAGE_/MESSENGER hoặc VNPAY/VNP_. Đây chỉ là inventory tên biến, không chứng minh tài khoản nhà cung cấp chưa tồn tại. Không in giá trị bí mật. Live integration gates vẫn chưa mở.

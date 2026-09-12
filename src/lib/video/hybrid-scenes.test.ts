@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -15,8 +16,8 @@ import {
 import type { ProductScript } from "./script-schema";
 import { TemplateVideoRenderer } from "./template-video-renderer";
 import type { ComposeArgs } from "./template-pipeline/compose-template";
-import type { probeVideo } from "./ffmpeg-renderer";
-import type { TemplateId } from "./template-registry";
+import { probeVideo } from "./ffmpeg-renderer";
+import { TEMPLATES_ROOT, type TemplateId } from "./template-registry";
 import {
   HYBRID_TEMPLATES,
   MISSING_PRODUCT_ASSET,
@@ -150,6 +151,65 @@ function hybridScript(): ProductScript {
   };
   return script;
 }
+
+
+async function runProcess(executable: string, args: readonly string[]): Promise<string> {
+  const { promise, resolve, reject } = Promise.withResolvers<string>();
+  const child = spawn(executable, args, { shell: false });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk: Buffer) => {
+    stdout += chunk.toString();
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
+  child.on("error", reject);
+  child.on("close", (code) => {
+    if (code === 0) resolve(stdout);
+    else reject(new Error(`${executable} failed (exit ${code}): ${stderr.slice(-800)}`));
+  });
+  return promise;
+}
+
+
+function pipelineScript(): ProductScript {
+  const script = validScript();
+  script.music = null;
+  script.scenes = [script.scenes[0]!, script.scenes[1]!, script.scenes[3]!].map((scene) => {
+    const { sfx: _sfx, ...rest } = scene;
+    void _sfx;
+    return rest;
+  }) as ProductScript["scenes"];
+  script.scenes[0] = {
+    ...script.scenes[0]!,
+    inputs: { ...script.scenes[0]!.inputs, product_image: urlA },
+  };
+  return script;
+}
+
+
+async function pipelineMedia(png: Buffer): Promise<HybridMediaContext> {
+  const hash = createHash("sha256").update(png).digest("hex");
+  const root = scratch();
+  const filePath = path.join(root, "product.png");
+  writeFileSync(filePath, png);
+  const registry = createMemoryRegistry();
+  await registry.save(org, asset(skuA, hash, urlA));
+  return {
+    organizationId: org,
+    campaignKind: "product",
+    skuId: skuA,
+    sandbox: memorySandbox({ [hash]: filePath }),
+    deps: {
+      registry,
+      resolveImage: async (url) =>
+        url === urlA ? { sha256: hash, mimeType: "image/png", width: 240, height: 480, bytes: png.length } : null,
+      now: () => new Date("2026-09-12T12:00:00.000Z"),
+    },
+  };
+}
+
 
 describe("AT-034-01 SKU asset and missing fallback", () => {
   it("injects the matching SKU bytes into the compose payload", async () => {
@@ -356,6 +416,118 @@ describe("AT-034-04 voice routing", () => {
       ...script.scenes.map(() => "vi-VN-NamMinhNeural"),
     ]);
   });
+
+  it(
+    "renders a HyperFrames pipeline MP4 with H.264 yuv420p 1080x1920, audio, and product image",
+    async () => {
+      const script = pipelineScript();
+      const outputRoot = scratch();
+      const productPath = path.join(outputRoot, "product.png");
+      await runProcess("ffmpeg", [
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=0xFF00FF:s=700x640:d=0.04",
+        "-frames:v",
+        "1",
+        productPath,
+      ]);
+      const productPng = readFileSync(productPath);
+      const media = await pipelineMedia(productPng);
+      const prepared = await prepareComposeInputs(
+        "frame-liquid-bg-hero",
+        script.scenes[0]!.inputs as Record<string, unknown>,
+        media,
+      );
+      expect(String(prepared.product_image).startsWith("data:image/png;base64,")).toBe(true);
+      const audioRoot = path.resolve(process.cwd(), "assets/audio");
+      const fixtureVoice = path.join(audioRoot, "sfx", "accents", "ding.mp3");
+      const hyperframesPath =
+        process.env.ONEVOICE_HYPERFRAMES_PATH?.trim() ||
+        path.resolve(process.cwd(), "node_modules/.bin/hyperframes");
+      const renderer = new TemplateVideoRenderer({
+        outputRoot,
+        templatesRoot: TEMPLATES_ROOT,
+        audioRoot,
+        hyperframesPath,
+        composeTimeoutMs: 240_000,
+        tts: {
+          async synthesize(_text, outPath) {
+            copyFileSync(fixtureVoice, outPath);
+          },
+        },
+        musicGain: 0.35,
+      });
+      const rendered = await renderer.render({
+        script,
+        media,
+        voice: { voiceId: "vi-VN-HoaiMyNeural" },
+      });
+      try {
+        const probe = await probeVideo(rendered.path);
+        expect(probe.codecName).toBe("h264");
+        expect(probe.pixelFormat).toBe("yuv420p");
+        expect(probe.width).toBe(1080);
+        expect(probe.height).toBe(1920);
+        expect(probe.formatName).toMatch(/mp4/);
+        const totalMs = script.scenes.reduce((sum, scene) => sum + scene.durationMs, 0);
+        expect(Math.abs(probe.durationMs - totalMs)).toBeLessThanOrEqual(250);
+        expect(rendered.sha256).toMatch(/^[0-9a-f]{64}$/);
+        expect(rendered.rendererRevision).toBe("onevoice-template-v1");
+
+        const audioJson = JSON.parse(
+          await runProcess("ffprobe", [
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_type,codec_name,sample_rate",
+            "-of",
+            "json",
+            rendered.path,
+          ]),
+        ) as { streams?: Array<{ codec_type?: string; codec_name?: string; sample_rate?: string }> };
+        const audio = audioJson.streams?.[0];
+        expect(audio?.codec_type).toBe("audio");
+        expect(audio?.codec_name).toBe("aac");
+        expect(Number(audio?.sample_rate)).toBeGreaterThan(0);
+
+        const framePath = path.join(outputRoot, "hero-frame.rgb");
+        await runProcess("ffmpeg", [
+          "-y",
+          "-ss",
+          "1.0",
+          "-i",
+          rendered.path,
+          "-frames:v",
+          "1",
+          "-f",
+          "rawvideo",
+          "-pix_fmt",
+          "rgb24",
+          framePath,
+        ]);
+        const pixels = readFileSync(framePath);
+        expect(pixels.length).toBe(1080 * 1920 * 3);
+        let magentaPixels = 0;
+        for (let i = 0; i < pixels.length; i += 3) {
+          if (pixels[i]! > 160 && pixels[i + 1]! < 90 && pixels[i + 2]! > 160) magentaPixels += 1;
+        }
+        expect(magentaPixels).toBeGreaterThan(10_000);
+        console.info(
+          `AT-034-04 sha256=${rendered.sha256} durationMs=${probe.durationMs} ${probe.codecName}/${probe.pixelFormat} ${probe.width}x${probe.height} audio=${audio?.codec_name} magenta=${magentaPixels}`,
+        );
+
+      } finally {
+        await rendered.cleanup();
+      }
+    },
+    600_000,
+  );
+
+
 });
 
 describe("hybrid template set", () => {

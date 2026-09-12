@@ -1,6 +1,6 @@
 # OneVoice — tiêu chuẩn kiểm thử và Definition of Done
 
-Tài liệu này là gate chung của 53 issue. Các AT-xxx trong từng issue là test cụ thể bổ sung, không thay gate này. Không chạy tài chính/thông điệp/bài đăng thật làm fixture.
+Tài liệu này là gate chung của 63 issue. Các AT-xxx trong từng issue là test cụ thể bổ sung, không thay gate này. Không chạy tài chính/thông điệp/bài đăng thật làm fixture. Không Facebook Graph / production charge.
 
 ## 1. Phân loại bằng chứng
 
@@ -118,3 +118,16 @@ Không điền PASS vào mẫu trước chạy. Lưu sanitized logs dưới docs
 ## 8. Bằng chứng lịch sử không được đánh đồng với HEAD hiện tại
 
 Snapshot Linux trước đây:890 tests pass/4 opt-in skipped với media test deadline đã có giải thích; snapshot đó có trước các thay đổi consultation/content mới. SQL regression501 assertions/18 suites cũng có phạm vi lịch sử và chưa bao trùm mọi schema dang dở. Agent nhận bàn giao phải chạy lại phần mình sửa; release phải kiểm whole current workspace. Phiên soạn tài liệu này không tuyên bố runtime tests mới.
+
+## 9. Website-first / Orca browser loop
+
+Bổ sung, không thay gate 1–8. Dùng cho OV-057/059/060/062 và mọi UI public `/chat` hoặc staff WEB composer. Không Graph, không Messenger send, không Facebook publish, không charge.
+
+- Mở đúng surface: khách `/chat` (không login); staff `/support` và `/support/[id]`. Không chiếm `/support` cho chat công khai.
+- Snapshot accessibility/tree trước khi click; tương tác qua ref `@eN` (hoặc handle tương đương) từ snapshot hiện tại. Snapshot cũ hết hạn sau navigation/re-render — snapshot lại, không đoán ref.
+- Chờ bằng `orca wait` / waiter theo điều kiện (selector, URL, network idle, text) — **không `sleep` cố định** để “hy vọng” UI xong.
+- Sau flow: đọc console và network log. **Không có** request Facebook Graph (`graph.facebook.com`, Messenger send, comment reply, publish). Cookie session WEB không lộ token raw trong log.
+- Reload `/chat` giữ lịch sử cùng session; tab/phiên khác không đọc được hội thoại. Trạng thái AI processing / waiting staff / claimed phải quan sát được trên UI.
+- Composer chỉ hiện/enable trên hội thoại WEB; Facebook conversation ẩn hoặc disable, không phát Graph.
+- Evidence: sanitized log/text dưới `docs/tasks/onevoice/evidence/`; screenshot nhỏ tùy chọn. Không commit binary lớn, token, PII.
+- AT website-first phải fail được trước impl (thiếu WEB channel, 404 `/chat`, Graph gọi nhầm, WAITING_STAFF vẫn AI reply). OV-063 là exception live sandbox; các issue khác không đòi IPN thật.

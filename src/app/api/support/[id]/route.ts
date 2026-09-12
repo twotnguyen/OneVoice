@@ -5,7 +5,11 @@ import { createSupabaseDataClient } from "@/lib/supabase/server";
 import { createSupportReader } from "@/lib/conversations/support/read";
 import { createSupabaseConversationRepository } from "@/lib/conversations/supabase";
 import { postgresUuid } from "@/lib/jobs/types";
-const command=z.object({operation:z.enum(["claim","complete","reassign"]),expectedRevision:z.number().int().nonnegative(),requestId:postgresUuid,assigneeId:postgresUuid.optional()}).strict().refine(input=>input.operation==="reassign"?!!input.assigneeId:input.assigneeId===undefined);
+const command=z.object({operation:z.enum(["claim","complete","reassign","reply"]),expectedRevision:z.number().int().nonnegative(),requestId:postgresUuid,assigneeId:postgresUuid.optional(),text:z.string().trim().min(1).max(1800).optional()}).strict().refine(input=>input.operation==="reassign"?!!input.assigneeId&&input.text===undefined:input.operation==="reply"?input.text!==undefined&&input.assigneeId===undefined:input.assigneeId===undefined&&input.text===undefined);
+async function mutationAction(request:Request){
+ try { return command.parse(await body(request.clone())).operation==="reply"?"reply_customer" as const:"claim_handoff" as const; }
+ catch { return "claim_handoff" as const; }
+}
 type Context={params:Promise<{id:string}>};
 export async function GET(request:Request,context:Context) {
  return withApiPermission(request,"read_operations",async actor=>{
@@ -25,12 +29,17 @@ async function body(request:Request) {
  finally {if(timer)clearTimeout(timer);void reader.cancel().catch(()=>{});}
 }
 export async function POST(request:Request,context:Context) {
- return withApiPermission(request,"claim_handoff",async actor=>{
+ return withApiPermission(request,await mutationAction(request),async actor=>{
   let input:z.infer<typeof command>;let id:string;
   try {id=postgresUuid.parse((await context.params).id);input=command.parse(await body(request));}catch{return Response.json({error:"INVALID_INPUT"},{status:400});}
   if(input.operation==="reassign"&&actor.role!=="manager")return Response.json({error:"FORBIDDEN"},{status:403});
   const client=createSupabaseDataClient();
   try {
+   if(input.operation==="reply"){
+    const {data,error}=await client.rpc("staff_web_reply",{p_organization_id:actor.organizationId,p_actor_id:actor.userId,p_conversation_id:id,p_expected_revision:input.expectedRevision,p_request_id:input.requestId,p_text:input.text!}).abortSignal(AbortSignal.timeout(10000));
+    if(error)throw Error(error.code==="42501"?"CONVERSATION_FORBIDDEN":error.code==="40001"||error.code==="23505"?"CONVERSATION_CONFLICT":error.code==="22023"?"CONVERSATION_INVALID_INPUT":"CONVERSATION_UNAVAILABLE");
+    return Response.json(data);
+   }
    if(input.operation==="reassign"){
     const {data,error}=await client.rpc("reassign_conversation_handoff",{p_organization_id:actor.organizationId,p_actor_id:actor.userId,p_conversation_id:id,p_expected_revision:input.expectedRevision,p_assignee_id:input.assigneeId!,p_request_id:input.requestId}).abortSignal(AbortSignal.timeout(10000));
     if(error)throw Error(error.code==="42501"?"CONVERSATION_FORBIDDEN":error.code==="40001"||error.code==="23505"?"CONVERSATION_CONFLICT":error.code==="22023"?"CONVERSATION_INVALID_INPUT":"CONVERSATION_UNAVAILABLE");
