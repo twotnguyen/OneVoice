@@ -18,6 +18,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
         <AppNav />
         <div className={`app-header__spacer ${styles.actions}`}>
           <Link href="/campaigns">Chiến dịch</Link>
+          <Link href="/orders">Đơn hàng</Link>
           <Link href="/support">Hỗ trợ</Link>
           {actor.role === "manager" && <Link href="/settings">Cấu hình</Link>}
           <form action="/api/auth/logout" method="post"><button type="submit">Đăng xuất</button></form>

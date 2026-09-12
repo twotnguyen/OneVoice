@@ -21,3 +21,32 @@ it("returns409 for a competing state revision",async()=>{state.transition.mockRe
 it("returns403 for non-claimant completion rejected by database",async()=>{state.transition.mockRejectedValue(Error("CONVERSATION_FORBIDDEN"));expect((await POST(post(input("complete")),context)).status).toBe(403);});
 it("manager reassignment uses separate audited RPC",async()=>{state.actor={...state.actor!,role:"manager"};expect((await POST(post({...input("reassign"),assigneeId:id}),context)).status).toBe(200);expect(state.rpc).toHaveBeenCalledWith("reassign_conversation_handoff",expect.objectContaining({p_actor_id:state.actor.userId,p_organization_id:state.actor.organizationId,p_assignee_id:id}));expect(state.transition).not.toHaveBeenCalled();});
 it("bounds pagination and ignores no untrusted scope override",async()=>{expect((await queue(new Request("https://app.test/api/support?limit=101"))).status).toBe(400);expect((await queue(new Request("https://app.test/api/support?organizationId=other"))).status).toBe(400);expect(state.queue).not.toHaveBeenCalled();});
+it("AT-059-01 staff WEB reply uses staff_web_reply and skips handoff transition",async()=>{
+ expect((await POST(post({...input("reply"),text:"Xin chao tu nhan vien"}),context)).status).toBe(200);
+ expect(state.rpc).toHaveBeenCalledWith("staff_web_reply",expect.objectContaining({p_actor_id:state.actor!.userId,p_organization_id:state.actor!.organizationId,p_conversation_id:id,p_text:"Xin chao tu nhan vien",p_request_id:input().requestId,p_expected_revision:1}));
+ expect(state.transition).not.toHaveBeenCalled();
+});
+it("AT-059-02 manager can reply; empty text and inactive session are rejected",async()=>{
+ state.actor={...state.actor!,role:"manager"};
+ expect((await POST(post({...input("reply"),text:"Manager ho tro"}),context)).status).toBe(200);
+ expect((await POST(post({...input("reply"),text:""}),context)).status).toBe(400);
+ expect((await POST(post({...input("reply"),text:"   "}),context)).status).toBe(400);
+ state.actor=null;
+ expect((await POST(post({...input("reply"),text:"no session"}),context)).status).toBe(401);
+ expect(state.transition).not.toHaveBeenCalled();
+});
+it("AT-059-03 Facebook reply RPC invalid is 400 without Graph",async()=>{
+ state.rpc.mockReturnValue({abortSignal:async()=>({data:null,error:{code:"22023"}})});
+ expect((await POST(post({...input("reply"),text:"graph"}),context)).status).toBe(400);
+ expect(state.transition).not.toHaveBeenCalled();
+});
+it("AT-059-04 non-claimant reply is 403; revision conflict is 409",async()=>{
+ state.rpc.mockReturnValueOnce({abortSignal:async()=>({data:null,error:{code:"42501"}})});
+ expect((await POST(post({...input("reply"),text:"loser"}),context)).status).toBe(403);
+ state.rpc.mockReturnValueOnce({abortSignal:async()=>({data:null,error:{code:"40001"}})});
+ expect((await POST(post({...input("reply"),text:"stale"}),context)).status).toBe(409);
+});
+it("AT-059-02 cross-Origin reply is rejected before RPC",async()=>{
+ expect((await POST(post({...input("reply"),text:"evil"},"https://evil.test"),context)).status).toBe(403);
+ expect(state.client).not.toHaveBeenCalled();
+});

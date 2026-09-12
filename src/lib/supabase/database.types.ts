@@ -120,7 +120,7 @@ export type Database = {
       }
       marketing_control: { Row: { organization_id: string; status: string; revision: number; priority_campaign_id: string | null; reason: string; updated_at: string }; Insert: { organization_id: string; status?: string; revision?: number; priority_campaign_id?: string | null; reason?: string; updated_at?: string }; Update: { status?: string; revision?: number; priority_campaign_id?: string | null; reason?: string; updated_at?: string }; Relationships: [] }
       campaigns: { Row: { id: string; organization_id: string; title: string; objective: string; source_kind: string; source_ref: string; priority: boolean; status: string; version: number; decision: Json | null; source_snapshot: Json; settings_snapshot: Json; timezone: string; created_at: string; updated_at: string }; Insert: { id: string; organization_id: string; title: string; objective: string; source_kind: string; source_ref: string; priority: boolean; status?: string; version?: number; decision?: Json | null; source_snapshot: Json; settings_snapshot: Json; timezone: string; created_at?: string; updated_at?: string }; Update: { status?: string; version?: number; updated_at?: string }; Relationships: [] }
-      campaign_slots: { Row: { id: string; campaign_id: string; ordinal: number; scheduled_at: string | null; content_version_id: string | null; content_revision: number; status: string }; Insert: { id?: string; campaign_id: string; ordinal: number; scheduled_at?: string | null; content_version_id?: string | null; content_revision?: number; status?: string }; Update: { scheduled_at?: string | null; content_version_id?: string | null; content_revision?: number; status?: string }; Relationships: [] }
+      campaign_slots: { Row: { id: string; campaign_id: string; ordinal: number; scheduled_at: string | null; content_version_id: string | null; content_revision: number; status: string; claimed_request: string | null; claimed_at: string | null; replaced_slot_id: string | null; decision_reason: string | null }; Insert: { id?: string; campaign_id: string; ordinal: number; scheduled_at?: string | null; content_version_id?: string | null; content_revision?: number; status?: string; claimed_request?: string | null; claimed_at?: string | null; replaced_slot_id?: string | null; decision_reason?: string | null }; Update: { scheduled_at?: string | null; content_version_id?: string | null; content_revision?: number; status?: string; claimed_request?: string | null; claimed_at?: string | null; replaced_slot_id?: string | null; decision_reason?: string | null }; Relationships: [] }
       campaign_receipts: { Row: { request_id: string; organization_id: string; campaign_id: string; actor_id: string | null; command: string; expected_revision: number; document: Json; result: Json; created_at: string }; Insert: { request_id: string; organization_id: string; campaign_id: string; actor_id?: string | null; command: string; expected_revision: number; document: Json; result: Json; created_at?: string }; Update: never; Relationships: [] }
       knowledge_gaps: {
         Row: { id: string; organization_id: string; product_id: string | null; field: string; reason: string; status: string; version: number; occurrences: number; last_conversation_id: string; updated_at: string; resolved_at: string | null }
@@ -560,6 +560,8 @@ export type Database = {
       conversations: {
         Row: {
           active_handoff_id: string | null
+          channel: string
+          channel_user_key: string
           created_at: string
           id: string
           last_event_time_ms: number | null
@@ -2080,6 +2082,17 @@ export type Database = {
         }
         Returns: Json
       }
+      staff_web_reply: {
+        Args: {
+          p_actor_id: string
+          p_conversation_id: string
+          p_expected_revision: number
+          p_organization_id: string
+          p_request_id: string
+          p_text: string
+        }
+        Returns: Json
+      }
       onevoice_healthcheck: { Args: never; Returns: string }
       save_catalog_product: {
         Args: { p_organization_id: string; p_actor_id: string; p_request_id: string; p_product_id: string; p_expected_version: number; p_document: Json }
@@ -2140,6 +2153,15 @@ export type Database = {
       }
       expire_due_inventory_attempts: { Args: Record<string, never>; Returns: number }
       sku_active_reserved: { Args: { p_product_id: string; p_variant_id: string | null }; Returns: number }
+      claim_marketing_tick: { Args: { p_org: string; p_request: string; p_now: string; p_revision?: number | null }; Returns: Json }
+      apply_slot_decision: { Args: { p_org: string; p_slot: string; p_campaign: string; p_request: string; p_revision: number; p_document: Json }; Returns: Json }
+      complete_priority_control: { Args: { p_org: string; p_campaign: string; p_request: string; p_revision: number }; Returns: Json }
+      priority_pending_slots: { Args: { p_org: string; p_campaign: string }; Returns: number }
+      inspect_campaign_source: { Args: { p_org: string; p_campaign: string }; Returns: Json }
+      enqueue_due_automation_ticks: { Args: Record<string, never>; Returns: number }
+      claim_automation_tick: { Args: { p_owner: string }; Returns: { id: string; organization_id: string; entity_id: string; kind: string; lease_owner: string | null; lease_token: string | null; attempt_started_at: string | null; attempts: number; available_at: string; created_at: string; dedup_key: string; last_error: string | null; lease_expires_at: string | null; max_attempts: number; scheduled_at: string; status: string }[] }
+      unschedule_campaign_slot: { Args: { p_org: string; p_actor: string; p_slot: string; p_request: string }; Returns: Json }
+      read_slot_content_history: { Args: { p_org: string; p_actor: string; p_slot: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never

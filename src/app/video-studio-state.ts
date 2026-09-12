@@ -19,31 +19,54 @@ export type QueuedRenderResponse = Readonly<{
   status: "queued";
   urls: { status: string; video: string; download: string };
 }>;
-export type RenderOperation = Readonly<{ token: string; renderId: string; productId: string }>;
+export type RenderOperation = Readonly<{ token: string; renderId: string; productId: string; slotId?: string; requestId?: string; voiceId?: string }>;
 export type DeskState =
   | { status: "idle" }
   | { status: "creating"; operation: RenderOperation; stage?: RenderStage }
   | { status: "ready"; operation: RenderOperation; result: RenderResponse }
   | { status: "error"; operation: RenderOperation; message: string }
   | { status: "artifact_error"; operation: RenderOperation; result: RenderResponse };
-export type StudioState = Readonly<{ selectedId: string | null; desk: DeskState }>;
+export type StudioState = Readonly<{ selectedId: string | null; slotId: string | null; desk: DeskState }>;
 export type StudioAction =
   | { type: "select"; productId: string }
+  | { type: "select_slot"; slotId: string }
   | { type: "start"; operation: RenderOperation }
   | { type: "progress"; token: string; stage: RenderStage }
   | { type: "success"; token: string; result: RenderResponse }
   | { type: "failure"; token: string; message: string }
-  | { type: "artifact_failure"; token: string };
+  | { type: "artifact_failure"; token: string }
+  | { type: "resume"; selectedId?: string | null; slotId?: string | null; operation?: RenderOperation; result?: RenderResponse };
 
-export const initialStudioState: StudioState = { selectedId: null, desk: { status: "idle" } };
+export const initialStudioState: StudioState = { selectedId: null, slotId: null, desk: { status: "idle" } };
 
 export function studioReducer(state: StudioState, action: StudioAction): StudioState {
   if (action.type === "select") {
     if (state.desk.status === "creating") return state;
-    return { selectedId: action.productId, desk: { status: "idle" } };
+    return { selectedId: action.productId, slotId: null, desk: { status: "idle" } };
+  }
+  if (action.type === "select_slot") {
+    if (state.desk.status === "creating") return state;
+    return { selectedId: null, slotId: action.slotId, desk: { status: "idle" } };
+  }
+  if (action.type === "resume") {
+    if (state.desk.status === "creating") return state;
+    const selectedId = action.selectedId === undefined ? state.selectedId : action.selectedId;
+    const slotId = action.slotId === undefined ? state.slotId : action.slotId;
+    if (action.result && action.operation) {
+      return { selectedId, slotId, desk: { status: "ready", operation: action.operation, result: action.result } };
+    }
+    if (action.operation) {
+      return { selectedId, slotId, desk: { status: "creating", operation: action.operation } };
+    }
+    return { selectedId, slotId, desk: { status: "idle" } };
   }
   if (action.type === "start") {
-    if (state.desk.status === "creating" || state.selectedId !== action.operation.productId) return state;
+    if (state.desk.status === "creating") return state;
+    if (action.operation.slotId) {
+      if (state.slotId !== action.operation.slotId) return state;
+    } else if (state.selectedId !== action.operation.productId) {
+      return state;
+    }
     return { ...state, desk: { status: "creating", operation: action.operation } };
   }
   if (action.type === "progress") {
@@ -203,4 +226,14 @@ export const STUDIO_POLL_TOTAL_TIMEOUT_MS = 300_000;
 export function nextPollDelayMs(attempt: number): number {
   const safeAttempt = Number.isFinite(attempt) && attempt > 0 ? Math.floor(attempt) : 0;
   return Math.min(STUDIO_POLL_INITIAL_DELAY_MS * 2 ** safeAttempt, STUDIO_POLL_MAX_DELAY_MS);
+}
+
+export function studioQueryString(input: { selectedId?: string | null; slotId?: string | null; renderId?: string | null; category?: string | null }): string {
+  const params = new URLSearchParams();
+  if (input.slotId) params.set("slotId", input.slotId);
+  else if (input.selectedId) params.set("selectedId", input.selectedId);
+  if (input.renderId) params.set("renderId", input.renderId);
+  if (input.category && input.category !== "all") params.set("category", input.category);
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }

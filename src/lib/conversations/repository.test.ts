@@ -12,9 +12,16 @@ it("normalizes provider failures without retaining private content", async () =>
  await expect(repo.project("a0000000-0000-0000-0000-000000000001", "00000000-0000-4000-8000-000000000001", new AbortController().signal)).rejects.toThrow(/^CONVERSATION_UNAVAILABLE$/);
 });
 it("preserves durable suppression returned by the projection RPC", async () => {
- const repo = createConversationRepository({ rpc: async () => ({ data: { ignored: false, inserted: false, aiEligible: false, conversation: { id: "00000000-0000-4000-8000-000000000001", organizationId: "a0000000-0000-0000-0000-000000000001", pageId: "10000000014", psid: "20000000014", status: "AI_ACTIVE", revision: 3, activeHandoffId: null, reason: null, claimedBy: null, lastEventTimeMs: 1700000000000 } }, error: null }) });
+ const repo = createConversationRepository({ rpc: async () => ({ data: { ignored: false, inserted: false, aiEligible: false, conversation: { id: "00000000-0000-4000-8000-000000000001", organizationId: "a0000000-0000-0000-0000-000000000001", channel: "FACEBOOK", channelUserKey: "20000000014", pageId: "10000000014", psid: "20000000014", status: "AI_ACTIVE", revision: 3, activeHandoffId: null, reason: null, claimedBy: null, lastEventTimeMs: 1700000000000 } }, error: null }) });
  const result = await repo.project("a0000000-0000-0000-0000-000000000001", "00000000-0000-4000-8000-000000000001", new AbortController().signal);
  expect(result).toMatchObject({ ignored: false, aiEligible: false, conversation: { status: "AI_ACTIVE" } });
+});
+it("keeps Facebook projection RPC name and accepts WEB snapshots", async () => {
+ let name = "";
+ const repo = createConversationRepository({ rpc: async (rpcName) => { name = rpcName; return { data: { ignored: false, inserted: true, aiEligible: true, conversation: { id: "00000000-0000-4000-8000-000000000002", organizationId: "a0000000-0000-0000-0000-000000000001", channel: "WEB", channelUserKey: "web-user-054", pageId: null, psid: null, status: "AI_ACTIVE", revision: 0, activeHandoffId: null, reason: null, claimedBy: null, lastEventTimeMs: 1700000001000 } }, error: null }; } });
+ const result = await repo.project("a0000000-0000-0000-0000-000000000001", "00000000-0000-4000-8000-000000000002", new AbortController().signal);
+ expect(name).toBe("project_facebook_conversation");
+ expect(result).toMatchObject({ ignored: false, conversation: { channel: "WEB", channelUserKey: "web-user-054", pageId: null, psid: null } });
 });
 it("does not start a projection after cancellation", async () => {
  let calls = 0;

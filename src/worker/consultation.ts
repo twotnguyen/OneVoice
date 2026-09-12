@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import {randomUUID} from "node:crypto";
 import {pathToFileURL} from "node:url";
 import {createClient} from "@supabase/supabase-js";
@@ -5,6 +6,7 @@ import type {Database} from "../lib/supabase/database.types";
 import {OpenAICompatibleProvider} from "../lib/ai/openai-compatible";
 import {createConsultationHandler,createConsultationStore,consultationPorts} from "../lib/consultation/worker";
 import {createGraphMessengerTransport,createMessengerHandler,createMessengerJobQueue,createMessengerStore} from "../lib/channels/facebook/messenger";
+import {createWebOutboundHandler,createWebOutboundJobQueue,createWebOutboundStore} from "../lib/channels/web/outbound";
 import {createGraphPublicCommentTransport,createPublicCommentDispositionHandler,createPublicCommentInboundStore,createPublicCommentSendHandler,createPublicCommentSendQueue,createPublicCommentSendStore} from "../lib/channels/facebook/comments";
 import {runBusinessJobs} from "./business-jobs";
 /** Explicit opt-in, no dotenv loading. Graph send uses FACEBOOK_PAGE_ACCESS_TOKEN when configured. */
@@ -15,6 +17,7 @@ export async function runConsultation(signal:AbortSignal){
  const store=createConsultationStore(client,required("ONEVOICE_ORGANIZATION_ID"));
  const rpc=(name:string,args:Record<string,unknown>)=>client.rpc(name as never,args as never);
  const pumps=[runBusinessJobs({queue:store.queue,owner:randomUUID(),signal,handlers:{inbound_event:createConsultationHandler(store,consultationPorts(client,ai))},pollMs:1000})];
+ pumps.push(runBusinessJobs({queue:createWebOutboundJobQueue(rpc),owner:randomUUID(),signal,handlers:{outbound_message:createWebOutboundHandler(createWebOutboundStore(rpc))},pollMs:1000}));
  const comments=createPublicCommentInboundStore(rpc);
  pumps.push(runBusinessJobs({queue:comments.queue,owner:randomUUID(),signal,handlers:{inbound_event:createPublicCommentDispositionHandler(comments)},pollMs:1000}));
  const token=process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim();

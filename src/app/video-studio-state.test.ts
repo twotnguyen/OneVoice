@@ -8,6 +8,7 @@ import {
   safeRenderMessage,
   StudioOperationController,
   studioReducer,
+  studioQueryString,
 } from "./video-studio-state";
 
 const result = {
@@ -98,6 +99,29 @@ describe("studioReducer", () => {
     expect(safeRenderMessage("SCRIPT_DURATION_EXCEEDED")).toBe("Thời lượng kịch bản vượt quá giới hạn cho phép. Hãy thử lại.");
     expect(safeRenderMessage("TTS_UNAVAILABLE")).toBe("Dịch vụ lồng tiếng chưa sẵn sàng hoặc phản hồi chậm. Hãy thử lại sau ít phút.");
     expect(safeRenderMessage("NARRATION_OVERRUNS_SCENE")).toBe("Giọng đọc dài hơn thời lượng cảnh video. Hãy thử tạo lại.");
+  });
+  it("AT-035-02 ignores a stale slot completion after a newer selection", () => {
+    let state = studioReducer(initialStudioState, { type: "select_slot", slotId: "slot-a" });
+    state = studioReducer(state, { type: "start", operation: { token: "op-1", renderId: "render-1", productId: "slot-a", slotId: "slot-a" } });
+    state = studioReducer(state, { type: "failure", token: "op-1", message: "failed" });
+    state = studioReducer(state, { type: "select_slot", slotId: "slot-b" });
+    state = studioReducer(state, { type: "start", operation: { token: "op-2", renderId: "render-2", productId: "slot-b", slotId: "slot-b" } });
+    state = studioReducer(state, { type: "success", token: "op-1", result });
+    expect(state.slotId).toBe("slot-b");
+    expect(state.desk).toMatchObject({ status: "creating", operation: { token: "op-2", slotId: "slot-b" } });
+  });
+  it("AT-035-02 resume restores a persisted render without starting a new operation", () => {
+    const resumed = studioReducer(initialStudioState, {
+      type: "resume",
+      slotId: "slot-a",
+      operation: { token: "resume", renderId: "render-1", productId: "slot-a", slotId: "slot-a" },
+      result,
+    });
+    expect(resumed.slotId).toBe("slot-a");
+    expect(resumed.desk.status).toBe("ready");
+    if (resumed.desk.status !== "ready") throw new Error("expected ready");
+    expect(resumed.desk.result.urls.download).toBe("/download");
+    expect(studioQueryString({ slotId: "slot-a", renderId: "render-1" })).toBe("?slotId=slot-a&renderId=render-1");
   });
 });
 

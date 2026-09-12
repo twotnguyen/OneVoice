@@ -16,6 +16,7 @@ const matrix = [
   ["update_order", true, true],
   ["update_shipping", true, true],
   ["update_warranty", true, true],
+  ["reply_customer", true, true],
   ["manage_catalog", true, false],
   ["manage_policies", true, false],
   ["manage_ai", true, false],
