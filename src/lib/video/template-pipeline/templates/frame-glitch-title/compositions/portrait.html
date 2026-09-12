@@ -30,6 +30,7 @@
   #root { position: relative; width: 1080px; height: 1920px; background: #0d0e10; color: #f5f5f7;
     font-family: 'Archivo', sans-serif;
     display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .media-bg { position: absolute; inset: 0; width: 1080px; height: 1920px; object-fit: cover; object-position: center; z-index: 1; opacity: 0.35; pointer-events: none; }
   .mono { font-family: 'Space Mono', monospace; }
 
   /* scanlines */
@@ -83,7 +84,7 @@
     data-duration="5"
     data-width="1080"
     data-height="1920"
-    data-composition-variables='{"title":"Sự thật","subtitle":"04 · GIẢI MÃ · điều không ai nói cho bạn"}'
+    data-composition-variables='{"title":"","subtitle":""}'
   >
     <svg width="0" height="0" style="position:absolute">
       <defs>
@@ -95,6 +96,7 @@
         </filter>
       </defs>
     </svg>
+    <img class="media-bg" alt="" />
 
     <div class="chrome tl mono">&gt;&gt; SIGNAL · CH-04</div>
     <div class="chrome tr mono">REC ●</div>
@@ -125,12 +127,18 @@
       var v = (window.__hyperframes &&
                typeof window.__hyperframes.getVariables === "function")
         ? window.__hyperframes.getVariables() : {};
-      // The 3 stacked title layers must share identical text for the RGB split.
       var title = v.title != null ? String(v.title) : "";
       var allLayers = document.querySelectorAll(".glitch-text");
       allLayers.forEach(function (el) { el.textContent = title; });
       var sub = document.querySelector(".subtitle");
       if (sub && v.subtitle != null) sub.textContent = String(v.subtitle);
+      var bg = document.querySelector(".media-bg");
+      var bgSrc = v.media_background;
+      if (bg) {
+        var s = bgSrc == null ? "" : String(bgSrc);
+        if (s.indexOf("data:image/png;base64,") === 0 || s.indexOf("data:image/jpeg;base64,") === 0 || s.indexOf("data:image/webp;base64,") === 0) bg.src = s;
+        else { bg.removeAttribute("src"); bg.style.display = "none"; }
+      }
 
       /* Auto-scale all 3 layers in sync so RGB-split stays aligned */
       var base = document.querySelector(".glitch-text.base");

@@ -88,3 +88,52 @@ it.skipIf(!enabled)("stores configured descriptive provenance and rejects refres
  sql(`update public.knowledge_sources set document=document||'{"active":false}' where id='${guide}';`);
  await expect(repository.evidence([{ key: "guide", kind: "knowledge", id: guide }])).rejects.toThrow("STALE_CONTENT");
 }, 20000);
+it.skipIf(!enabled)("rejects trend evidence bound to the wrong runId or fingerprint", async () => {
+ const orgId = randomUUID(), run = randomUUID(), otherRun = randomUUID(), campaignA = randomUUID(), slotA = randomUUID(), campaignB = randomUUID(), slotB = randomUUID();
+ const fpA = "c".repeat(64), fpB = "d".repeat(64), now = new Date(), topic = "Bàn phím";
+ const observation = (fingerprint: string, path: string) => ({ fingerprint, topic, url: `https://example.com/${path}`, sourceTimestamp: now.toISOString(), timestampKind: "published", expiresAt: new Date(now.getTime() + 900000).toISOString(), trust: "untrusted_external", metrics: null });
+ const batch = { observedAt: now.toISOString(), capabilities: { social: "unconfigured", news: "available", facebook: "unavailable" }, sources: [{ key: "fixture", kind: "rss_news", url: "https://example.com/rss", ttlSeconds: 900, status: "success", errorCode: null, observations: [observation(fpA, "a"), observation(fpB, "b")] }] };
+ const settings = JSON.stringify(settingsSchema.parse({ ...defaultSettings().settings, allowedTopics: [topic] })).replaceAll("'", "''");
+ sql(`begin;insert into public.organizations(id,name,slug) values('${orgId}','Trend mismatch','${orgId}');insert into public.business_settings(organization_id,revision,settings) values('${orgId}',1,'${settings}');insert into public.campaigns(id,organization_id,title,objective,source_kind,source_ref,priority,source_snapshot,settings_snapshot,timezone,decision) values('${campaignA}','${orgId}','Trend fingerprint','engagement','trend','fixture',false,'${JSON.stringify({ runId: run, observation: observation(fpA, "a") })}','{}','Asia/Ho_Chi_Minh','{}'),('${campaignB}','${orgId}','Trend run','engagement','trend','fixture',false,'${JSON.stringify({ runId: otherRun, observation: observation(fpA, "a") })}','{}','Asia/Ho_Chi_Minh','{}');insert into public.campaign_slots(id,campaign_id,ordinal) values('${slotA}','${campaignA}',1),('${slotB}','${campaignB}',1);commit;`);
+ const client = createClient<Database>("http://127.0.0.1:54321", process.env.ONEVOICE_LOCAL_ADMIN!, { auth: { persistSession: false, autoRefreshToken: false } });
+ expect((await client.rpc("record_trend_ingestion", { p_organization_id: orgId, p_run_id: run, p_batch: batch as Json })).error).toBeNull();
+ try {
+  const repository = createContentVersionRepository(client, orgId);
+  const hook = `Chủ đề tham khảo: ${topic}`, phrase = "Nhắn tin để được tư vấn";
+  const draft = { post: { hook, caption: phrase, cta: phrase }, script: null, model: { id: "fixture", responseId: null }, claims: [{ field: "post.hook", start: 0, end: hook.length, kind: "trend", sourceKey: "trend" }, ...["post.caption", "post.cta"].map(field => ({ field, start: 0, end: phrase.length, kind: "neutral" }))] };
+  const wrongFingerprint = await repository.evidence([{ key: "trend", kind: "trend", id: run, fingerprint: fpB }]);
+  await expect(repository.save({ id: randomUUID(), slotId: slotA, requestId: randomUUID(), expectedVersion: 0, draft, evidence: wrongFingerprint })).rejects.toThrow("FORBIDDEN");
+  const currentRun = await repository.evidence([{ key: "trend", kind: "trend", id: run, fingerprint: fpA }]);
+  await expect(repository.save({ id: randomUUID(), slotId: slotB, requestId: randomUUID(), expectedVersion: 0, draft, evidence: currentRun })).rejects.toThrow("FORBIDDEN");
+ } finally { sql(`update public.campaigns set status='FAILED' where id in ('${campaignA}','${campaignB}');`); }
+}, 20000);
+it.skipIf(!enabled)("rejects document fields that contain a forbidden topic", async () => {
+ const orgId = randomUUID(), productId = randomUUID(), variantId = randomUUID(), campaignId = randomUUID(), slotId = randomUUID();
+ const settings = JSON.stringify(settingsSchema.parse({ ...defaultSettings().settings, forbiddenTopics: ["Keyboard"] })).replaceAll("'", "''");
+ sql(`begin;insert into public.organizations(id,name,slug) values('${orgId}','Forbidden topic','${orgId}');insert into public.business_settings(organization_id,revision,settings) values('${orgId}',1,'${settings}');insert into public.products(id,organization_id,source_url,canonical_url,name,in_stock,stock_quantity,price_vnd,quality,specifications) values('${productId}','${orgId}','urn:test:${productId}','urn:test:${productId}','Keyboard',true,2,100000,'partial','[{"name":"RAM","value":"16GB"}]');insert into public.product_variants(id,product_id,name,in_stock,stock_quantity,price_vnd,options) values('${variantId}','${productId}','Variant',true,2,100000,'{"RAM":"16GB"}');insert into public.campaigns(id,organization_id,title,objective,source_kind,source_ref,priority,source_snapshot,settings_snapshot,timezone) values('${campaignId}','${orgId}','Forbidden fixture','mixed','product','${productId}',true,'{}','{}','Asia/Ho_Chi_Minh');insert into public.campaign_slots(id,campaign_id,ordinal) values('${slotId}','${campaignId}',1);commit;`);
+ const client = createClient<Database>("http://127.0.0.1:54321", process.env.ONEVOICE_LOCAL_ADMIN!, { auth: { persistSession: false, autoRefreshToken: false } });
+ try {
+  const repository = createContentVersionRepository(client, orgId);
+  const evidence = await repository.evidence([{ key: "product", kind: "product", id: productId, skuId: variantId }]);
+  const draft = { post: { hook: "Keyboard", caption: "100.000 ₫", cta: "Nhắn tin để được tư vấn" }, script: null, model: { id: "fixture", responseId: null }, claims: [{ field: "post.hook", start: 0, end: 8, kind: "name", sourceKey: "product" }, { field: "post.caption", start: 0, end: 9, kind: "price", sourceKey: "product" }, { field: "post.cta", start: 0, end: 23, kind: "neutral" }] };
+  await expect(repository.save({ id: randomUUID(), slotId, requestId: randomUUID(), expectedVersion: 0, draft, evidence })).rejects.toThrow("INVALID_CONTENT");
+ } finally { sql(`update public.products set disabled_at=clock_timestamp() where id='${productId}';update public.campaigns set status='FAILED' where id='${campaignId}';`); }
+}, 20000);
+it.skipIf(!enabled)("rejects check-current when a source expires while waiting for a later row lock", async () => {
+ const orgId = randomUUID(), productId = randomUUID(), campaignId = randomUUID(), slotId = randomUUID(), guideId = randomUUID(), runId = randomUUID();
+ const settings = JSON.stringify(settingsSchema.parse(defaultSettings().settings)).replaceAll("'", "''");
+ sql(`begin;insert into public.organizations(id,name,slug) values('${orgId}','Expiry lock','${orgId}');insert into public.business_settings(organization_id,revision,settings) values('${orgId}',1,'${settings}');insert into public.products(id,organization_id,source_url,canonical_url,name,in_stock,stock_quantity,price_vnd,quality,specifications) values('${productId}','${orgId}','urn:test:${productId}','urn:test:${productId}','Keyboard',true,2,100000,'partial','[{"name":"RAM","value":"16GB"}]');insert into public.campaigns(id,organization_id,title,objective,source_kind,source_ref,priority,source_snapshot,settings_snapshot,timezone) values('${campaignId}','${orgId}','Expiry fixture','mixed','product','${productId}',true,'{}','{}','Asia/Ho_Chi_Minh');insert into public.campaign_slots(id,campaign_id,ordinal) values('${slotId}','${campaignId}',1);insert into public.knowledge_sources(id,organization_id,version,document) values('${guideId}','${orgId}',1,'{"name":"Guide","kind":"text","text":"Thiết kế gọn nhẹ","url":null,"authority":"business","productIds":["${productId}"],"topics":[],"freshnessHours":1,"active":true}');insert into public.knowledge_ingestion_runs(id,organization_id,source_id,source_version,refresh_cycle) values('${runId}','${orgId}','${guideId}',1,1);insert into public.knowledge_ingestions(id,organization_id,source_id,source_version,source_document,content_hash,content_type,fetched_at,expires_at) select '${runId}','${orgId}','${guideId}',1,document,repeat('a',64),'text/plain',clock_timestamp(),clock_timestamp()+interval '2.5 seconds' from public.knowledge_sources where id='${guideId}';insert into public.knowledge_chunks(ingestion_id,ordinal,body) values('${runId}',1,'Thiết kế gọn nhẹ');commit;`);
+ const client = createClient<Database>("http://127.0.0.1:54321", process.env.ONEVOICE_LOCAL_ADMIN!, { auth: { persistSession: false, autoRefreshToken: false } });
+ try {
+  const repository = createContentVersionRepository(client, orgId);
+  const evidence = await repository.evidence([{ key: "product", kind: "product", id: productId, skuId: productId }, { key: "guide", kind: "knowledge", id: guideId }]);
+  const hook = "Theo Guide: “Thiết kế gọn nhẹ”", cta = "Nhắn tin để được tư vấn";
+  const draft = { post: { hook, caption: "100.000 ₫", cta }, script: null, model: { id: "fixture", responseId: null }, claims: [{ field: "post.hook", start: 0, end: hook.length, kind: "knowledge", sourceKey: "guide", quote: "Thiết kế gọn nhẹ" }, { field: "post.caption", start: 0, end: 9, kind: "price", sourceKey: "product" }, { field: "post.cta", start: 0, end: cta.length, kind: "neutral" }] };
+  const saved = await repository.save({ id: randomUUID(), slotId, requestId: randomUUID(), expectedVersion: 0, draft, evidence });
+  const holder = spawn("docker", args, { windowsHide: true }); let output = "";
+  const locked = new Promise<void>(resolve => holder.stdout.on("data", data => { output += data.toString(); if (output.includes("later_locked")) resolve(); }));
+  const released = new Promise<void>((resolve, reject) => { holder.on("error", reject); holder.on("exit", code => code === 0 ? resolve() : reject(Error("lock fixture failed"))); });
+  holder.stdin.end(`begin;select id from public.knowledge_ingestion_runs where id='${runId}' for update;select 'later_locked';select pg_sleep(3);commit;`);
+  await locked; await expect(repository.current(saved.id)).rejects.toThrow("STALE_CONTENT"); await released;
+ } finally { sql(`update public.products set disabled_at=clock_timestamp() where id='${productId}';update public.campaigns set status='FAILED' where id='${campaignId}';update public.knowledge_sources set document=document||'{"active":false}',version=version+1 where id='${guideId}';`); }
+}, 20000);

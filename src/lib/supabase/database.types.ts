@@ -15,6 +15,8 @@ type NativeOrderRow = {
 }
 type NativeOrderItemRow = { order_id: string; line_number: number; product_id: string; variant_id: string | null; product_version: number; name: string; sku: string | null; quantity: number; unit_price_vnd: number; line_total_vnd: number; source_name: string | null; source_url: string | null }
 type NativeOrderRequestRow = { request_id: string; organization_id: string; order_id: string; actor_kind: string; actor_id: string | null; owner_id: string | null; conversation_id: string | null; expected_revision: number; document: Json; result: Json; created_at: string }
+type PaymentAttemptRow = { id: string; request_id: string; organization_id: string; order_id: string; expected_version: number; frozen_total_vnd: number; currency: string; status: string; expires_at: string; created_at: string; updated_at: string }
+type InventoryReservationRow = { id: string; attempt_id: string; organization_id: string; order_id: string; product_id: string; variant_id: string | null; quantity: number; state: string; expires_at: string; created_at: string; updated_at: string }
 
 export type Database = {
   graphql_public: {
@@ -274,6 +276,8 @@ export type Database = {
         Update: { organization_id?: string; flat_fee_vnd?: number | null; revision?: number; updated_at?: string }
         Relationships: []
       }
+      payment_attempts: { Row: PaymentAttemptRow; Insert: PaymentAttemptRow; Update: Partial<PaymentAttemptRow>; Relationships: [] }
+      inventory_reservations: { Row: InventoryReservationRow; Insert: InventoryReservationRow; Update: Partial<InventoryReservationRow>; Relationships: [] }
       business_policies: {
         Row: {
           body: string
@@ -2122,6 +2126,20 @@ export type Database = {
         Args: { p_organization_id: string; p_order_id: string; p_expected_revision: number; p_request_id: string }
         Returns: Json
       }
+      begin_payment: {
+        Args: { p_organization_id: string; p_order_id: string; p_expected_version: number; p_request_id: string }
+        Returns: Json
+      }
+      expire_inventory_attempt: {
+        Args: { p_organization_id: string; p_attempt_id: string }
+        Returns: Json
+      }
+      consume_inventory_attempt: {
+        Args: { p_organization_id: string; p_attempt_id: string }
+        Returns: Json
+      }
+      expire_due_inventory_attempts: { Args: Record<string, never>; Returns: number }
+      sku_active_reserved: { Args: { p_product_id: string; p_variant_id: string | null }; Returns: number }
     }
     Enums: {
       [_ in never]: never

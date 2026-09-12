@@ -23,6 +23,7 @@ import {
   type ProductScript,
 } from "./script-schema";
 import { TEMPLATE_REGISTRY } from "./template-registry";
+import { prepareComposeInputs, type HybridMediaContext } from "./hybrid-scenes";
 import { resolveMusicPath, resolveSfxPath } from "./audio-registry";
 import { composeTemplate, type ComposeArgs } from "./template-pipeline/compose-template";
 import {
@@ -49,6 +50,8 @@ export type TemplateRenderRequest = Readonly<{
   script: ProductScript;
   snapshot?: ProductSnapshot;
   imagePath?: string;
+  voice?: Readonly<{ voiceId?: string; speed?: number }>;
+  media?: HybridMediaContext;
   onSceneProgress?: (sceneIndex: number, total: number) => void;
   onStage?: (stage: "synthesizing_voice" | "composing_scenes") => void;
 }>;
@@ -130,11 +133,6 @@ export class TemplateVideoRenderer {
 
   async render(request: TemplateRenderRequest): Promise<RenderedVideo> {
     const timings: Record<string, number> = {};
-    if (request.imagePath) {
-      console.warn(
-        "[onevoice] asset_ignored: template renderer is text-only, skipping image",
-      );
-    }
     const parsed = ProductScriptSchema.safeParse(request.script);
     if (!parsed.success) throw new Error("TEMPLATE_SCRIPT_INVALID");
     const script = parsed.data;
@@ -168,7 +166,13 @@ export class TemplateVideoRenderer {
             await this.compose({
               templatesRoot: this.options.templatesRoot,
               templateId: scene.templateId,
-              inputs: scene.inputs as Record<string, unknown>,
+              inputs: await prepareComposeInputs(
+                scene.templateId,
+                scene.inputs as Record<string, unknown>,
+                request.media
+                  ? { ...request.media, imagePath: request.imagePath ?? request.media.imagePath }
+                  : undefined,
+              ),
               outputPath: rawPath,
               aspect: script.aspect,
               fps,
@@ -197,8 +201,8 @@ export class TemplateVideoRenderer {
           ttsLimit(async () => {
             const rawAudio = path.join(workDirectory, `scene-${index}-raw.mp3`);
             await this.options.tts.synthesize(scene.voiceText, rawAudio, {
-              voice: script.voice.voiceId,
-              rate: script.voice.speed,
+              voice: request.voice?.voiceId ?? script.voice.voiceId,
+              rate: request.voice?.speed ?? script.voice.speed,
             });
             const measuredSec = await this.measureAudio(rawAudio);
             if (measuredSec * 1000 > scene.durationMs) {

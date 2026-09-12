@@ -47,3 +47,22 @@ it("accepts real031 script with trusted style inventory but rejects missing temp
  script.scenes[0].voiceText = "Sản phẩm tốt nhất thị trường";
  expect(() => validateContentVersion(value, [], inventory)).toThrow();
 });
+it("accepts trusted accent_index and mediaUrl and rejects unknown or uncovered numeric defaults", () => {
+ const phrase = "Nhắn tin để được tư vấn";
+ const script = structuredClone(fixture); script.meta = { hook: phrase, caption: phrase, cta: phrase };
+ script.scenes = script.scenes.map(scene => ({ ...scene, voiceText: phrase, inputs: {} })) as typeof script.scenes;
+ script.scenes[0].templateId = "frame-creative-voltage";
+ script.scenes[0].inputs = { accent_index: 1 } as unknown as typeof script.scenes[0]["inputs"];
+ script.scenes[script.scenes.length - 1].inputs = { primary_url: "https://cdn.example.com/h.png" } as unknown as typeof script.scenes[0]["inputs"];
+ const claims = ["post.hook", "post.caption", "post.cta", ...script.scenes.map((_, index) => `script.scenes.${index}.voiceText`)].map(field => ({ field, start: 0, end: phrase.length, kind: "neutral" }));
+ const value = { post: script.meta, script, model: { id: "fixture", responseId: null }, claims };
+ const inventory = script.scenes.map(scene => ({ templateId: scene.templateId, templateHash: "a".repeat(64), staticText: {}, nonTextInputs: {} as Record<string, "color" | "index" | "mediaUrl"> }));
+ inventory[0].nonTextInputs = { accent_index: "index" };
+ inventory[inventory.length - 1].nonTextInputs = { primary_url: "mediaUrl" };
+ expect(validateContentVersion(value, [], inventory).artifactHash).toBeNull();
+ script.scenes[1].inputs = { figure: "98%" } as unknown as typeof script.scenes[0]["inputs"];
+ expect(() => validateContentVersion(value, [], inventory)).toThrow("UNCOVERED_TEXT");
+ script.scenes[1].inputs = {} as unknown as typeof script.scenes[0]["inputs"];
+ inventory[1].staticText = { badge: "98%" };
+ expect(() => validateContentVersion(value, [], inventory)).toThrow("UNCOVERED_TEXT");
+});

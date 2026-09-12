@@ -76,6 +76,7 @@ type CreateCommand = Readonly<{
   productId: string;
   scope: OrganizationScope;
   onStage?: (stage: RenderStage) => void;
+  persisted?: Readonly<{ script: GeneratedVideoScript["script"]; content: GeneratedProductContent }>;
 }>;
 
 const DEFAULT_RENDER_EVENT_TIMEOUT_MS = 3000;
@@ -217,7 +218,12 @@ export class ProductVideoPipeline {
     {
       const t = performance.now();
       try {
-        if (this.dependencies.generateScript) {
+        if (command.persisted) {
+          content = command.persisted.content;
+          script = command.persisted.script;
+          ctx.sceneCount = script.scenes.length;
+          ctx.scriptSha256 = createHash("sha256").update(JSON.stringify(script)).digest("hex");
+        } else if (this.dependencies.generateScript) {
           const generated = await this.dependencies.generateScript(snapshot);
           content = generated.content;
           script = generated.script;
