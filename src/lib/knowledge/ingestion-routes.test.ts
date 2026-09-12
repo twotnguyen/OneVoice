@@ -1,0 +1,14 @@
+import { beforeEach, expect, it, vi } from "vitest";
+import type { StaffSession } from "@/lib/auth/session";
+const state = vi.hoisted(() => ({ actor: null as StaffSession | null, refresh: vi.fn(), status: vi.fn(), client: vi.fn(() => ({})) }));
+vi.mock("@/lib/auth/routes", () => ({ createAuthContext: async () => ({ session: async () => state.actor, finish: (response: Response) => response }) }));
+vi.mock("@/lib/auth/config", () => ({ readAuthConfig: () => ({ origin: "https://app.test" }) }));
+vi.mock("@/lib/supabase/server", () => ({ createSupabaseDataClient: state.client }));
+vi.mock("./ingestion-repository", async original => ({ ...await original<object>(), createIngestionManager: () => ({ refresh: state.refresh, status: state.status }) }));
+import { GET, POST } from "@/app/api/knowledge/ingestion/route";
+const input = { sourceId: "a5000000-0000-4000-8000-000000000001", version: 1 };
+const post = (origin = "https://app.test", value: unknown = input) => new Request("https://app.test/api/knowledge/ingestion", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify(value) });
+beforeEach(() => { vi.clearAllMocks(); state.actor = { userId: "actor", organizationId: "org", role: "manager", displayName: "Test" }; state.refresh.mockResolvedValue(input.sourceId); });
+it("denies anonymous and staff before composition", async () => { state.actor = null; expect((await GET(new Request("https://app.test/api/knowledge/ingestion?sourceId=" + input.sourceId))).status).toBe(401); state.actor = { userId: "staff", organizationId: "org", role: "staff", displayName: "Staff" }; expect((await POST(post())).status).toBe(403); expect(state.client).not.toHaveBeenCalled(); });
+it("requires same origin and rejects identity injection", async () => { expect((await POST(post("https://evil.test"))).status).toBe(403); expect((await POST(post("https://app.test", { ...input, actorId: "forged" }))).status).toBe(400); });
+it("queues manager refresh with no fetch in request", async () => { expect((await POST(post())).status).toBe(202); expect(state.refresh).toHaveBeenCalledWith(input.sourceId, 1); });

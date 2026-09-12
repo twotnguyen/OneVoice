@@ -4,13 +4,11 @@ import { describe, expect, it } from "vitest";
 
 import type { RenderJob } from "@/lib/queue/types";
 import type { RenderStage } from "@/lib/render/types";
-import { RenderProgressStore } from "@/lib/render/progress-store";
 import { RenderGate } from "@/lib/render/render-gate";
 import { createDownloadRoute, createVideoRoute } from "@/lib/video/media-response";
 import type { StoredVideo, VideoManifest } from "@/lib/video/types";
 import { createRenderStatusRoute } from "./[renderId]/route";
 import { createRendersRoute } from "./route";
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const renderId = "b0000000-0000-4000-8000-000000000001";
 const productId = "b0000000-0000-4000-8000-000000000002";

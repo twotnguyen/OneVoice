@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { z } from "zod";
+import { withApiPermission } from "@/lib/auth/guards";
 
 import type { RenderJob } from "@/lib/queue/types";
 import { defaultDiagnosticSink, type DiagnosticSink } from "@/lib/render/diagnostics";
@@ -58,6 +59,8 @@ export function createRenderStatusRoute(dependencies: Dependencies) {
 }
 
 export async function GET(request: Request, context: Context): Promise<Response> {
-  const { getComposition } = await import("@/lib/render/composition-root");
-  return createRenderStatusRoute(getComposition()).GET(request, context);
+  return withApiPermission(request, "manage_marketing", async () => {
+    const { getComposition } = await import("@/lib/render/composition-root");
+    return createRenderStatusRoute(getComposition()).GET(request, context);
+  });
 }

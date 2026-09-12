@@ -274,5 +274,6 @@ describe.skipIf(!process.env.ONEVOICE_E2E)("video determinism e2e", () => {
     expect(typeof hash1).toBe("string");
     expect(hash1.length).toBeGreaterThan(0);
     expect(hash2.length).toBeGreaterThan(0);
-  });
+  // Two full-resolution renders plus SSIM exceed the default 5s on CI CPUs.
+  }, 120_000);
 });

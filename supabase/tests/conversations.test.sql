@@ -1,0 +1,71 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(35);
+select has_table('public','conversations','durable Page+PSID conversations exist');
+select ok(not has_table_privilege('authenticated','public.conversation_messages','SELECT'),'private messages hidden from direct browser access');
+select ok(not has_table_privilege('service_role','public.conversations','UPDATE'),'service mutations require RPC');
+insert into auth.users(id) values('b0000000-0000-4000-8000-000000000141'),('b0000000-0000-4000-8000-000000000142'),('b0000000-0000-4000-8000-000000000143');
+insert into public.staff_profiles(user_id,organization_id,role) values('b0000000-0000-4000-8000-000000000141','a0000000-0000-0000-0000-000000000001','staff'),('b0000000-0000-4000-8000-000000000142','a0000000-0000-0000-0000-000000000001','staff'),('b0000000-0000-4000-8000-000000000143','a0000000-0000-0000-0000-000000000001','manager');
+select public.ingest_facebook_events('a0000000-0000-0000-0000-000000000001','10000000014','[
+ {"pageId":"10000000014","providerKey":"message:conversation-first","kind":"message","senderId":"20000000014","recipientId":"10000000014","eventTimeMs":1700000000000,"data":{"text":"local fixture"}},
+ {"pageId":"10000000014","providerKey":"message:conversation-second","kind":"message","senderId":"20000000014","recipientId":"10000000014","eventTimeMs":1600000000000,"data":{"text":"older fixture while waiting"}},
+ {"pageId":"10000000014","providerKey":"message:conversation-pre-handoff","kind":"message","senderId":"20000000014","recipientId":"10000000014","eventTimeMs":1590000000000,"data":{"text":"pre-handoff unprojected backlog"}},
+ {"pageId":"10000000014","providerKey":"echo:conversation","kind":"echo","senderId":"10000000014","recipientId":"20000000014","data":{"text":"echo fixture"}},
+ {"pageId":"10000000014","providerKey":"comment:conversation","kind":"comment","senderId":"20000000014","recipientId":"10000000014","data":{"text":"public fixture"}}
+]');
+create temporary table first_event as select id from public.facebook_inbound_events where page_id='10000000014' and provider_key='message:conversation-first';
+create temporary table second_event as select id from public.facebook_inbound_events where page_id='10000000014' and provider_key='message:conversation-second';
+grant select on first_event,second_event to service_role;
+set local role service_role;
+create temporary table projection as select public.project_facebook_conversation('a0000000-0000-0000-0000-000000000001',id) result from first_event;
+create temporary table convo as select (result->'conversation'->>'id')::uuid id from projection;
+select is((select result->>'inserted' from projection),'true','first event projected');
+select is(public.project_facebook_conversation('a0000000-0000-0000-0000-000000000001',id)->>'inserted','false','projection replay deduplicates') from first_event;
+select is((select count(*) from public.conversation_messages where conversation_id=(select id from convo)),1::bigint,'one durable message');
+select is(public.project_facebook_conversation('a0000000-0000-0000-0000-000000000001',id)->>'ignored','true','echo ignored') from public.facebook_inbound_events where page_id='10000000014' and kind='echo';
+select is(public.project_facebook_conversation('a0000000-0000-0000-0000-000000000001',id)->>'ignored','true','public identity never merged') from public.facebook_inbound_events where page_id='10000000014' and kind='comment';
+select is(public.request_conversation_handoff('a0000000-0000-0000-0000-000000000001',id,0,'customer_requested')->>'status','WAITING_STAFF','request pauses atomically') from first_event;
+select is(public.request_conversation_handoff('a0000000-0000-0000-0000-000000000001',id,0,'customer_requested')->>'revision','1','request replay does not increment state') from first_event;
+select is(public.project_facebook_conversation('a0000000-0000-0000-0000-000000000001',id)->'conversation'->>'status','WAITING_STAFF','older message appends without resuming') from second_event;
+select is((select count(*) from public.conversation_messages where conversation_id=(select id from convo)),2::bigint,'message appended while waiting');
+select is((select last_event_time_ms from public.conversations where id=(select id from convo)),1700000000000::bigint,'out of order does not regress watermark');
+select is((select count(*) from public.business_jobs where kind='outbound_message'),0::bigint,'projection creates no send job');
+select is(public.request_conversation_handoff('a0000000-0000-0000-0000-000000000001',id,1,'missing_evidence')->>'revision','1','additional request while paused shares queue entry') from second_event;
+select is((select count(*) from public.conversation_handoffs where conversation_id=(select id from convo)),1::bigint,'one active handoff');
+select public.ingest_facebook_events('a0000000-0000-0000-0000-000000000001','10000000014','[{"pageId":"10000000014","providerKey":"message:conversation-delayed","kind":"message","senderId":"20000000014","recipientId":"10000000014","eventTimeMs":1700000001000,"data":{"text":"delayed while waiting"}}]');
+create temporary table delayed_event as select id from public.facebook_inbound_events where page_id='10000000014' and provider_key='message:conversation-delayed';
+reset role;
+create function pg_temp.reject_handoff_audit() returns trigger language plpgsql as $$begin raise exception 'fixture_handoff_audit_failure'; end$$;
+create trigger handoff_audit_fixture before insert on public.audit_events for each row execute function pg_temp.reject_handoff_audit();
+set local role service_role;
+select throws_ok($$select public.transition_conversation_handoff('a0000000-0000-0000-0000-000000000001','b0000000-0000-4000-8000-000000000141',id,1,'claim','c0000000-0000-4000-8000-000000000149') from convo$$,'P0001','fixture_handoff_audit_failure','failed audit rolls back claim');
+select is((select status from public.conversations where id=(select id from convo)),'WAITING_STAFF','claim state unchanged after audit failure');
+reset role;
+drop trigger handoff_audit_fixture on public.audit_events;
+set local role service_role;
+select is(public.transition_conversation_handoff('a0000000-0000-0000-0000-000000000001','b0000000-0000-4000-8000-000000000141',id,1,'claim','c0000000-0000-4000-8000-000000000141')->>'status','STAFF_ACTIVE','staff claim succeeds') from convo;
+select throws_ok($$select public.transition_conversation_handoff('a0000000-0000-0000-0000-000000000001','b0000000-0000-4000-8000-000000000142',id,1,'claim','c0000000-0000-4000-8000-000000000142') from convo$$,'40001','conversation_version_conflict','second claimant loses CAS');
+select throws_ok($$select public.transition_conversation_handoff('a0000000-0000-0000-0000-000000000001','b0000000-0000-4000-8000-000000000142',id,2,'complete','c0000000-0000-4000-8000-000000000144') from convo$$,'42501','conversation_forbidden','different staff cannot complete');
+select is(public.transition_conversation_handoff('a0000000-0000-0000-0000-000000000001','b0000000-0000-4000-8000-000000000143',id,2,'complete','c0000000-0000-4000-8000-000000000143')->>'status','AI_ACTIVE','manager can complete claim') from convo;
+select is(public.request_conversation_handoff('a0000000-0000-0000-0000-000000000001',id,0,'customer_requested')->>'status','AI_ACTIVE','original replay cannot reopen completed handoff') from first_event;
+select is(public.request_conversation_handoff('a0000000-0000-0000-0000-000000000001',id,1,'missing_evidence')->>'status','AI_ACTIVE','message decision while paused also cannot reopen') from second_event;
+select is((select count(*) from public.audit_events where entity_id=(select id from convo)),3::bigint,'request claim complete audited once each');
+reset role;
+update public.staff_profiles set active=false where user_id='b0000000-0000-4000-8000-000000000141';
+set local role service_role;
+select throws_ok($$select public.transition_conversation_handoff('a0000000-0000-0000-0000-000000000001','b0000000-0000-4000-8000-000000000141',id,1,'claim','c0000000-0000-4000-8000-000000000141') from convo$$,'42501','conversation_forbidden','disabled actor rejected even on retry');
+reset role;
+set local role authenticated;
+select throws_ok($$select public.project_facebook_conversation('a0000000-0000-0000-0000-000000000001','c0000000-0000-4000-8000-000000000141')$$,'42501',null,'browser cannot invoke projection');
+select throws_ok($$select public.conversation_snapshot('c0000000-0000-4000-8000-000000000141')$$,'42501',null,'internal snapshot is not an authorization bypass');
+reset role;
+select is(public.project_facebook_conversation('a0000000-0000-0000-0000-000000000001',id)->>'aiEligible','false','delayed job received during pause remains suppressed after completion') from delayed_event;
+select is(public.request_conversation_handoff('a0000000-0000-0000-0000-000000000001',id,3,'customer_requested')->>'status','AI_ACTIVE','delayed suppressed message cannot reopen staff-completed work') from delayed_event;
+select is(public.project_facebook_conversation('a0000000-0000-0000-0000-000000000001',id)->>'aiEligible','false','suppression survives replay') from delayed_event;
+select is(public.project_facebook_conversation('a0000000-0000-0000-0000-000000000001',id)->>'aiEligible','false','unprojected pre-handoff backlog remains suppressed after completion') from public.facebook_inbound_events where page_id='10000000014' and provider_key='message:conversation-pre-handoff';
+select is(public.request_conversation_handoff('a0000000-0000-0000-0000-000000000001',id,3,'customer_requested')->>'status','AI_ACTIVE','old backlog cannot reopen completed staff work') from public.facebook_inbound_events where page_id='10000000014' and provider_key='message:conversation-pre-handoff';
+select public.ingest_facebook_events('a0000000-0000-0000-0000-000000000001','10000000014','[{"pageId":"10000000014","providerKey":"message:conversation-fresh","kind":"message","senderId":"20000000014","recipientId":"10000000014","eventTimeMs":1800000000000,"data":{"text":"new request after staff completion"}}]');
+select is(public.project_facebook_conversation('a0000000-0000-0000-0000-000000000001',id)->>'aiEligible','true','only newly received post-completion messages are eligible') from public.facebook_inbound_events where page_id='10000000014' and provider_key='message:conversation-fresh';
+select is(public.request_conversation_handoff('a0000000-0000-0000-0000-000000000001',id,3,'customer_requested')->>'status','WAITING_STAFF','fresh input can request a new handoff') from public.facebook_inbound_events where page_id='10000000014' and provider_key='message:conversation-fresh';
+select * from finish();
+rollback;

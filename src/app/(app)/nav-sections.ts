@@ -7,10 +7,10 @@ export type NavEntry = Readonly<{
 }>;
 
 export const NAV_SECTIONS: readonly NavEntry[] = [
-  { href: "/", label: "Studio", status: "active" },
   { href: "/dashboard", label: "Tổng quan", status: "active" },
-  { href: "/history", label: "Lịch sử video", status: "active" },
+  { href: "/", label: "Studio", status: "active" },
   { href: "/catalog", label: "Khám phá catalog", status: "active" },
+  { href: "/history", label: "Lịch sử video", status: "active" },
   { href: "/funnel", label: "Marketing Funnel", status: "active" },
 ];
 

@@ -221,9 +221,9 @@ p {
 }
 
 .app-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-5);
   padding: 14px clamp(20px, 4vw, 64px);
   border-bottom: 1px solid var(--line);
@@ -235,6 +235,7 @@ p {
 }
 
 .app-brand {
+  justify-self: start;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -250,12 +251,24 @@ p {
   color: var(--brand-primary);
 }
 
+.app-nav {
+  justify-self: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .app-nav ul {
   display: flex;
+  align-items: center;
+  justify-content: center;
   gap: var(--space-2);
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.app-header__spacer {
+  justify-self: end;
 }
 
 .app-nav__link {
@@ -2091,9 +2104,31 @@ p {
   flex-direction: column;
   gap: 16px;
 }
+.trend-badges-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.trend-peak-badge {
+  font-size: var(--text-xs);
+  color: var(--ink-secondary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--line);
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
+}
+.trend-peak-badge strong {
+  color: var(--brand-primary);
+  font-weight: 700;
+}
 .trend-total-badge {
   font-size: var(--text-xs);
-  color: var(--ink-muted);
+  color: var(--ink-secondary);
+  background: var(--brand-primary-subtle);
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
 }
 .trend-total-badge strong {
   color: var(--brand-primary);
@@ -2102,20 +2137,40 @@ p {
 .trend-chart-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  position: relative;
 }
 .trend-svg {
   width: 100%;
   height: auto;
+  overflow: visible;
+  cursor: crosshair;
+  user-select: none;
+}
+.trend-grid-label {
+  font-size: 10px;
+  fill: var(--ink-subtle);
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+.trend-point-group {
+  cursor: pointer;
+}
+.trend-point-halo {
+  transition: r 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
 }
 .trend-axis-labels {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-family: var(--font-mono);
   color: var(--ink-subtle);
-  padding: 0 16px;
+  padding: 0 38px 0 38px;
+}
+.trend-axis-mid {
+  color: var(--ink-muted);
+  font-size: 0.68rem;
 }
 
 /* Recent Activity Card */
@@ -2218,5 +2273,25 @@ p {
 @media (max-width: 640px) {
   .executive-kpi-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 960px) {
+  .app-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: 12px 20px;
+  }
+  .app-brand {
+    width: 100%;
+    justify-content: center;
+  }
+  .app-nav {
+    overflow-x: auto;
+  }
+  .app-header__spacer {
+    display: none;
   }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import path from "node:path";
+import { requirePagePermission } from "@/lib/auth/guards";
 
 import { readServerEnv } from "@/lib/env/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -11,6 +12,7 @@ import { HistoryClient, type HistoryItem, type VideoScriptContent } from "./hist
 export const dynamic = "force-dynamic";
 
 export default async function HistoryPage() {
+  await requirePagePermission("manage_marketing", "/history");
   const { runtime } = readServerEnv();
   const mediaRoot = path.isAbsolute(runtime.mediaRoot)
     ? runtime.mediaRoot

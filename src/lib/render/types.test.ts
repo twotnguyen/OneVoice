@@ -33,7 +33,7 @@ describe("toRenderRunView", () => {
 
     const view = toRenderRunView(manifest);
 
-    expect(view).toEqual({ renderId, status: "succeeded", content });
+    expect(view).toEqual({ renderId, status: "succeeded", content, durationSeconds: 12 });
     expect(view).not.toHaveProperty("artifact");
   });
 
@@ -89,6 +89,6 @@ describe("toRenderRunView", () => {
       publication: { channel: "tiktok", postId: "123" },
     } as unknown as VideoManifest;
 
-    expect(toRenderRunView(manifest)).toEqual({ renderId, status: "succeeded", content });
+    expect(toRenderRunView(manifest)).toEqual({ renderId, status: "succeeded", content, durationSeconds: 12 });
   });
 });

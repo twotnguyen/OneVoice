@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { z } from "zod";
+import { withApiPermission } from "@/lib/auth/guards";
 
 import type { OrganizationScope, StudioProduct, StudioProductFilters } from "@/lib/catalog/types";
 
@@ -81,6 +82,8 @@ export function createProductsRoute(dependencies: Dependencies) {
 }
 
 export async function GET(request: Request): Promise<Response> {
-  const { getComposition } = await import("@/lib/render/composition-root");
-  return createProductsRoute(getComposition()).GET(request);
+  return withApiPermission(request, "read_catalog", async () => {
+    const { getComposition } = await import("@/lib/render/composition-root");
+    return createProductsRoute(getComposition()).GET(request);
+  });
 }

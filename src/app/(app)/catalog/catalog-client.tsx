@@ -3,6 +3,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import type { ProductDetail, StudioProduct } from "@/lib/catalog/types";
@@ -566,7 +567,10 @@ export function CatalogClient({
                 {/* Thumbnail */}
                 <div className="showroom-card__thumb">
                   {product.primaryImageUrl ? (
-                    <img
+                    <Image
+                      unoptimized
+                      fill
+                      style={{ objectFit: "contain", padding: 12 }}
                       src={product.primaryImageUrl}
                       alt={product.name}
                       loading="lazy"
@@ -1214,7 +1218,10 @@ function ProductDetailModal({
           <div className="modal-image-col">
             <div className="modal-image-viewport">
               {currentImage ? (
-                <img
+                <Image
+                  unoptimized
+                  fill
+                  style={{ objectFit: "contain", padding: 16 }}
                   src={currentImage}
                   alt={product.name}
                   className="modal-image-main"
@@ -1267,7 +1274,7 @@ function ProductDetailModal({
                     className={`modal-thumb-btn ${idx === activeImageIndex ? "active" : ""}`}
                     aria-label={`Chọn ảnh số ${idx + 1}`}
                   >
-                    <img src={imgUrl} alt="" />
+                    <Image unoptimized width={64} height={64} src={imgUrl} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                   </button>
                 ))}
               </div>

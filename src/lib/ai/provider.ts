@@ -4,6 +4,7 @@ export type GenerateTextInput = {
   prompt: string;
   timeoutMs?: number;
   model?: string;
+  signal?: AbortSignal;
 };
 
 export type GenerateTextResult = {

@@ -14,7 +14,7 @@ describe("resolveRuntimePaths", () => {
     const appPaths = resolveRuntimePaths({ mediaRoot: "renders", ffmpegPath: "ffmpeg", ffprobePath: "ffprobe", cwd: "/app/a" });
     const workerPaths = resolveRuntimePaths({ mediaRoot: "renders", ffmpegPath: "ffmpeg", ffprobePath: "ffprobe", cwd: "/app/a" });
     expect(appPaths.queueRoot).toBe(workerPaths.queueRoot);
-    expect(appPaths.queueRoot).toBe(path.join("/app/a", "renders", "queue"));
+    expect(appPaths.queueRoot).toBe(path.resolve("/app/a", "renders", "queue"));
   });
 
   it("explicit ONEVOICE_QUEUE_ROOT wins over the default", () => {

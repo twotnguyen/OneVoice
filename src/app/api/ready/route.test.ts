@@ -6,6 +6,10 @@ const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
 const { supabaseSelectMock } = vi.hoisted(() => ({ supabaseSelectMock: vi.fn() }));
 
 vi.mock("node:child_process", () => ({ execFile: execFileMock }));
+vi.mock("@/lib/auth/routes", () => ({ createAuthContext: async () => ({
+  session: async () => ({ userId: "manager", organizationId: "org", role: "manager" }),
+  finish: (response: Response) => response,
+}) }));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: () => ({
     from: () => ({ select: supabaseSelectMock }),
@@ -33,10 +37,10 @@ describe("GET /api/ready", () => {
   it("returns 200 when every dependency is ok", async () => {
     supabaseSelectMock.mockResolvedValue({ error: null });
 
-    const response = await GET();
+    const response = await GET(new Request("https://app.test/api/ready"));
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(await response.json()).toEqual({
       status: "ok",
       service: "onevoice",
@@ -47,7 +51,7 @@ describe("GET /api/ready", () => {
   it("returns 503 when a dependency fails", async () => {
     supabaseSelectMock.mockResolvedValue({ error: { message: "connection refused" } });
 
-    const response = await GET();
+    const response = await GET(new Request("https://app.test/api/ready"));
 
     expect(response.status).toBe(503);
     const body = await response.json();

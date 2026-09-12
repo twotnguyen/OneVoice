@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { readServerEnv } from "@/lib/env/server";
+import { requirePagePermission, requireActionPermission } from "@/lib/auth/guards";
 import { CatalogRepository } from "@/lib/catalog/repository";
 import type { ProductDetail, StudioProduct } from "@/lib/catalog/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -10,6 +11,7 @@ import { CatalogClient } from "./catalog-client";
 export const dynamic = "force-dynamic";
 
 export default async function CatalogPage() {
+  await requirePagePermission("read_catalog", "/catalog");
   const { runtime } = readServerEnv();
   const repository = new CatalogRepository({
     client: createSupabaseServerClient(),
@@ -34,6 +36,7 @@ export default async function CatalogPage() {
 
   async function fetchProductDetailAction(id: string): Promise<ProductDetail | null> {
     "use server";
+    await requireActionPermission("read_catalog");
     const { runtime: currentRuntime } = readServerEnv();
     const repo = new CatalogRepository({ client: createSupabaseServerClient() });
     return repo.getProductDetail({ organizationId: currentRuntime.organizationId }, id);
@@ -50,6 +53,7 @@ export default async function CatalogPage() {
     inStockOnly?: boolean;
   }) {
     "use server";
+    await requireActionPermission("read_catalog");
     const { runtime: currentRuntime } = readServerEnv();
     const repo = new CatalogRepository({ client: createSupabaseServerClient() });
     const productType = !options.category || options.category === "all" ? "all" : options.category;

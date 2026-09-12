@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { requirePagePermission } from "@/lib/auth/guards";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -370,6 +371,7 @@ async function getFunnelMetrics(): Promise<FunnelMetrics> {
 }
 
 export default async function FunnelPage() {
+  await requirePagePermission("manage_marketing", "/funnel");
   const metrics = await getFunnelMetrics();
   return <FunnelClient metrics={metrics} />;
 }

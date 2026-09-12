@@ -2,12 +2,12 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
 
 import type { RenderStage } from "@/lib/render/types";
 import {
   checkDownloadArtifact,
-  formatSnapshotLabel,
   initialStudioState,
   isQueuedRenderResponse,
   isSucceededRenderResponse,
@@ -116,6 +116,7 @@ export function VideoStudio() {
   const { selectedId, desk } = studio;
 
   const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const categoryScrollId = useId();
   const sliderTrackRef = useRef<HTMLDivElement>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [thumbRatio, setThumbRatio] = useState(0.3);
@@ -217,38 +218,24 @@ export function VideoStudio() {
     window.addEventListener("mouseup", handleMouseUp);
   }, []);
 
-  const searchRef = useRef(search);
-  searchRef.current = search;
-  const brandRef = useRef(selectedBrand);
-  brandRef.current = selectedBrand;
-  const categoryRef = useRef(selectedCategory);
-  categoryRef.current = selectedCategory;
-  const priceRangeRef = useRef(selectedPriceRange);
-  priceRangeRef.current = selectedPriceRange;
-  const inStockOnlyRef = useRef(inStockOnly);
-  inStockOnlyRef.current = inStockOnly;
   useEffect(() => {
+    if (search === debouncedSearch) return;
     const timer = setTimeout(() => {
+      setCatalogState("loading");
       setDebouncedSearch(search);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, debouncedSearch]);
 
   const loadProducts = useCallback((
     pageToLoad: number,
-    signal?: AbortSignal,
-    currentSearch?: string,
-    currentBrand?: string | null,
-    currentCategory?: string,
-    currentPriceRange?: PriceRange,
-    currentInStockOnly?: boolean,
+    signal: AbortSignal | undefined,
+    s: string,
+    brand: string | null,
+    cat: string,
+    pr: PriceRange,
+    stock: boolean,
   ) => {
-    const brand = currentBrand !== undefined ? currentBrand : brandRef.current;
-    const s = currentSearch !== undefined ? currentSearch : searchRef.current;
-    const cat = currentCategory !== undefined ? currentCategory : categoryRef.current;
-    const pr = currentPriceRange !== undefined ? currentPriceRange : priceRangeRef.current;
-    const stock = currentInStockOnly !== undefined ? currentInStockOnly : inStockOnlyRef.current;
-
     let url = `/api/products?page=${pageToLoad}&pageSize=${PAGE_SIZE}`;
     if (cat && cat !== "all") {
       url += `&productType=${encodeURIComponent(cat)}`;
@@ -275,6 +262,7 @@ export function VideoStudio() {
       .then(async (response) => {
         if (!response.ok) throw new Error("catalog unavailable");
         const payload = (await readJsonBody(response)) as ProductsResponse | null;
+        if (signal?.aborted) return;
         if (!payload || !Array.isArray(payload.items)) throw new Error("catalog unavailable");
         const total = typeof payload.total === "number" && Number.isFinite(payload.total) ? payload.total : payload.items.length;
         const serverTotalPages = typeof payload.totalPages === "number" && Number.isFinite(payload.totalPages) && payload.totalPages >= 1
@@ -290,7 +278,7 @@ export function VideoStudio() {
         setCatalogState(payload.items.length > 0 ? "ready" : "empty");
       })
       .catch((error: Error) => {
-        if (error.name !== "AbortError") setCatalogState("error");
+        if (!signal?.aborted && error.name !== "AbortError") setCatalogState("error");
       });
   }, []);
 
@@ -314,27 +302,33 @@ export function VideoStudio() {
       }
       return;
     }
+    setCatalogState("loading");
     setSelectedBrand(nextBrand);
   }, [selectedBrand, page, loadProducts, debouncedSearch, selectedCategory, selectedPriceRange, inStockOnly]);
 
   const handleCategoryClick = useCallback((categoryId: string) => {
+    if (categoryId === selectedCategory) return;
+    setCatalogState("loading");
     setSelectedCategory(categoryId);
     const brandsForCat = BRANDS_BY_CATEGORY[categoryId] || BRANDS_BY_CATEGORY.all;
     if (selectedBrand && !brandsForCat.includes(selectedBrand)) {
       setSelectedBrand(null);
     }
-  }, [selectedBrand]);
+  }, [selectedBrand, selectedCategory]);
 
   const handlePriceRangeClick = useCallback((rangeId: PriceRange) => {
+    if (rangeId === selectedPriceRange) return;
+    setCatalogState("loading");
     setSelectedPriceRange(rangeId);
-  }, []);
+  }, [selectedPriceRange]);
 
   const handleInStockToggle = useCallback((checked: boolean) => {
+    if (checked === inStockOnly) return;
+    setCatalogState("loading");
     setInStockOnly(checked);
-  }, []);
+  }, [inStockOnly]);
 
   useEffect(() => {
-    setCatalogState("loading");
     const controller = new AbortController();
     void loadProducts(1, controller.signal, debouncedSearch, selectedBrand, selectedCategory, selectedPriceRange, inStockOnly);
     return () => controller.abort();
@@ -523,6 +517,7 @@ export function VideoStudio() {
               <div
                 className="category-tabs-scroll"
                 ref={categoryScrollRef}
+                id={categoryScrollId}
                 role="tablist"
                 aria-label="Chọn loại sản phẩm"
                 onMouseDown={handleTabsMouseDown}
@@ -553,6 +548,27 @@ export function VideoStudio() {
                   ref={sliderTrackRef}
                   onClick={handleTrackClick}
                   role="scrollbar"
+                  tabIndex={0}
+                  aria-controls={categoryScrollId}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(scrollProgress * 100)}
+                  onKeyDown={(event) => {
+                    const el = categoryScrollRef.current;
+                    if (!el) return;
+                    const maxScroll = el.scrollWidth - el.clientWidth;
+                    const positions: Record<string, number> = {
+                      ArrowLeft: el.scrollLeft - 40,
+                      ArrowRight: el.scrollLeft + 40,
+                      PageUp: el.scrollLeft - el.clientWidth,
+                      PageDown: el.scrollLeft + el.clientWidth,
+                      Home: 0,
+                      End: maxScroll,
+                    };
+                    if (!(event.key in positions)) return;
+                    event.preventDefault();
+                    el.scrollTo({ left: Math.max(0, Math.min(maxScroll, positions[event.key])), behavior: "smooth" });
+                  }}
                   aria-orientation="horizontal"
                   aria-label="Thanh kéo cuộn danh mục"
                 >
@@ -706,7 +722,10 @@ export function VideoStudio() {
 
                       <div className="product-card-thumb">
                         {product.primaryImageUrl ? (
-                          <img
+                          <Image
+                            unoptimized
+                            width={64}
+                            height={64}
                             src={product.primaryImageUrl}
                             alt=""
                             loading="lazy"
@@ -779,7 +798,7 @@ export function VideoStudio() {
             <div className="selected-hero-card">
               <div className="selected-hero-card__thumb">
                 {selectedProduct.primaryImageUrl ? (
-                  <img src={selectedProduct.primaryImageUrl} alt={selectedProduct.name} />
+                  <Image unoptimized width={80} height={80} src={selectedProduct.primaryImageUrl} alt={selectedProduct.name} />
                 ) : (
                   <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--ink-muted)" }}>{selectedProduct.brand}</span>
                 )}

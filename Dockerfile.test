@@ -1,0 +1,15 @@
+# syntax=docker/dockerfile:1
+# SPDX-License-Identifier: Apache-2.0
+FROM node:24.13.0-bookworm-slim
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV ONEVOICE_E2E=1
+ENV ONEVOICE_FONT_PATH=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && corepack enable && corepack prepare pnpm@11.24.0 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+RUN test ! -e .env && test ! -d references
+CMD ["sh", "-c", "pnpm typecheck && pnpm lint && pnpm exec vitest run --maxWorkers=1 --no-file-parallelism"]

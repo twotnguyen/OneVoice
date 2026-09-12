@@ -1,0 +1,18 @@
+.page { max-width: 1200px; margin: 0 auto; padding: 40px 24px; color: #17212f; }
+.page h1 { font-size: 30px; margin-bottom: 8px; }
+.page p { line-height: 1.6; }
+.notice { padding: 14px 18px; border-radius: 10px; background: #eef2ff; }
+.columns { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(320px, 2fr); gap: 24px; margin-top: 20px; align-items: start; }
+.card { border: 1px solid #e2e5eb; border-radius: 16px; background: white; padding: 24px; min-width: 0; }
+.page button { padding: 10px 14px; border: 1px solid #d5dae4; border-radius: 8px; background: white; color: #243249; cursor: pointer; font: inherit; }
+.page button:disabled { cursor: default; opacity: .6; }
+.page button:focus-visible, .page input:focus-visible, .page textarea:focus-visible, .page select:focus-visible { outline: 2px solid #3456c9; outline-offset: 2px; }
+.source { display: grid; gap: 8px; text-align: left; width: 100%; margin: 8px 0; overflow-wrap: anywhere; }
+.source span { font-size: 13px; color: #647084; }
+.page fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.page label { display: grid; gap: 8px; margin: 16px 0; }
+.page input:not([type=checkbox]), .page textarea, .page select { padding: 10px; border: 1px solid #d5dae4; border-radius: 8px; font: inherit; width: 100%; box-sizing: border-box; background: white; color: inherit; }
+.page textarea { resize: vertical; }
+.page .check { display: flex; align-items: center; }
+.actions, .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+@media (max-width: 760px) { .columns { grid-template-columns: 1fr; } .page { padding: 24px 16px; } .card { padding: 18px; } }

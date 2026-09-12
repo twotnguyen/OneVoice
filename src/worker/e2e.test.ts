@@ -11,7 +11,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { CatalogRepository } from "@/lib/catalog/repository";
-import type { OrganizationScope, ProductSnapshot } from "@/lib/catalog/types";
+import type { ProductSnapshot } from "@/lib/catalog/types";
 import { FileJobQueue } from "@/lib/queue/file-queue";
 import type { RenderJob } from "@/lib/queue/types";
 import { ProductVideoPipeline } from "@/lib/render/product-video-pipeline";
@@ -29,7 +29,6 @@ afterEach(async () => {
 
 describe.skipIf(!process.env.ONEVOICE_E2E)("worker e2e", () => {
   const orgId = "a0000000-0000-4000-8000-000000000001";
-  const scope: OrganizationScope = { organizationId: orgId };
   const productId = "b0000000-0000-4000-8000-000000000002";
   const renderId = "c0000000-0000-4000-8000-000000000003";
 

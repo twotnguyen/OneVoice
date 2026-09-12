@@ -307,7 +307,8 @@ export class CatalogRepository {
 
     let query = this.client
       .from("products")
-      .select("*", { count: "exact" });
+      .select("*", { count: "exact" })
+      .is("disabled_at", null);
 
     const orgId = filters.organizationId ?? this.defaultOrgId;
     query = query.eq("organization_id", orgId);
@@ -397,7 +398,7 @@ export class CatalogRepository {
     }
     const { data: product, error: prodErr } = await productQuery.maybeSingle();
 
-    if (prodErr || !product) {
+    if (prodErr || !product || product.disabled_at) {
       return null;
     }
 
@@ -486,7 +487,7 @@ export class CatalogRepository {
         isPrimary: img.is_primary,
         altText: img.alt_text,
       })),
-      variants: (variantsRes.data ?? []).map((v) => ({
+      variants: (variantsRes.data ?? []).filter((v) => !v.disabled_at).map((v) => ({
         id: v.id,
         sourceVariantId: v.source_variant_id,
         sku: v.sku,

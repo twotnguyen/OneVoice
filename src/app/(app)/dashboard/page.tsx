@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import path from "node:path";
+import { requirePagePermission } from "@/lib/auth/guards";
 
 import { readServerEnv } from "@/lib/env/server";
 import { getDashboardData, type DashboardClient } from "@/lib/stats/aggregations";
@@ -16,6 +17,7 @@ import { TrendChart } from "./trend-chart";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  await requirePagePermission("manage_marketing", "/dashboard");
   const { runtime } = readServerEnv();
   const supabase = createSupabaseServerClient();
 

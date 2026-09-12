@@ -26,9 +26,14 @@ describe("isActiveSection", () => {
 });
 
 describe("NAV_SECTIONS", () => {
-  it("keeps deferred entries disabled with no routes", () => {
-    const disabled = NAV_SECTIONS.filter((entry) => entry.status === "disabled");
-    expect(disabled.map((entry) => entry.href)).toEqual(["/history", "/catalog", "/funnel"]);
-    expect(NAV_SECTIONS.filter((entry) => entry.status === "active")).toHaveLength(2);
+  it("orders navigation sections starting with dashboard", () => {
+    expect(NAV_SECTIONS.map((entry) => entry.href)).toEqual([
+      "/dashboard",
+      "/",
+      "/catalog",
+      "/history",
+      "/funnel",
+    ]);
+    expect(NAV_SECTIONS.every((entry) => entry.status === "active")).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { z } from "zod";
+import { withApiPermission, renderRequestLimiter } from "@/lib/auth/guards";
 
 import type { OrganizationScope } from "@/lib/catalog/types";
 import type { RenderJob } from "@/lib/queue/types";
@@ -84,6 +85,8 @@ export function createRendersRoute(dependencies: Dependencies) {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const { getComposition } = await import("@/lib/render/composition-root");
-  return createRendersRoute(getComposition()).POST(request);
+  return withApiPermission(request, "manage_marketing", async () => {
+    const { getComposition } = await import("@/lib/render/composition-root");
+    return createRendersRoute(getComposition()).POST(request);
+  }, { mutation: true, limiter: renderRequestLimiter });
 }

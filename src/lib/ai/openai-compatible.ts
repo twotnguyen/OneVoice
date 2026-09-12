@@ -75,8 +75,12 @@ async function readErrorDetail(response: Response, apiKey: string): Promise<stri
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve,reject) => {
+    const stop=()=>{clearTimeout(timer);reject(new Error("AI provider cancelled"));};
+    const timer=setTimeout(()=>{signal?.removeEventListener("abort",stop);resolve();},ms);
+    signal?.addEventListener("abort",stop,{once:true});if(signal?.aborted)stop();
+  });
 }
 
 function isTimeoutError(error: unknown): boolean {
@@ -103,6 +107,7 @@ export class OpenAICompatibleProvider implements AiProvider {
     let lastDetail = "";
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      input.signal?.throwIfAborted();
       let response: Response;
       try {
         response = await this.fetchImplementation(this.responsesUrl, {
@@ -116,7 +121,7 @@ export class OpenAICompatibleProvider implements AiProvider {
             model,
             input: input.prompt,
           }),
-          signal: AbortSignal.timeout(timeoutMs),
+          signal: input.signal ? AbortSignal.any([input.signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
         });
       } catch (error) {
         if (isTimeoutError(error)) {
@@ -134,7 +139,7 @@ export class OpenAICompatibleProvider implements AiProvider {
         lastDetail = await readErrorDetail(response, this.config.apiKey);
         const retryable = isRetryableStatus(response.status);
         if (retryable && attempt < MAX_ATTEMPTS) {
-          await sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+          await sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),input.signal);
           continue;
         }
         throw new Error(`AI provider request failed with status ${response.status} (HTTP)`, {
@@ -152,6 +157,7 @@ export class OpenAICompatibleProvider implements AiProvider {
       }
 
       const parsed = responseSchema.safeParse(payload);
+      input.signal?.throwIfAborted();
       if (!parsed.success) {
         throw new Error("AI provider returned invalid response (SCHEMA): schema mismatch", {
           cause: parsed.error,

@@ -44,6 +44,7 @@ describe("CatalogRepository", () => {
     const query = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       gt: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       range: vi.fn().mockResolvedValue({
@@ -93,6 +94,7 @@ describe("CatalogRepository", () => {
     const query = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       gt: vi.fn().mockReturnThis(),
       ilike: vi.fn().mockReturnThis(),
       or: vi.fn().mockReturnThis(),
@@ -126,6 +128,7 @@ describe("CatalogRepository", () => {
     const query = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       gt: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
       lte: vi.fn().mockReturnThis(),
@@ -160,6 +163,7 @@ describe("CatalogRepository", () => {
     const query = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       gt: vi.fn().mockReturnThis(),
       ilike: vi.fn().mockReturnThis(),
       or: vi.fn().mockReturnThis(),
@@ -189,6 +193,7 @@ describe("CatalogRepository", () => {
     const query = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       gt: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       range: vi.fn().mockResolvedValue({
@@ -243,6 +248,7 @@ describe("CatalogRepository", () => {
     const query = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       maybeSingle: vi.fn().mockResolvedValue({ data: contentContextRow, error: null }),
     };
     const client = {
@@ -313,6 +319,7 @@ describe("CatalogRepository", () => {
     const query = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       maybeSingle: vi.fn().mockResolvedValue({ data: contentContextRow, error: null }),
     };
     const client = {
@@ -354,6 +361,7 @@ describe("CatalogRepository", () => {
     const query = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       maybeSingle: vi.fn().mockResolvedValue({ data: contentContextRow, error: null }),
     };
     const client = {
@@ -373,6 +381,7 @@ describe("CatalogRepository", () => {
     const query = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       maybeSingle: vi.fn().mockResolvedValue({
         data: null,
         error: { message: "sensitive database detail" },
@@ -396,6 +405,7 @@ describe("CatalogRepository", () => {
     const query = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       gt: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       range: vi.fn().mockResolvedValue({ data: [], count: 0, error: null }),
@@ -418,6 +428,7 @@ describe("CatalogRepository", () => {
     const mockQueryBuilder: Record<string, unknown> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       or: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
       lte: vi.fn().mockReturnThis(),
@@ -468,6 +479,7 @@ describe("CatalogRepository", () => {
     const mockQueryBuilder: Record<string, unknown> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       or,
       gte: vi.fn().mockReturnThis(),
       lte: vi.fn().mockReturnThis(),
@@ -499,6 +511,7 @@ describe("CatalogRepository", () => {
     const mockQueryBuilder: Record<string, unknown> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       or,
       order: vi.fn().mockReturnThis(),
       range: vi.fn().mockResolvedValue({ data: [], count: 0, error: null }),
@@ -518,6 +531,7 @@ describe("CatalogRepository", () => {
     const mockQueryBuilder: Record<string, unknown> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       or,
       order: vi.fn().mockReturnThis(),
       range: vi.fn().mockResolvedValue({ data: [], count: 0, error: null }),
@@ -540,6 +554,7 @@ describe("CatalogRepository", () => {
     const mockQueryBuilder: Record<string, unknown> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       or,
       order: vi.fn().mockReturnThis(),
       range: vi.fn().mockResolvedValue({ data: [], count: 0, error: null }),
@@ -563,6 +578,7 @@ describe("CatalogRepository", () => {
           return {
             select: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
             maybeSingle: vi.fn().mockResolvedValue({
               data: {
                 id: "prod-1",
@@ -581,6 +597,7 @@ describe("CatalogRepository", () => {
           return {
             select: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
             order: vi.fn().mockResolvedValue({
               data: [
                 {
@@ -672,6 +689,7 @@ describe("CatalogRepository", () => {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
         maybeSingle: vi.fn().mockResolvedValue({
           data: {
             product_id: "prod-1",

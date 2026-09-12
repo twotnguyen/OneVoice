@@ -1,0 +1,12 @@
+import { expect, it, vi } from "vitest";
+import { provisionStaff, staffCommandSchema, type ProvisionPort } from "./staff-admin";
+const input = { action: "create" as const, requestId: "a0000000-0000-4000-8000-000000000048", email: "fake@example.test", password: "a-local-long-password", displayName: "Test staff", role: "staff" as const };
+const reservation = { userId: "b0000000-0000-4000-8000-000000000048", marker: "private-marker", completed: false };
+const owned = { id: reservation.userId, email: input.email, marker: reservation.marker };
+function port(): ProvisionPort { return { reserve: vi.fn(async () => reservation), find: vi.fn(async () => null), create: vi.fn(async () => owned), finish: vi.fn(async () => ({ userId: reservation.userId, version: 1 })) }; }
+it("provisions only a reserved identity and finishes after ownership verification", async () => { const p = port(); await expect(provisionStaff(p, input)).resolves.toEqual({ userId: reservation.userId, version: 1 }); expect(p.create).toHaveBeenCalledWith(reservation, input); });
+it("recovers an ambiguous Auth create by reserved identity", async () => { const p = port(); p.create = vi.fn(async () => { throw Error("timeout"); }); p.find = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(owned); await expect(provisionStaff(p, input)).resolves.toMatchObject({ version: 1 }); });
+it("does not adopt a foreign identity or finish an uncertain creation", async () => { const p = port(); p.find = vi.fn(async () => ({ ...owned, marker: "foreign" })); await expect(provisionStaff(p, input)).rejects.toThrow("PROVISION_FAILED"); expect(p.finish).not.toHaveBeenCalled(); expect(p.create).not.toHaveBeenCalled(); });
+it("keeps a failed profile completion recoverable without deleting Auth", async () => { const p = port(); p.finish = vi.fn(async () => { throw Error("UNAVAILABLE"); }); await expect(provisionStaff(p, input)).rejects.toThrow("UNAVAILABLE"); });
+it("replays a completed creation without touching Auth", async () => { const p = port(); p.reserve = vi.fn(async () => ({ ...reservation, completed: true })); await provisionStaff(p, input); expect(p.find).not.toHaveBeenCalled(); expect(p.create).not.toHaveBeenCalled(); });
+it("bounds credentials and rejects actor injection", () => { expect(staffCommandSchema.safeParse({ ...input, password: "short" }).success).toBe(false); expect(staffCommandSchema.safeParse({ ...input, organizationId: "foreign" }).success).toBe(false); });
