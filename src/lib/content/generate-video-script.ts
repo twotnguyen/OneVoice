@@ -151,7 +151,7 @@ export function buildScriptPrompt(snapshot: ProductSnapshot): string {
     "Return exactly one JSON object with keys schema, renderer, aspect, music, voice, meta, scenes — with no other text.",
     'schema must be "onevoice.script.v1", renderer "hyperframes", aspect "9:16".',
     `music must be one of: ${MUSIC_NAMES.join(", ")} — or null for no music bed.`,
-    "voice is { speed: 0.8-1.2 }.",
+    "voice is { speed: 0.8-1.2, voiceId?: 'vi-VN-HoaiMyNeural' | 'vi-VN-NamMinhNeural' }.",
     "meta is { hook (8-90 chars), caption (20-280 chars), cta (3-60 chars) } — short punchy marketing copy.",
     "Template catalogue (id | role | natural duration | slots with char limits):",
     buildCatalogueTable(),
@@ -169,10 +169,30 @@ export function buildScriptPrompt(snapshot: ProductSnapshot): string {
   return prompt;
 }
 
+const THINK_BLOCK_PATTERN = /<think\b[^>]*>[\s\S]*?<\/think>/gi;
+const UNCLOSED_THINK_BLOCK_PATTERN = /<think\b[^>]*>[\s\S]*$/gi;
+
+export function stripReasoningBlocks(text: string): string {
+  return text
+    .replace(THINK_BLOCK_PATTERN, "")
+    .replace(UNCLOSED_THINK_BLOCK_PATTERN, "")
+    .trim();
+}
+
+export function sanitizeVoiceText(text: string): string {
+  return text
+    .replace(/[*#_~]/g, "")
+    .replace(/\[(?!\s*pause\b).*?\]/gi, "")
+    .replace(/\(.*?\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function stripOptionalJsonFence(text: string): string {
-  const trimmed = text.trim();
+  const cleaned = stripReasoningBlocks(text);
+  const trimmed = cleaned.trim();
   const match = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(trimmed);
-  return match?.[1] ?? trimmed;
+  return match?.[1]?.trim() ?? trimmed;
 }
 
 function summarizeViolations(
@@ -233,6 +253,13 @@ function validateScriptText(text: string, snapshot: ProductSnapshot): ProductScr
     raw = JSON.parse(stripOptionalJsonFence(text)) as unknown;
   } catch {
     throw new ScriptGenerationError("SCRIPT_SCHEMA_INVALID", "response is not valid JSON", 1);
+  }
+  if (raw && typeof raw === "object" && "scenes" in raw && Array.isArray((raw as { scenes: unknown }).scenes)) {
+    for (const scene of (raw as { scenes: Array<{ voiceText?: unknown }> }).scenes) {
+      if (typeof scene === "object" && scene !== null && typeof scene.voiceText === "string") {
+        scene.voiceText = sanitizeVoiceText(scene.voiceText);
+      }
+    }
   }
   const parsed = ProductScriptSchema.safeParse(raw);
   if (!parsed.success) {

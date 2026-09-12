@@ -27,6 +27,13 @@
 *.tsbuildinfo
 __pycache__/
 *.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.eslintcache
 
 # Generated media can be recreated by the content/video pipeline
 /renders/
@@ -146,6 +153,8 @@ Desktop.ini
 .vscode/
 !.vscode/extensions.json
 !.vscode/settings.example.json
+.cursor/
+.claude/
 
 # -----------------------------------------------------------------------------
 # Local AI/model artifacts
@@ -167,3 +176,4 @@ references/
 # Team/spec/session artifacts are local operational state, not source.
 # -----------------------------------------------------------------------------
 /.omc/
+/.superpowers/

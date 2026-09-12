@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { createHash } from "node:crypto";
+
 import type { GenerateTextResult } from "@/lib/ai/provider";
 import type { OrganizationScope, ProductSnapshot } from "@/lib/catalog/types";
 import type { GeneratedProductContent } from "@/lib/content/types";
@@ -30,9 +32,7 @@ export type RenderEventInput = Readonly<{
   videoBytes?: number;
   videoDurationMs?: number;
   createdAt: string;
-  // T9: template-pipeline ledger fields. Only rendererRevision + ttsTotalMs
-  // are populated at the terminate() seam; sceneCount/scriptSha256 population
-  // is a T12-observability follow-up via runToRenderEvent LiveRowCtx.
+  // Hash identifies the exact serialized script supplied to the renderer.
   sceneCount?: number;
   ttsTotalMs?: number;
   rendererRevision?: string;
@@ -49,6 +49,8 @@ type TerminateCtx = {
   timings: Record<string, number>;
   usage: GenerateTextResult["usage"] | undefined;
   model: string | undefined;
+  sceneCount?: number;
+  scriptSha256?: string;
   renderEventTimeoutMs: number;
 };
 
@@ -139,6 +141,8 @@ export class ProductVideoPipeline {
         ...(run.status === "failed" ? { errorStage: run.error.stage, errorCode: run.error.code } : {}),
         ...(ctx.model ? { model: ctx.model } : {}),
         ...(ctx.usage ? { usage: ctx.usage } : {}),
+        ...(ctx.sceneCount !== undefined ? { sceneCount: ctx.sceneCount } : {}),
+        ...(ctx.scriptSha256 ? { scriptSha256: ctx.scriptSha256 } : {}),
         timings: { ...ctx.timings },
         totalDurationMs,
         ...(run.status === "succeeded"
@@ -208,11 +212,24 @@ export class ProductVideoPipeline {
     }
 
     let content: GeneratedProductContent;
+    let script: GeneratedVideoScript["script"] | undefined;
     this.stage(command, "generating_content");
     {
       const t = performance.now();
       try {
-        content = await this.dependencies.generateContent(snapshot);
+        if (this.dependencies.generateScript) {
+          const generated = await this.dependencies.generateScript(snapshot);
+          content = generated.content;
+          script = generated.script;
+          ctx.model = generated.model;
+          ctx.usage = generated.usage ?? content.usage;
+          ctx.sceneCount = script.scenes.length;
+          ctx.scriptSha256 = createHash("sha256").update(JSON.stringify(script)).digest("hex");
+        } else {
+          content = await this.dependencies.generateContent(snapshot);
+          ctx.model = content.model;
+          ctx.usage = content.usage;
+        }
       } catch {
         timings.generating_content_ms = Math.round(performance.now() - t);
         return await this.terminate(await this.fail(command, {
@@ -222,8 +239,6 @@ export class ProductVideoPipeline {
       }
       timings.generating_content_ms = Math.round(performance.now() - t);
     }
-    ctx.usage = content.usage;
-    ctx.model = content.model;
 
     let asset: ResolvedAsset | null = null;
     let video: RenderedVideo | null = null;
@@ -231,19 +246,6 @@ export class ProductVideoPipeline {
       // Template path (T7): the script stage already produced the script, so
       // the renderer takes it directly. Ffmpeg path: derive a storyboard.
       // Resolve image only for ffmpeg path — template renderer is text-only.
-      const generateScript = this.dependencies.generateScript;
-      let script: GeneratedVideoScript["script"] | undefined;
-      if (generateScript) {
-        try {
-          script = (await generateScript(snapshot)).script;
-        } catch {
-          timings.generating_content_ms = Math.round(performance.now() - ctx.startedAt);
-          return await this.terminate(await this.fail(command, {
-            stage: "generating_content",
-            code: "AI_GENERATION_FAILED",
-          }), command, ctx);
-        }
-      }
       if (script) {
         if (snapshot.primaryImageUrl) {
           console.warn(

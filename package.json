@@ -25,15 +25,20 @@
     "data:import": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-products-to-supabase.ts",
     "data:verify": "node --env-file-if-exists=.env --experimental-strip-types scripts/verify-supabase-data.ts",
     "build:worker": "esbuild src/worker/main.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/worker.js",
+    "build:knowledge-worker": "esbuild src/worker/knowledge-ingestion.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/knowledge-ingestion.js && esbuild src/lib/knowledge/ingestion-parser.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/knowledge-parser.js",
+    "start:knowledge-worker": "node dist/knowledge-ingestion.js",
     "data:backfill-renders": "node --env-file-if-exists=.env --experimental-strip-types scripts/backfill-render-events.ts",
     "ai:verify": "node --env-file-if-exists=.env --experimental-strip-types scripts/verify-ai-provider.ts",
     "video:verify": "node --env-file-if-exists=.env --experimental-strip-types scripts/verify-rendered-video.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.116.0",
+    "fast-xml-parser": "5.11.1",
     "hyperframes": "0.6.94",
     "next": "16.3.4",
     "p-limit": "^7.3.2",
+    "parse5": "^8.0.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "4.5.4"

@@ -140,7 +140,9 @@ describe("rendered video verifier script", () => {
     expect(result.stdout).toContain("Dimensions: 1080x1920");
     expect(result.stdout).toContain("Duration: 12.000 seconds");
     expect(result.stdout).toContain(`File size: ${bytes} bytes`);
-  });
+    // Real fixture encoding/startup plus the verifier's own 10-second probe budget.
+    // Keep this local to the cold-path integration test, not the whole suite.
+  }, 20_000);
 
   it("rejects an otherwise conforming MP4 whose duration is outside the render window", async () => {
     const root = await temporaryRoot();

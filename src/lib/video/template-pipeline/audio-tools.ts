@@ -234,18 +234,28 @@ export async function mixMusicBed(
   outPath: string,
   ffmpegPath = "ffmpeg",
   fadeSec = 1.5,
+  ducking = true,
 ): Promise<void> {
   if (!(totalSec > 0)) throw new Error("mixMusicBed: totalSec must be positive");
   const total = totalSec.toFixed(3);
   const fadeStart = Math.max(0, totalSec - fadeSec).toFixed(3);
-  await run(ffmpegPath, [
-    "-y", "-i", voicePath, "-i", musicPath,
-    "-filter_complex",
-    `[1:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono,` +
+
+  const filterGraph = ducking
+    ? `[1:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono,` +
+      `aloop=loop=-1:size=2e9,atrim=0:${total},volume=${gain},` +
+      `afade=t=out:st=${fadeStart}:d=${fadeSec}[bed_raw];` +
+      `[0:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono[voice];` +
+      `[bed_raw][voice]sidechaincompress=threshold=0.08:ratio=4:attack=30:release=350:makeup=1[bed];` +
+      `[voice][bed]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[out]`
+    : `[1:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono,` +
       `aloop=loop=-1:size=2e9,atrim=0:${total},volume=${gain},` +
       `afade=t=out:st=${fadeStart}:d=${fadeSec}[bed];` +
       `[0:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono[voice];` +
-      `[voice][bed]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[out]`,
+      `[voice][bed]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[out]`;
+
+  await run(ffmpegPath, [
+    "-y", "-i", voicePath, "-i", musicPath,
+    "-filter_complex", filterGraph,
     "-map", "[out]",
     "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100",
     outPath,

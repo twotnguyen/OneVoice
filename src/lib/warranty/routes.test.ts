@@ -1,0 +1,14 @@
+import { beforeEach, expect, it, vi } from "vitest";
+import type { StaffSession } from "@/lib/auth/session";
+const state = vi.hoisted(() => ({ actor: null as StaffSession | null, save: vi.fn(), list: vi.fn(), client: vi.fn(() => ({})) }));
+vi.mock("@/lib/auth/routes", () => ({ createAuthContext: async () => ({ session: async () => state.actor, finish: (response: Response) => response }) }));
+vi.mock("@/lib/auth/config", () => ({ readAuthConfig: () => ({ origin: "https://app.test" }) }));
+vi.mock("@/lib/supabase/server", () => ({ createSupabaseDataClient: state.client }));
+vi.mock("./repository", () => ({ createWarrantyRepository: () => ({ save: state.save, list: state.list }), WarrantyError: class extends Error {} }));
+import { GET, POST } from "@/app/api/warranty/route";
+const input = { id: "a2600000-0000-4000-8000-000000000001", requestId: "b2600000-0000-4000-8000-000000000001", orderId: "c2600000-0000-4000-8000-000000000001", lineNumber: 1, expectedVersion: 0, status: "RECEIVED", customerNote: "Visible", privateNote: "Private" };
+const post = (origin = "https://app.test", value: unknown = input) => new Request("https://app.test/api/warranty", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify(value) });
+beforeEach(() => { vi.clearAllMocks(); state.actor = { userId: "actor", organizationId: "org", role: "staff", displayName: "Test" }; state.save.mockResolvedValue({ id: input.id, version: 1 }); });
+it("rejects anonymous before composition", async () => { state.actor = null; expect((await GET(new Request("https://app.test/api/warranty"))).status).toBe(401); expect((await POST(post())).status).toBe(401); expect(state.client).not.toHaveBeenCalled(); });
+it("rejects cross-origin writes and actor injection", async () => { expect((await POST(post("https://evil.test"))).status).toBe(403); expect((await POST(post("https://app.test", { ...input, actorId: "forged" }))).status).toBe(400); expect(state.save).not.toHaveBeenCalled(); });
+it("allows authorized staff save", async () => { expect((await POST(post())).status).toBe(200); expect(state.save).toHaveBeenCalledWith(input); });

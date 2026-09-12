@@ -4,6 +4,7 @@
 // luôn 200 để Compose healthcheck tương thích).
 
 import { execFile } from "node:child_process";
+import { withApiPermission } from "@/lib/auth/guards";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -50,7 +51,8 @@ async function checkFfmpeg(): Promise<"ok" | "fail"> {
   }
 }
 
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
+  return withApiPermission(request, "manage_marketing", async () => {
   const [supabase, ffmpeg] = await Promise.all([checkSupabase(), checkFfmpeg()]);
   const ready = supabase === "ok" && ffmpeg === "ok";
   return Response.json(
@@ -66,4 +68,5 @@ export async function GET(): Promise<Response> {
       },
     },
   );
+  });
 }

@@ -23,6 +23,10 @@ export type TtsClientOptions = Readonly<{
 export type TtsSynthOptions = Readonly<{
   /** External abort signal. Combined with the total timeoutMs budget. */
   signal?: AbortSignal;
+  /** Optional voice ID e.g. "vi-VN-HoaiMyNeural" or "vi-VN-NamMinhNeural". */
+  voice?: string;
+  /** Optional speech rate multiplier e.g. 1.1 or 1.15. */
+  rate?: number;
 }>;
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -101,7 +105,11 @@ export class TtsClient {
         const response = await this.fetchImplementation(`${this.endpoint}/tts`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({
+            text,
+            ...(options?.voice ? { voice: options.voice } : {}),
+            ...(options?.rate !== undefined ? { rate: options.rate } : {}),
+          }),
           signal: options?.signal
             ? AbortSignal.any([options.signal, controller.signal])
             : controller.signal,

@@ -1,0 +1,14 @@
+import { beforeEach, expect, it, vi } from "vitest";
+import type { StaffSession } from "../auth/session";
+const state = vi.hoisted(() => ({ actor: null as StaffSession | null, priority: vi.fn(), list: vi.fn(), client: vi.fn(() => ({})) }));
+vi.mock("@/lib/auth/routes", () => ({ createAuthContext: async () => ({ session: async () => state.actor, finish: (response: Response) => response }) }));
+vi.mock("@/lib/auth/config", () => ({ readAuthConfig: () => ({ origin: "https://app.test" }) }));
+vi.mock("@/lib/supabase/server", () => ({ createSupabaseDataClient: state.client }));
+vi.mock("./repository", () => ({ createCampaignRepository: () => ({ priority: state.priority, list: state.list }) }));
+import { GET, POST } from "@/app/api/campaigns/route";
+const id = "a3000000-0000-4000-8000-000000000001";
+const input = { id, requestId: id, expectedControlRevision: 0, sourceKind: "product", sourceId: id, objective: "mixed" };
+const post = (origin = "https://app.test", body: unknown = input) => new Request("https://app.test/api/campaigns", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify(body) });
+beforeEach(() => { vi.clearAllMocks(); state.actor = { userId: id, organizationId: id, role: "manager", displayName: "Fixture" }; state.priority.mockResolvedValue({ id, version: 1 }); state.list.mockResolvedValue({ items: [] }); });
+it("denies anonymous before composition; staff may read only", async () => { state.actor = null; expect((await GET(new Request("https://app.test/api/campaigns"))).status).toBe(401); expect(state.client).not.toHaveBeenCalled(); state.actor = { userId: id, organizationId: id, role: "staff", displayName: "Fixture" }; expect((await GET(new Request("https://app.test/api/campaigns"))).status).toBe(200); expect((await POST(post())).status).toBe(403); expect(state.priority).not.toHaveBeenCalled(); });
+it("requires manager same-origin and rejects scheduling/content injection", async () => { expect((await POST(post("https://evil.test"))).status).toBe(403); expect((await POST(post("https://app.test", { ...input, scheduledAt: "now" }))).status).toBe(400); expect((await POST(post())).status).toBe(201); });

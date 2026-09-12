@@ -1,0 +1,13 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+.main { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: var(--bg-canvas); }
+.card { width: min(100%, 430px); padding: 36px; background: var(--bg-surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 40px #0f172a08; }
+.brand { color: var(--brand-primary); font-size: 12px; font-weight: 800; letter-spacing: .16em; margin-bottom: 20px; }
+.card h1 { font-size: 26px; margin-bottom: 12px; }
+.card p { line-height: 1.6; }
+.form { display: grid; gap: 10px; margin-top: 24px; }
+.form label { font-weight: 600; margin-top: 8px; }
+.form input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-surface); color: var(--ink-primary); }
+.card button, .continue { display: block; width: 100%; margin-top: 18px; padding: 12px; min-height: 44px; background: var(--brand-primary); color: white; border: 0; border-radius: 8px; font: inherit; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer; }
+.card button:hover, .continue:hover { background: var(--brand-primary-hover); }
+.card :focus-visible { outline: 3px solid var(--brand-primary); outline-offset: 3px; }
+.error { color: #991b1b; background: #fef2f2; padding: 12px; border-radius: 8px; margin-top: 16px; }

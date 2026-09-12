@@ -27,6 +27,15 @@ export type OrganizationScope = Readonly<{
   organizationId: string;
 }>;
 
+export interface StudioProductFilters {
+  brand?: string;
+  search?: string;
+  productType?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  inStockOnly?: boolean;
+}
+
 export type StudioProduct = Readonly<{
   id: string;
   name: string;
@@ -35,6 +44,9 @@ export type StudioProduct = Readonly<{
   priceVnd: number;
   currency: string;
   stockQuantity: number | null;
+  inStock: boolean;
+  primaryImageUrl: string | null;
+  keySpecs: readonly string[];
   collectedAt: string | null;
 }>;
 

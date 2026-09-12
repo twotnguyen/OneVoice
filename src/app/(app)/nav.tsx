@@ -11,29 +11,30 @@ export function AppNav() {
   return (
     <nav aria-label="Điều hướng chính" className="app-nav">
       <ul>
-        {NAV_SECTIONS.map((entry) =>
-          entry.status === "disabled" ? (
-            <li key={entry.href}>
-              <span aria-disabled="true" className="app-nav__link app-nav__link--disabled">
-                {entry.label}
-              </span>
-            </li>
-          ) : (
+        {NAV_SECTIONS.map((entry) => {
+          const active = isActiveSection(pathname, entry.href);
+          const disabled = entry.status === "disabled";
+
+          return (
             <li key={entry.href}>
               <Link
-                href={entry.href}
-                aria-current={isActiveSection(pathname, entry.href) ? "page" : undefined}
+                href={disabled ? "#" : entry.href}
+                aria-current={active ? "page" : undefined}
+                aria-disabled={disabled ? "true" : undefined}
                 className={
-                  isActiveSection(pathname, entry.href)
-                    ? "app-nav__link app-nav__link--active"
-                    : "app-nav__link"
+                  disabled
+                    ? "app-nav__link app-nav__link--disabled"
+                    : active
+                      ? "app-nav__link app-nav__link--active"
+                      : "app-nav__link"
                 }
               >
                 {entry.label}
+                {disabled && <span className="app-nav__badge">Sắp ra mắt</span>}
               </Link>
             </li>
-          ),
-        )}
+          );
+        })}
       </ul>
     </nav>
   );

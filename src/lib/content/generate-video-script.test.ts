@@ -11,6 +11,8 @@ import {
   ScriptGenerationError,
   buildScriptPrompt,
   generateVideoScript,
+  sanitizeVoiceText,
+  stripReasoningBlocks,
 } from "./generate-video-script";
 
 const snapshot: ProductSnapshot = {
@@ -326,5 +328,25 @@ describe("generateVideoScript", () => {
 
     expect(result.usage).toEqual(usage);
     expect(result.content.usage).toEqual(usage);
+  });
+
+  it("strips closed and unclosed reasoning blocks (<think>) cleanly", () => {
+    const input = "<think>Analyzing product snapshot...\nFinding best template</think>{\"schema\":\"onevoice.script.v1\"}";
+    expect(stripReasoningBlocks(input)).toBe("{\"schema\":\"onevoice.script.v1\"}");
+
+    const unclosed = "<think>Model ran out of tokens before finishing";
+    expect(stripReasoningBlocks(unclosed)).toBe("");
+  });
+
+  it("sanitizes stage directions and markdown from voiceText while preserving pause tags", () => {
+    const raw = "[Nhạc dạo sôi động] *Tai nghe* siêu êm (Cười) với giá chỉ [pause:0.5s] 29 triệu đồng.";
+    expect(sanitizeVoiceText(raw)).toBe("Tai nghe siêu êm với giá chỉ [pause:0.5s] 29 triệu đồng.");
+  });
+
+  it("successfully parses responses containing thinking blocks", async () => {
+    const textWithThink = `<think>Step 1: check truth guard\nStep 2: build scenes</think>\n${goldenScriptText()}`;
+    const provider = providerReturning([textWithThink]);
+    const result = await generateVideoScript(provider, snapshot);
+    expect(result.script.schema).toBe("onevoice.script.v1");
   });
 });

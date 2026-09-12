@@ -1,0 +1,7 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Keep account controls in the header's existing third column. */
+.actions.actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.actions a, .actions button { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: var(--text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; background: var(--bg-surface); color: var(--ink-secondary); }
+.actions a:hover, .actions button:hover { color: var(--brand-primary); background: var(--brand-primary-subtle); }
+.actions :focus-visible { outline: 3px solid var(--brand-primary); outline-offset: 2px; }
+@media(max-width: 960px) { .actions.actions { width: 100%; justify-content: center; } }

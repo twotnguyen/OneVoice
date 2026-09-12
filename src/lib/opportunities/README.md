@@ -1,0 +1,21 @@
+# Opportunity decision contract
+
+`readOpportunityInput(client, organizationId, productIds, recent)` is a trusted server-only, read-only adapter. The caller must authorize the configured organization, supply up to 100 candidate product IDs, and load actual durable recent picks from campaign history. An empty product set supports general programs and engagement-only topics. Missing history must not be silently represented as empty by an integrating scheduler. No module here enables automation, creates campaigns, schedules, or publishes.
+
+`rankOpportunities(input, { ai?, now? })` validates and deeply freezes a copy of the complete input, and returns an `OpportunityDecision`. OV-030 must store that **entire result** atomically with its campaign/request receipt before using a selection. It includes a canonical input SHA-256 digest, `ov029-v1` algorithm identifier, source versions, chosen key, candidate component scores, exclusions, and AI model/status/assessments. Selection is a proposal; current settings, stock, price, program validity, trend freshness and automation permissions must be revalidated before scheduling or publishing. Snapshot reads span sources and are not a distributed transaction.
+
+Technical defaults:
+
+- Operational inputs expire after five minutes; start boundaries are inclusive and expiry boundaries exclusive. A source or program expiring while AI runs is excluded.
+- Product candidates require active, positive known price, positive known stock, and in-stock status. If any variants exist, only active sellable variant buckets qualify; the parent stock bucket cannot substitute. Program offers remain independent and discounts are never added or applied to catalog prices.
+- Availability contributes 10 heuristic points; one or more effective programs contributes 10 total points. Product/program objective utility is engagement=10, messages=25, paid-orders=30. Engagement-only trends use 30/0/0 respectively and are eligible only for engagement or mixed. Mixed is the equal mean of these three utilities. These numbers are versioned prioritization rules, **not** probabilities, measured performance or predicted revenue.
+- Performance remains `null` / `unavailable` until OV-040. External RSS or Mastodon instance observations never become Facebook/business performance or catalog facts.
+- Seven-day recent-key exclusion applies before ranking. Trend keys derive from normalized topic text so changing metrics/fingerprints do not erase recent-pick history.
+- Trend-only topics require an explicit allowed-topic substring match; forbidden-topic matches take precedence. Matching uses Unicode normalization and case folding; it is a conservative lexical rule, not a claim of complete semantic moderation. Truth Guard remains a later publishing boundary.
+- Existing `AiProvider` is optional, bounded to ten seconds and 50 eligible candidates. The model supplies only advisory relevance (0..1, at most 10 extra points), manager-goal alignment and a brief explanation. Unknown/duplicate candidates or invalid output reject the entire AI response. AI explanations are advisory text, never operational evidence. Untrusted source text appears only as JSON data, with explicit instructions that it cannot override the ranking task or facts.
+- Automatic mode can return deterministic rule-only rankings when AI is absent/invalid. A free-text manager goal must have a valid positive AI alignment before any selection; otherwise no opportunity is selected. No unverified fallback changes the manager's goal.
+- Input limits: 100 products, 100 variants per product, 100 program rows, 10 trend sources × 50 observations, 1,000 recent picks, 50 shortlisted candidates. Oversized source sets fail closed rather than silently ignoring stock buckets or program scope. The scheduler must choose the bounded candidate product pool explicitly.
+
+Offline verification: `pnpm exec vitest run src/lib/opportunities`.
+
+Actual local database adapter proof (synthetic fixtures, no AI call, no `.env`): obtain `SERVICE_ROLE_KEY` from `pnpm exec supabase status -o json` into the process variable `ONEVOICE_LOCAL_ADMIN`, run `pnpm exec vitest run src/lib/opportunities/snapshot.local.test.ts`, and remove the variable in `finally`. This test hardcodes localhost Supabase and the local Docker database and deletes its synthetic fixtures.

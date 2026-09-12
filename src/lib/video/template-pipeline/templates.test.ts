@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -52,9 +52,8 @@ describe("template-pipeline/templates", () => {
     for (const file of htmlFiles(TEMPLATES_ROOT)) {
       const html = readFileSync(file, "utf8");
       // compositions/*.html sit one level deeper than the template assets/ dir.
-      const assetsBase = file.includes("/compositions/")
-        ? join(file, "..", "..")
-        : join(file, "..");
+      const parent = dirname(file);
+      const assetsBase = basename(parent) === "compositions" ? dirname(parent) : parent;
       for (const ref of fontRefs(html)) {
         const full = join(assetsBase, "assets", "fonts", ref);
         if (!existsSync(full) || statSync(full).size === 0)
