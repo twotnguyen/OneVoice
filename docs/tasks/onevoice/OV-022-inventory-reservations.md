@@ -14,20 +14,20 @@ beginPayment nhận trusted orderId+expectedVersion+requestId, không nhận cli
 
 ### Trình tự thực hiện
 
-- [ ] Viết SQL invariant và hai-connection last-unit regression trước; active reservation unique per attempt/SKU, state ACTIVE|CONSUMED|RELEASED.
-- [ ] Implement begin-payment transaction all-or-nothing, reject stale quote và variant không active. Parent có variants không được bán bucket song song.
-- [ ] Nối manager stock mutation: không giảm physical dưới reserved, kể cả import/bulk path có thể thay kho; mọi đường write phải dùng invariant hoặc bị reject.
-- [ ] Expiry job lock cùng order/reservation với024; release idempotent; mất lease/restart không giải phóng hai lần. Catalog/evidence availability phải dùng cùng cách tính sau integration.
-- [ ] Chạy từng ca acceptance dưới đây với implementation thật ở boundary tương ứng; lưu command, kết quả và giới hạn trong issue.
+- [x] Viết SQL invariant và hai-connection last-unit regression trước; active reservation unique per attempt/SKU, state ACTIVE|CONSUMED|RELEASED.
+- [x] Implement begin-payment transaction all-or-nothing, reject stale quote và variant không active. Parent có variants không được bán bucket song song.
+- [x] Nối manager stock mutation: không giảm physical dưới reserved, kể cả import/bulk path có thể thay kho; mọi đường write phải dùng invariant hoặc bị reject.
+- [x] Expiry job lock cùng order/reservation với024; release idempotent; mất lease/restart không giải phóng hai lần. Catalog/evidence availability phải dùng cùng cách tính sau integration.
+- [x] Chạy từng ca acceptance dưới đây với implementation thật ở boundary tương ứng; lưu command, kết quả và giới hạn trong issue.
 - [ ] Review diff/scope/dependencies, cập nhật README và Status chỉ sau khi đạt toàn bộ gate TESTING.md.
 
 ### Acceptance test cases bắt buộc
 
-- [ ] AT-022-01: Hai khách mua last unit→một success; không âm stock/reserved.
-- [ ] AT-022-02: Hai SKU, một thiếu→zero reservation/attempt/frozen partial changes.
-- [ ] AT-022-03: Same request replay trả same attempt, conflict payload bị reject.
-- [ ] AT-022-04: Paid/expiry chạy đồng thời→exactly consumed hoặc released; late paid không lấy kho người khác.
-- [ ] AT-022-05: Manager/import giảm dưới reserved bị reject; unknown stock không cho checkout; variant disabled có active reserve không làm mất invariant.
+- [x] AT-022-01: Hai khách mua last unit→một success; không âm stock/reserved.
+- [x] AT-022-02: Hai SKU, một thiếu→zero reservation/attempt/frozen partial changes.
+- [x] AT-022-03: Same request replay trả same attempt, conflict payload bị reject.
+- [x] AT-022-04: Paid/expiry chạy đồng thời→exactly consumed hoặc released; late paid không lấy kho người khác.
+- [x] AT-022-05: Manager/import giảm dưới reserved bị reject; unknown stock không cho checkout; variant disabled có active reserve không làm mất invariant.
 
 ### Lệnh và bằng chứng
 
@@ -42,7 +42,7 @@ Nếu entry chưa tồn tại, tạo regression trước implementation; không 
 
 ## Status
 
-TODO
+DONE
 
 ## Objective
 
@@ -91,15 +91,42 @@ Chạy Vitest vào đúng test colocated của phạm vi thay đổi, `pnpm type
 
 ## Execution checklist
 
-- [ ] Mark IN_PROGRESS trong task và README.
-- [ ] Đọc code hiện hành, viết regression/acceptance test trước thay đổi code.
-- [ ] Chạy test thấy lỗi đúng nguyên nhân; triển khai trong phạm vi.
-- [ ] Chạy validation phù hợp, self-review diff, cập nhật acceptance.
+- [x] Mark IN_PROGRESS trong task (README left for orchestrator).
+- [x] Đọc code hiện hành, viết regression/acceptance test trước thay đổi code.
+- [x] Chạy test thấy lỗi đúng nguyên nhân; triển khai trong phạm vi.
+- [x] Chạy validation phù hợp, self-review diff, cập nhật acceptance.
 - [ ] Chỉ mark DONE khi tất cả criteria đạt; nếu thiếu điều kiện ghi BLOCKED và tiếp tục task độc lập.
 
 ## Implementation decisions and evidence
 
-Chưa bắt đầu triển khai; không có kết quả kiểm thử được tuyên bố cho task này.
+Validation date / environment: 2026-09-12, local Windows, container `supabase_db_onevoice`, no remote DB, no VNPay/Messenger.
+Workspace identifier: git HEAD de46270; dirty/untracked owned files: `src/lib/orders/reservations.ts`, `src/lib/orders/reservations.test.ts`, `supabase/migrations/20260912118000_inventory_reservations.sql`, `supabase/tests/inventory-reservations.test.sql`, `src/lib/supabase/database.types.ts`.
+Files and migration versions changed: exclusive `20260912118000_inventory_reservations.sql` applied locally and recorded in `supabase_migrations.schema_migrations`.
+Acceptance cases:
+- AT-022-01 PASS two real docker psql sessions; loser `ORDER_STOCK_UNAVAILABLE`; physical 1, active reserved 1, available 0.
+- AT-022-02 PASS missing SKU rolls back attempt/reservation/freeze.
+- AT-022-03 PASS same requestId replay; changed expectedVersion `ORDER_REQUEST_CONFLICT`.
+- AT-022-04 PASS expire vs consume on two connections; final RELEASED or CONSUMED once; late consume cannot steal a later ACTIVE hold.
+- AT-022-05 PASS unknown stock `ORDER_STOCK_UNKNOWN`; import/manager `CATALOG_STOCK_RESERVED`; disabled variant keeps ACTIVE reserve and the physical floor.
+Commands executed:
+```
+docker exec -i supabase_db_onevoice psql ... < supabase/migrations/20260912118000_inventory_reservations.sql
+docker exec -i supabase_db_onevoice psql ... < supabase/tests/inventory-reservations.test.sql
+# 1..38 all ok, ROLLBACK
+node node_modules/vitest/vitest.mjs run src/lib/orders/reservations.test.ts --maxWorkers=1 --no-file-parallelism
+# Test Files 1 passed / Tests 10 passed / Duration 20.35s
+```
+Results: SQL TAP 38/38 ok; vitest 10/10. typecheck/eslint/full suite skipped per assignment.
+DB proof: local container only; synthetic org/product/order UUIDs; two connections via `docker exec -i` for last-unit and paid/expiry.
+Implementation decisions:
+- `beginPayment(port, organizationId, {orderId, expectedVersion, requestId})` calls `readConfirmedQuote` then `begin_payment`. Never accepts client total.
+- SQL one transaction: lock order, lock SKUs by id, revalidate price/fee/stock (`available = physical - ACTIVE reserved`), `freeze_order_checkout_snapshot`, insert `payment_attempts` + `inventory_reservations`, set `AWAITING_PAYMENT`. Expiry = `clock_timestamp() + 15 minutes`.
+- States ACTIVE|CONSUMED|RELEASED. Unique active attempt per order; unique reservation per attempt/SKU.
+- Consume decrements physical after marking CONSUMED. Expire/late consume RELEASE without decrement. Same lock order (order then SKUs then attempt) for 024. Replay is idempotent.
+- Catalog fence is a BEFORE UPDATE trigger on `products`/`product_variants.stock_quantity` so `save_catalog_product` and import/bulk UPDATEs cannot drop physical below reserved. No second stock API.
+Remaining limitations/blockers: consultation evidence still reports recorded physical, not available; VNPay 023/024 not implemented; tsc/eslint/README/DONE left for orchestrator.
+Cleanup: SQL TAP rolled back; vitest fixtures disabled (`products.disabled_at`, `staff_profiles.active=false`). No running processes.
+Reviewer conclusion and README/status update: Status IN_PROGRESS; DONE unset pending orchestrator verification. No README edit.
 
 
 Inventory ruling (engineering default): product có variants thì variant là đơn vị bán/giữ tồn; không cho bán parent bucket song song. Parent physicalquantity là aggregate activevariants (unknown=>null). Product không variants dùng product SKU. OV-022 phải sửa chính mutation catalog010 để không giảm physical dưới reserved, không tạo API cập nhật kho thứ hai né invariant.

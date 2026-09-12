@@ -134,6 +134,7 @@ subheadline and a rounded CTA pill.
 | `subheadline`   | string | ≤120 | one supporting sentence                                       |
 | `cta`           | string | ≤24  | rounded pill label (e.g. "Theo dõi ngay")                    |
 | `brand`         | string | ≤24  | footer-left label (channel/source)                           |
+| `product_image` | string | https URL | product hero; renderer resolves via OV-033 to local data URI, `object-fit: contain` |
 
 > Headline renders in an eye-catching gradient (default gold→orange→pink→purple).
 > Override with `headline_from`/`headline_to` to fit the tone if you want.
@@ -167,6 +168,7 @@ with a cyan×magenta RGB-split glitch. High-energy, edgy.
 | ---------- | ------ | ----- | ------------------------------------------------------ |
 | `title`    | string | ≤40   | the big glitch title (short; uppercased automatically) |
 | `subtitle` | string | ≤80   | mono line under the title                              |
+| `media_background` | string | https URL | full-bleed background; renderer resolves locally, `object-fit: cover` |
 
 ---
 
@@ -220,6 +222,7 @@ Each side (`left` / `right`) object:
 - `bullets` — array of short lines (use "/" inside a line, e.g. "Khoá cố định / lộ trình tuyến tính").
 - `stat` + `stat_label` — optional stat chip under the card (e.g. "88%" + "Ưa nền tảng mới").
 - `win` — `true` (or a custom badge string) marks the winning side (teal border + WIN badge).
+- `image` — optional https URL; renderer resolves via OV-033 to a local data URI, `object-fit: contain`.
 
 ---
 

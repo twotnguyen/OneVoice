@@ -14,19 +14,19 @@ Verify signature trước mutation; match merchant, transaction ref, amount, cur
 
 ### Trình tự thực hiện
 
-- [ ] Viết table-driven IPN fixtures và local SQL concurrency test trước; lưu unique provider transaction receipt với digest để replay kiểm payload.
-- [ ] Implement positive signature verification và strict parser, không tin browser return. Lock attempt/order/reservations cùng thứ tự022.
-- [ ] Finalize transaction hoặc late-payment exception, giữ lịch sử bất biến. Failure/out-of-order không downgrade paid. Endpoint trả provider ACK đúng verified outcome.
+- [x] Viết table-driven IPN fixtures và local SQL concurrency test trước; lưu unique provider transaction receipt với digest để replay kiểm payload.
+- [x] Implement positive signature verification và strict parser, không tin browser return. Lock attempt/order/reservations cùng thứ tự022.
+- [x] Finalize transaction hoặc late-payment exception, giữ lịch sử bất biến. Failure/out-of-order không downgrade paid. Endpoint trả provider ACK đúng verified outcome.
 - [ ] Chạy sandbox end-to-end start→IPN→DB→return page; ghi evidence đã che thông tin; chuẩn bị manager exception read model cho025.
-- [ ] Chạy từng ca acceptance dưới đây với implementation thật ở boundary tương ứng; lưu command, kết quả và giới hạn trong issue.
+- [x] Chạy từng ca acceptance dưới đây với implementation thật ở boundary tương ứng; lưu command, kết quả và giới hạn trong issue.
 - [ ] Review diff/scope/dependencies, cập nhật README và Status chỉ sau khi đạt toàn bộ gate TESTING.md.
 
 ### Acceptance test cases bắt buộc
 
-- [ ] AT-024-01: Signature/merchant/amount/currency/ref sai→zero paid/stock mutation.
-- [ ] AT-024-02: Duplicate identical success→một consume/audit; reused ref với payload khác→reject.
-- [ ] AT-024-03: Race expiry vs IPN bằng hai DB connections: kho nhất quán; late success không PREPARING.
-- [ ] AT-024-04: Return trước IPN vẫn pending; failure đến sau success không downgrade.
+- [x] AT-024-01: Signature/merchant/amount/currency/ref sai→zero paid/stock mutation.
+- [x] AT-024-02: Duplicate identical success→một consume/audit; reused ref với payload khác→reject.
+- [x] AT-024-03: Race expiry vs IPN bằng hai DB connections: kho nhất quán; late success không PREPARING.
+- [x] AT-024-04: Return trước IPN vẫn pending; failure đến sau success không downgrade.
 - [ ] AT-024-05: Sandbox verified IPN bắt buộc trước DONE; thiếu merchant/callback quyền ghi BLOCKED.
 
 ### Lệnh và bằng chứng
@@ -42,7 +42,7 @@ Nếu entry chưa tồn tại, tạo regression trước implementation; không 
 
 ## Status
 
-TODO
+BLOCKED
 
 ## Objective
 
@@ -91,12 +91,44 @@ Chạy Vitest vào đúng test colocated của phạm vi thay đổi, `pnpm type
 
 ## Execution checklist
 
-- [ ] Mark IN_PROGRESS trong task và README.
-- [ ] Đọc code hiện hành, viết regression/acceptance test trước thay đổi code.
-- [ ] Chạy test thấy lỗi đúng nguyên nhân; triển khai trong phạm vi.
-- [ ] Chạy validation phù hợp, self-review diff, cập nhật acceptance.
-- [ ] Chỉ mark DONE khi tất cả criteria đạt; nếu thiếu điều kiện ghi BLOCKED và tiếp tục task độc lập.
+- [x] Mark IN_PROGRESS trong task (README left for orchestrator).
+- [x] Đọc code hiện hành, viết regression/acceptance test trước thay đổi code.
+- [x] Chạy test thấy lỗi đúng nguyên nhân; triển khai trong phạm vi.
+- [x] Chạy validation phù hợp, self-review diff, cập nhật acceptance.
+- [x] Chỉ mark DONE khi tất cả criteria đạt; nếu thiếu điều kiện ghi BLOCKED và tiếp tục task độc lập.
 
 ## Implementation decisions and evidence
 
-Chưa bắt đầu triển khai; không có kết quả kiểm thử được tuyên bố cho task này.
+Validation date / environment: 2026-09-13, local Windows, container `supabase_db_onevoice`, local Kong `127.0.0.1:54321`, no remote DB writes, no real/sandbox VNPay charge, no Facebook.
+Workspace identifier: OV-024 files below; dirty user/sibling files preserved. NEXT_PUBLIC_SUPABASE_URL left unchanged.
+Files and migration versions changed:
+- `src/lib/payments/vnpay/notification.ts`
+- `src/lib/payments/vnpay/notification.test.ts`
+- `src/app/api/payments/vnpay/ipn/route.ts`
+- `supabase/migrations/20260912121000_vnpay_payment_finalization.sql` applied locally and recorded in `supabase_migrations.schema_migrations` (version 20260912121000, name vnpay_payment_finalization)
+- `supabase/tests/payment-finalization.test.sql`
+- this issue
+Official IPN ACK: https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html retrieved 2026-09-13, PAY 2.1.0 GET IPN, HMACSHA512 before mutation, JSON `{RspCode,Message}`. Retry ends on 00/02; continues on 01/04/97/99. Messages match official PHP sample (`Confirm Success`, `Order not found`, `Order already confirmed`, `invalid amount`, `Invalid signature`, `Unknow error`).
+Acceptance cases:
+- AT-024-01 PASS vitest HMAC-before-mutate (97/01/04, mutations empty except SQL amount match) + SQL TAP unknown ref/merchant/amount/currency → zero paid/stock/receipt.
+- AT-024-02 PASS identical digest replay RspCode 02, one receipt/one `order.payment_paid` audit/one consume; different digest after PAID → 02, no second consume.
+- AT-024-03 PASS two real `docker exec -i` psql sessions: expire vs `finalize_vnpay_ipn` after `expires_at` in the past; final PAID+EXPIRED+MANUAL_REVIEW, reservation RELEASED, physical unchanged, one `payment_exceptions` row. Sequential TAP expire-then-IPN same invariants.
+- AT-024-04 PASS `readVnpayReturn` stays pending/UNPAID; failure IPN after success RspCode 02, still PAID/PREPARING.
+- AT-024-05 BLOCKED did not submit a sandbox payment. VNPay IPN is server-call-server after a charge; unsigned mocks are not sandbox IPN (97/99). No live IPN without charging.
+Commands executed:
+```
+docker exec -i supabase_db_onevoice psql ... < supabase/migrations/20260912121000_vnpay_payment_finalization.sql
+docker exec -i supabase_db_onevoice psql ... < supabase/tests/payment-finalization.test.sql
+# 1..49 all ok, ROLLBACK, no `not ok`
+node node_modules/vitest/vitest.mjs run src/lib/payments/vnpay/notification.test.ts --maxWorkers=1 --no-file-parallelism --reporter=verbose
+# Test Files 1 passed / Tests 8 passed
+```
+Results: SQL TAP 49/49 ok; vitest 8/8. typecheck/eslint/full suite skipped per assignment.
+DB proof: local container only; `vnpay_ipn_receipts` unique (txn_ref, payload_digest) plus one PAID/MANUAL_REVIEW per txn_ref; `orders.reconciliation`; `payment_exceptions` late_payment read model for OV-025. Fixtures disabled (`products.disabled_at`, `staff_profiles.active=false`). No db reset.
+Implementation decisions:
+- HMAC via `verifyVnpayChecksum` before any RPC. Merchant/currency filters in TS; amount/ref match and mutations in `finalize_vnpay_ipn`. Consume is `consume_inventory_attempt` inside that transaction (OV-022 lock order: advisory 26, order, SKUs, attempt).
+- Success 00+00: atomic PAID + consume + PREPARING + audit. Late/released: PAID + MANUAL_REVIEW, no PREPARING, no stock decrement, no refund. Failure after PAID does not downgrade. Return URL remains OV-023 read-only.
+- GET `/api/payments/vnpay/ipn` always HTTP 200 JSON ACK. No same-origin CSRF (VNPay server-to-server).
+Remaining limitations/blockers: AT-024-05 sandbox verified IPN requires a completed sandbox charge; assignment forbids submitting payment. Status BLOCKED. Live Next still points at remote Supabase.
+Cleanup: SQL TAP rolled back; vitest fixtures disabled. No extra processes. Migration left applied locally (forward-only).
+Reviewer conclusion and README/status update: Status BLOCKED on AT-024-05. AT-024-01..04 PASS. No README edit.

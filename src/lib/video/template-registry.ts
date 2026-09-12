@@ -4,7 +4,10 @@
 // data-duration attribute (seconds -> ms). role is prompt guidance only;
 // the schema does not constrain scene.type by template role.
 
+import path from "node:path";
 import { z } from "zod";
+
+export const TEMPLATES_ROOT = path.resolve(__dirname, "template-pipeline/templates");
 
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 
@@ -35,6 +38,7 @@ const comparisonSideSchema = z
     stat: z.string().min(1).max(12).optional(),
     stat_label: z.string().min(1).max(40).optional(),
     win: z.union([z.boolean(), z.string().min(1).max(24)]).optional(),
+    image: z.string().max(2000).optional(),
   })
   .strict();
 
@@ -164,6 +168,7 @@ export const TEMPLATE_REGISTRY: Readonly<Record<TemplateId, TemplateMeta>> =
           subheadline: z.string().max(120).optional(),
           cta: z.string().max(24).optional(),
           brand: z.string().max(24).optional(),
+          product_image: z.string().max(2000).optional(),
         })
         .strict() as z.ZodType<Record<string, unknown>>,
     ),
@@ -187,6 +192,7 @@ export const TEMPLATE_REGISTRY: Readonly<Record<TemplateId, TemplateMeta>> =
         .object({
           title: z.string().max(40).optional(),
           subtitle: z.string().max(80).optional(),
+          media_background: z.string().max(2000).optional(),
         })
         .strict() as z.ZodType<Record<string, unknown>>,
     ),
@@ -219,3 +225,33 @@ export const TEMPLATE_REGISTRY: Readonly<Record<TemplateId, TemplateMeta>> =
         .strict() as z.ZodType<Record<string, unknown>>,
     ),
   });
+
+export const TEMPLATE_NON_TEXT_INPUTS: Readonly<
+  Record<TemplateId, Readonly<Record<string, "color" | "index" | "mediaUrl">>>
+> = Object.freeze({
+  "frame-bold-poster": Object.freeze({}),
+  "frame-statement-outro": Object.freeze({}),
+  "frame-pentagram-stat": Object.freeze({}),
+  "frame-build-minimal": Object.freeze({}),
+  "frame-vignelli": Object.freeze({}),
+  "frame-logo-outro": Object.freeze({ primary_url: "mediaUrl" }),
+  "frame-liquid-bg-hero": Object.freeze({
+    headline_from: "color",
+    headline_to: "color",
+    product_image: "mediaUrl",
+  }),
+  "frame-creative-voltage": Object.freeze({ accent_index: "index" }),
+  "frame-glitch-title": Object.freeze({ media_background: "mediaUrl" }),
+  "frame-aicoding-list": Object.freeze({
+    accent_from: "color",
+    accent_to: "color",
+  }),
+  "frame-aicoding-comparison": Object.freeze({
+    "left.from": "color",
+    "left.to": "color",
+    "right.from": "color",
+    "right.to": "color",
+    "left.image": "mediaUrl",
+    "right.image": "mediaUrl",
+  }),
+});

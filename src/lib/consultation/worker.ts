@@ -6,6 +6,7 @@ import {postgresUuid,type BusinessJob} from "@/lib/jobs/types";
 import {createBusinessJobQueue} from "@/lib/jobs/supabase";
 import {createEvidenceLookup} from "./evidence";
 import {abortable,consult,type ConsultationContext,type Outcome} from "./planner";
+import {createCheckoutCollection,type ConfirmationPort} from "@/lib/orders/confirmation";
 const claimSchema=z.object({job:z.object({id:postgresUuid,organization_id:postgresUuid,entity_id:postgresUuid,kind:z.literal("inbound_event"),lease_owner:postgresUuid,lease_token:postgresUuid}),conversationId:postgresUuid,revision:z.number().int().nonnegative(),organizationId:postgresUuid,text:z.string().max(4000),history:z.array(z.object({text:z.string().max(600),decision:z.unknown().optional()})).max(8),introduce:z.boolean()});
 export type ConsultationClaim=z.infer<typeof claimSchema>;
 export function createConsultationStore(client:SupabaseClient<Database>,organizationId:string){
@@ -17,11 +18,15 @@ export function createConsultationStore(client:SupabaseClient<Database>,organiza
   async finish(job:BusinessJob,outcome:Outcome,signal:AbortSignal){signal.throwIfAborted();const result=await client.rpc("finish_consultation",{p_job_id:job.id,p_owner:job.lease_owner,p_token:job.lease_token,p_outcome:outcome as unknown as Json}).abortSignal(AbortSignal.any([signal,AbortSignal.timeout(8000)]));if(result.error||result.data!==true)throw Error("consultation_finish_rejected");},
  };
 }
-export function createConsultationHandler(store:{context:(job:BusinessJob)=>ConsultationContext;finish:(job:BusinessJob,outcome:Outcome,signal:AbortSignal)=>Promise<void>},ports:Parameters<typeof consult>[1]){
+export function createConsultationHandler(store:{context:(job:BusinessJob)=>ConsultationContext;finish:(job:BusinessJob,outcome:Outcome,signal:AbortSignal)=>Promise<void>},ports:Parameters<typeof consult>[1]&{confirmation?:ConfirmationPort;origin?:string}){
  return async(job:BusinessJob,parent:AbortSignal)=>{
   const signal=AbortSignal.any([parent,AbortSignal.timeout(40000)]);
-  const outcome=await consult(store.context(job),ports,signal);signal.throwIfAborted();
+  const context=store.context(job);
+  const checkout=ports.confirmation&&context.conversationId?createCheckoutCollection(ports.confirmation,{organizationId:context.organizationId,ownerId:context.conversationId,conversationId:context.conversationId,origin:ports.origin??"http://localhost:3000"}):undefined;
+  const outcome=await consult(context,{ai:ports.ai,lookup:ports.lookup,checkout},signal);signal.throwIfAborted();
   await abortable(store.finish(job,outcome,signal),signal);
  };
 }
-export function consultationPorts(client:SupabaseClient<Database>,ai:AiProvider){return {ai,lookup:createEvidenceLookup(client).lookup};}
+export function consultationPorts(client:SupabaseClient<Database>,ai:AiProvider){
+ return {ai,lookup:createEvidenceLookup(client).lookup,confirmation:{rpc:(name,args)=>client.rpc(name as never,args as never)} satisfies ConfirmationPort,origin:process.env.ONEVOICE_APP_ORIGIN||"http://localhost:3000"};
+}

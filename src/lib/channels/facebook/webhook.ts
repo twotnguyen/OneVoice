@@ -101,7 +101,9 @@ export function normalizeFacebookEvents(input: unknown, pageId: string): Faceboo
    const senderId = value.from === undefined ? null : optionalId(value.from);
    const eventTimeMs = timestamp(value.created_time ?? value.timestamp);
    const kind = value.item === "comment" ? "comment" : "feed";
-   // The verb + action timestamp + normalized fields preserve edits/removals.
+   const verb = typeof data.verb === "string" ? data.verb : "";
+   // Page self-echo, deleted/hidden comments and identity-less comments never enter the public invite pipeline.
+   if (kind === "comment" && (verb === "remove" || verb === "hide" || senderId === pageId || typeof data.comment_id !== "string")) continue;
    events.push({ pageId, providerKey: `${kind}:${hash([senderId, eventTimeMs, data])}`, kind, senderId, recipientId: pageId, eventTimeMs, deliveryTimeMs: deliveredAt, data });
   }
   if (events.length > 1000) throw new WebhookFailure(400);

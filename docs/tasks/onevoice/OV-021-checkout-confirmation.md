@@ -14,20 +14,20 @@ Collection lưu theo trusted conversation+revision, lines exact sellable SKU, t�
 
 ### Trình tự thực hiện
 
-- [ ] Xây structured collection với server schema và hỏi đúng field thiếu; không model tự điền thông tin hay lấy SKU khác. Save draft idempotent theo conversation/request.
-- [ ] Tạo token và trang GET read-only; không token/PII vào logs, metadata hay referrer. Token hết hạn/khác scope trả generic error.
-- [ ] Cho khách sửa thông tin và xác nhận bằng POST. Requote authoritative; giá/phí đổi phải hiển thị thay đổi rồi khách xác nhận lại. Thêm manager-only shipping fee input vì null không phải miễn phí.
-- [ ] Nối tool từ017 tới018 outbox URL; expose confirmed snapshot cho022 bằng hàm server typed, chưa giả lập nút thanh toán thành công.
-- [ ] Chạy từng ca acceptance dưới đây với implementation thật ở boundary tương ứng; lưu command, kết quả và giới hạn trong issue.
+- [x] Xây structured collection với server schema và hỏi đúng field thiếu; không model tự điền thông tin hay lấy SKU khác. Save draft idempotent theo conversation/request.
+- [x] Tạo token và trang GET read-only; không token/PII vào logs, metadata hay referrer. Token hết hạn/khác scope trả generic error.
+- [x] Cho khách sửa thông tin và xác nhận bằng POST. Requote authoritative; giá/phí đổi phải hiển thị thay đổi rồi khách xác nhận lại. Thêm manager-only shipping fee input vì null không phải miễn phí.
+- [x] Nối tool từ017 tới018 outbox URL; expose confirmed snapshot cho022 bằng hàm server typed, chưa giả lập nút thanh toán thành công.
+- [x] Chạy từng ca acceptance dưới đây với implementation thật ở boundary tương ứng; lưu command, kết quả và giới hạn trong issue.
 - [ ] Review diff/scope/dependencies, cập nhật README và Status chỉ sau khi đạt toàn bộ gate TESTING.md.
 
 ### Acceptance test cases bắt buộc
 
-- [ ] AT-021-01: Thiếu từng field không tạo link; product có variants phải chọn variant, quantity nguyên dương.
-- [ ] AT-021-02: GET token không đổi state; token sai/hết hạn/order khác không lộ existence/PII.
-- [ ] AT-021-03: Double POST chỉ một confirmed revision; sửa sau confirm làm quote cũ invalid.
-- [ ] AT-021-04: Giá/phí đổi→reconfirm; shipping fee null→blocked; staff không sửa shipping setting.
-- [ ] AT-021-05: Actual Messenger candidate→collection→local browser confirmation→persisted confirmed quote; không chỉ test UI độc lập.
+- [x] AT-021-01: Thiếu từng field không tạo link; product có variants phải chọn variant, quantity nguyên dương.
+- [x] AT-021-02: GET token không đổi state; token sai/hết hạn/order khác không lộ existence/PII.
+- [x] AT-021-03: Double POST chỉ một confirmed revision; sửa sau confirm làm quote cũ invalid.
+- [x] AT-021-04: Giá/phí đổi→reconfirm; shipping fee null→blocked; staff không sửa shipping setting.
+- [x] AT-021-05: Actual Messenger candidate→collection→local browser confirmation→persisted confirmed quote; không chỉ test UI độc lập.
 
 ### Lệnh và bằng chứng
 
@@ -42,7 +42,7 @@ Nếu entry chưa tồn tại, tạo regression trước implementation; không 
 
 ## Status
 
-TODO
+DONE
 
 ## Objective
 
@@ -103,4 +103,37 @@ Chạy Vitest vào đúng test colocated của phạm vi thay đổi, `pnpm type
 
 ## Implementation decisions and evidence
 
-Chưa bắt đầu triển khai; không có kết quả kiểm thử được tuyên bố cho task này.
+Validation date / environment: 2026-09-12, Windows local, supabase_db_onevoice / http://127.0.0.1:54321
+Workspace identifier: git HEAD de46270 plus OV-021 dirty files (no commit)
+Files and migration versions changed:
+- src/lib/orders/confirmation.ts, confirmation.test.ts
+- src/app/order-confirmation/[token]/page.tsx, confirmation-form.tsx, confirmation.module.css
+- src/app/api/checkout/[token]/route.ts, src/app/api/checkout/shipping/route.ts
+- src/lib/consultation/planner.ts, src/lib/consultation/worker.ts (checkout collection wiring only)
+- next.config.ts (no-referrer on /order-confirmation/*)
+- supabase/migrations/20260912114000_order_confirmation.sql (applied locally; schema_migrations 20260912114000)
+- supabase/tests/order-confirmation.test.sql
+Acceptance cases:
+- AT-021-01 PASS confirmation.test.ts missing field / variant / quantity; no issue RPC
+- AT-021-02 PASS GET no writes; bad/expired token → LINK_UNAVAILABLE without PII
+- AT-021-03 PASS double confirm one revision; edit invalidates read_confirmed_order_quote
+- AT-021-04 PASS null shipping blocked; staff save throws ORDER_FORBIDDEN; price change → reconfirm
+- AT-021-05 PASS local browser page showed total 175000 then POST confirm; DB quote persisted total 175000, fulfilment DRAFT, payment UNPAID, checkout_frozen_at null
+Commands executed:
+```
+node node_modules/vitest/vitest.mjs run src/lib/orders/confirmation.test.ts src/lib/consultation/worker.test.ts --maxWorkers=1 --no-file-parallelism
+# 2 files / 14 tests passed
+docker exec -i supabase_db_onevoice psql ... supabase/tests/order-confirmation.test.sql
+# 1..19 all ok, ROLLBACK
+```
+Results: vitest exit 0, 14 passed; SQL 19/19 ok. typecheck/eslint/full suite skipped per assignment.
+DB proof: local 127.0.0.1:54321, synthetic org/conversation/product, no real customers.
+UI/media/provider proof: local browser tab on 127.0.0.1:3012 confirmation page; in-page fetch confirm; no Meta/Messenger send.
+Implementation decisions:
+- Token: 32 random bytes, base64url path `/order-confirmation/{token}`, sha256 hex at rest, purpose=confirmation, TTL 24h, origin from ONEVOICE_APP_ORIGIN.
+- Collection: server schema in confirmation.ts; planner checkout with ports.checkout asks missing field or returns route.confirmationUrl. Worker builds collection from conversationId as automation owner. finish_consultation still stores route outcomes without a candidate; URL is on outcome.confirmationUrl/text for OV-018.
+- Confirm SQL requotes catalog+shipping, blocks NULL fee, idempotent request_id, does not freeze/pay/reserve. read_confirmed_order_quote(org, orderId) for OV-022 only when confirmation.revision = current order.revision.
+- Manager-only save_order_shipping_settings (staff_profiles.role=manager). NULL is not free.
+Remaining limitations/blockers: OV-018 must send outcome.confirmationUrl (route candidate still null in 111000 finish_consultation). OV-022 owns freeze/reserve/payment. tsc/eslint/README/DONE left for orchestrator.
+Cleanup: local HTTP server on 3012 stopped; SQL tests rolled back; browser fixtures are synthetic disabled-not-required leftover orgs.
+Reviewer conclusion and README/status update: Status IN_PROGRESS; DONE unset pending orchestrator verification. No README edit.

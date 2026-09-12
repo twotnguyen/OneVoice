@@ -188,14 +188,41 @@
                 }
             }
 
+            .product-slot {
+                position: absolute;
+                left: 80px;
+                top: 160px;
+                width: 480px;
+                height: 760px;
+                z-index: 6;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .product-image {
+                max-width: 480px;
+                max-height: 760px;
+                width: auto;
+                height: auto;
+                object-fit: contain;
+                object-position: center center;
+            }
+            .product-fallback {
+                font-size: 24px;
+                font-weight: 600;
+                letter-spacing: 2px;
+                text-transform: uppercase;
+                opacity: 0.72;
+                text-align: center;
+            }
             .main {
                 position: absolute;
-                left: 120px;
-                right: 120px;
+                left: 600px;
+                right: 80px;
                 top: 50%;
                 transform: translateY(-50%);
                 z-index: 10;
-                text-align: center;
+                text-align: left;
             }
             .headline {
                 font-weight: 900;
@@ -256,7 +283,7 @@
             data-duration="5"
             data-width="1920"
             data-height="1080"
-            data-composition-variables='{"kicker":"OneVoice","brand":"https://onevoice.local/","headline":"GPT 5.5 ra mắt","subheadline":"Mô hình AI mạnh nhất từ trước tới nay vừa được công bố.","cta":"Theo dõi ngay"}'
+            data-composition-variables='{"kicker":"","brand":"","headline":"","subheadline":"","cta":""}'
         >
             <div class="blob b1"></div>
             <div class="blob b2"></div>
@@ -267,6 +294,10 @@
 
             <div class="chip top">
                 <span class="kicker"></span><span>16:9</span>
+            </div>
+            <div class="product-slot">
+                <img class="product-image" alt="" />
+                <div class="product-fallback">Thiếu ảnh sản phẩm</div>
             </div>
 
             <div class="main">
@@ -296,6 +327,22 @@
                 set(".headline", v.headline);
                 set(".subheadline", v.subheadline);
                 set(".cta", v.cta);
+                var localMedia = function (value) {
+                    if (value == null || value === "") return "";
+                    var s = String(value);
+                    if (s.indexOf("data:image/png;base64,") === 0 || s.indexOf("data:image/jpeg;base64,") === 0 || s.indexOf("data:image/webp;base64,") === 0) return s;
+                    return "";
+                };
+                var productSrc = localMedia(v.product_image);
+                var productImg = document.querySelector(".product-image");
+                var productFallback = document.querySelector(".product-fallback");
+                if (productImg && productSrc) {
+                    productImg.src = productSrc;
+                    if (productFallback) productFallback.hidden = true;
+                } else if (productImg) {
+                    productImg.removeAttribute("src");
+                    if (productFallback) productFallback.hidden = false;
+                }
                 if (v.headline_from && v.headline_to) {
                     var hl = document.querySelector(".headline");
                     if (hl)

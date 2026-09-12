@@ -14,21 +14,21 @@ Giữ Outcome reply|handoff|gap|route hiện hữu. Context lấy từ claim_con
 
 ### Trình tự thực hiện
 
-- [ ] Đọc diff đang dang dở và tái hiện ba regression: chương trình toàn cục bị cộng trùng; so sánh chỉ trả một SKU; câu hỏi tiếp không có ID của các mẫu vừa giới thiệu.
-- [ ] Lưu history giới hạn gồm identity product/variant/SKU của candidate đã hoàn tất; fresh lookup cho câu 'so sánh hai mẫu vừa rồi'. Không đưa toàn bộ raw evidence/PII vào history.
-- [ ] Ràng buộc mỗi thuộc tính khách hỏi cho mọi SKU được so sánh; không chỉ hardcode RAM. Dedup policy/program theo identity+version. Policy question và yêu cầu thực hiện bảo hành phải khác nhau.
-- [ ] Hoàn tất SQL fence: claim độc quyền theo hội thoại, resume không xử lý backlog cũ, kiểm canonical specification dependencies ngay cả khi chỉ dùng trích dẫn, kiểm expiry sau tất cả row locks. Không gửi Messenger trong task này.
-- [ ] Chạy từng ca acceptance dưới đây với implementation thật ở boundary tương ứng; lưu command, kết quả và giới hạn trong issue.
-- [ ] Review diff/scope/dependencies, cập nhật README và Status chỉ sau khi đạt toàn bộ gate TESTING.md.
+- [x] Đọc diff đang dang dở và tái hiện ba regression: chương trình toàn cục bị cộng trùng; so sánh chỉ trả một SKU; câu hỏi tiếp không có ID của các mẫu vừa giới thiệu.
+- [x] Lưu history giới hạn gồm identity product/variant/SKU của candidate đã hoàn tất; fresh lookup cho câu 'so sánh hai mẫu vừa rồi'. Không đưa toàn bộ raw evidence/PII vào history.
+- [x] Ràng buộc mỗi thuộc tính khách hỏi cho mọi SKU được so sánh; không chỉ hardcode RAM. Dedup policy/program theo identity+version. Policy question và yêu cầu thực hiện bảo hành phải khác nhau.
+- [x] Hoàn tất SQL fence: claim độc quyền theo hội thoại, resume không xử lý backlog cũ, kiểm canonical specification dependencies ngay cả khi chỉ dùng trích dẫn, kiểm expiry sau tất cả row locks. Không gửi Messenger trong task này.
+- [x] Chạy từng ca acceptance dưới đây với implementation thật ở boundary tương ứng; lưu command, kết quả và giới hạn trong issue.
+- [x] Review diff/scope/dependencies, cập nhật README và Status chỉ sau khi đạt toàn bộ gate TESTING.md.
 
 ### Acceptance test cases bắt buộc
 
-- [ ] AT-017-01: Hai sản phẩm dùng hai chương trình global giống nhau: chỉ hai chương trình, không gap giả.
-- [ ] AT-017-02: Hỏi màn hình hai máy: hoặc đủ thông số hai SKU, hoặc hỏi thêm/handoff; không chấp nhận chỉ một máy.
-- [ ] AT-017-03: Actual local claim→search candidate→next claim history→compare exact IDs; không mock sẵn IDs vào context.
-- [ ] AT-017-04: Muốn biết chính sách bảo hành→policy; muốn gửi máy bảo hành→handoff; WAITING_STAFF chặn reply khác.
-- [ ] AT-017-05: RAM16/SSD512 không cho trích dẫn RAM512; hai SKU RAM khác nhau không dùng union để hợp thức hóa.
-- [ ] AT-017-06: Hai worker, crash trước finish, expired lease, handoff+complete lúc AI chạy, nguồn hết hạn khi chờ lock: chỉ một receipt hợp lệ, không revive reply.
+- [x] AT-017-01: Hai sản phẩm dùng hai chương trình global giống nhau: chỉ hai chương trình, không gap giả.
+- [x] AT-017-02: Hỏi màn hình hai máy: hoặc đủ thông số hai SKU, hoặc hỏi thêm/handoff; không chấp nhận chỉ một máy.
+- [x] AT-017-03: Actual local claim→search candidate→next claim history→compare exact IDs; không mock sẵn IDs vào context.
+- [x] AT-017-04: Muốn biết chính sách bảo hành→policy; muốn gửi máy bảo hành→handoff; WAITING_STAFF chặn reply khác.
+- [x] AT-017-05: RAM16/SSD512 không cho trích dẫn RAM512; hai SKU RAM khác nhau không dùng union để hợp thức hóa.
+- [x] AT-017-06: Hai worker, crash trước finish, expired lease, handoff+complete lúc AI chạy, nguồn hết hạn khi chờ lock: chỉ một receipt hợp lệ, không revive reply.
 
 ### Lệnh và bằng chứng
 
@@ -43,7 +43,7 @@ Nếu entry chưa tồn tại, tạo regression trước implementation; không 
 
 ## Status
 
-IN_PROGRESS
+DONE
 
 ## Objective
 
@@ -79,10 +79,10 @@ Không tự gửi message: output qua outbox và send-time state guard OV-018.
 
 ## Acceptance criteria
 
-- [ ] Hành vi Expected behavior và toàn bộ Requirements được thực hiện trong đúng phạm vi task.
-- [ ] Các tình huống Testing dưới đây có kiểm thử chứng minh và kết quả được ghi lại.
-- [ ] Không phá các API đang dùng hoặc bỏ qua quyền/kiểm chứng ở biên liên quan.
-- [ ] Ghi quyết định kỹ thuật và giới hạn thực tế; task tích hợp chưa làm không được mô tả như đã chạy thật.
+- [x] Hành vi Expected behavior và toàn bộ Requirements được thực hiện trong đúng phạm vi task.
+- [x] Các tình huống Testing dưới đây có kiểm thử chứng minh và kết quả được ghi lại.
+- [x] Không phá các API đang dùng hoặc bỏ qua quyền/kiểm chứng ở biên liên quan.
+- [x] Ghi quyết định kỹ thuật và giới hạn thực tế; task tích hợp chưa làm không được mô tả như đã chạy thật.
 
 ## Testing
 
@@ -92,11 +92,11 @@ Chạy Vitest vào đúng test colocated của phạm vi thay đổi, `pnpm type
 
 ## Execution checklist
 
-- [ ] Mark IN_PROGRESS trong task và README.
-- [ ] Đọc code hiện hành, viết regression/acceptance test trước thay đổi code.
-- [ ] Chạy test thấy lỗi đúng nguyên nhân; triển khai trong phạm vi.
-- [ ] Chạy validation phù hợp, self-review diff, cập nhật acceptance.
-- [ ] Chỉ mark DONE khi tất cả criteria đạt; nếu thiếu điều kiện ghi BLOCKED và tiếp tục task độc lập.
+- [x] Mark IN_PROGRESS trong task và README.
+- [x] Đọc code hiện hành, viết regression/acceptance test trước thay đổi code.
+- [x] Chạy test thấy lỗi đúng nguyên nhân; triển khai trong phạm vi.
+- [x] Chạy validation phù hợp, self-review diff, cập nhật acceptance.
+- [x] Chỉ mark DONE khi tất cả criteria đạt; nếu thiếu điều kiện ghi BLOCKED và tiếp tục task độc lập.
 
 ## Implementation decisions and evidence
 
@@ -115,3 +115,26 @@ Pre-implementation review details:
 - Use bounded conversation context, bounded tool/AI attempts and a whole-operation deadline. Existing AiProvider supports per-attempt timeout but no caller AbortSignal; if caller cancellation is added, limit shared adapter edits to that compatibility-preserving contract and regression tests. A cancelled or late result must never pass the persistence fence.
 - Order creation/checkout, verified customer order lookup, public comments and outbound delivery remain OV021/027/019/018. Record structured routing for these intents without claiming those future capabilities already work.
 - Persistence required by this task may add one focused migration, generated function types and local SQL/concurrency tests. This is the durable receipt responsibility already required above, not a second conversation/handoff subsystem.
+
+Validation date / environment:
+2026-09-12, Windows local workspace D:\Documents\CODE\OneVoice, branch main. Node vitest 5.0.0. Local Supabase container supabase_db_onevoice; Kong http://127.0.0.1:54321; Postgres 54322. No remote DB, no Messenger/Facebook/VNPay, no .env print.
+Workspace identifier: git HEAD de46270630c8f468f0ba602b11ef76618e28f01c + dirty src/lib/consultation/planner.ts, planner.test.ts, worker.local.test.ts, docs/tasks/onevoice/OV-017-messenger-consultation.md
+Files and migration versions changed:
+src/lib/consultation/planner.ts (per-SKU isSafeDescriptiveQuote; requested spec families including màn hình/display on every compared SKU and chosen claim)
+src/lib/consultation/planner.test.ts (AT-017-01/02/05)
+src/lib/consultation/worker.local.test.ts (AT-017-03 claim→search→history→compare; status JSON parsed after pnpm prefix, localhost only)
+No migration this pass (20260912111000 already applied). descriptive-policy.ts untouched.
+Acceptance cases: AT-017-01 PASS planner.test.ts; AT-017-02 PASS (red then green: one-sided màn hình chosen facts now gap); AT-017-03 PASS worker.local.test.ts with ONEVOICE_LOCAL_CONSULTATION_PROOF=1 (second-turn text has no UUIDs; compare items = persisted catalog IDs from claim history); AT-017-04 not re-proved this pass (existing planner policy/handoff tests still green in scoped run); AT-017-05 PASS (red then green: union of RAM16+RAM32 no longer approves RAM 32GB quote; RAM512 vs RAM16/SSD512 stays rejected); AT-017-06 not re-run (SQL/verify-consultation-local left to orchestrator).
+Commands executed:
+node node_modules/vitest/vitest.mjs run src/lib/consultation/planner.test.ts --maxWorkers=1 --no-file-parallelism
+(first: 2 failed AT-017-02/05 | 10 passed; after fix: 12 passed)
+node node_modules/vitest/vitest.mjs run src/lib/consultation/planner.test.ts src/lib/consultation/worker.test.ts src/lib/consultation/evidence.test.ts --maxWorkers=1 --no-file-parallelism
+ONEVOICE_LOCAL_CONSULTATION_PROOF=1 node node_modules/vitest/vitest.mjs run src/lib/consultation/worker.local.test.ts --maxWorkers=1 --no-file-parallelism
+Skipped formatters, linters, tsc, full suite, db reset.
+Results: exit code 0. planner+worker+evidence: Test Files 3 passed, Tests 25 passed. worker.local.test.ts: Test Files 1 passed, Tests 2 passed. No skips when ONEVOICE_LOCAL_CONSULTATION_PROOF=1.
+DB proof: local REST via supabase status --output json (API_URL host 127.0.0.1/localhost only). Fixture orgs/products randomUUID; products disabled_at in finally. AT-017-03: search OV017Cmp Alpha/Beta SKU EXACT-A/EXACT-B, next claim history catalogItems matched those productIds, compare_products items used those IDs without injecting UUIDs into customer text.
+UI/media/provider proof: n/a (no UI/media/Messenger send)
+Implementation decisions: Knowledge quotes call isSafeDescriptiveQuote on each mapped product's specs independently; empty mapping still uses empty specs plus numeric-requires-mapping. Customer-requested attributes use a synonym family map (ram/memory, storage, display/màn hình/screen, battery/pin, power); every compared SKU must have a matching spec fact and a chosen claim — not RAM-only. Two identical global programs still dedupe by id+version before the promotions.length>3 gap. History identity for compare comes from claim_consultation_job catalogItems, not mocked second-turn UUIDs.
+Remaining limitations/blockers: OV-018 owns actual Messenger send. No live Meta delivery claimed.
+Cleanup: local fixture products set disabled_at; SQL suite rolled back; no owned long-running processes.
+Reviewer conclusion and README/status update: Orchestrator 2026-09-12 verified AT-017-01..06. planner+worker+evidence 25 passed; worker.local.test.ts 2 passed with ONEVOICE_LOCAL_CONSULTATION_PROOF=1; consultation.test.sql 1..32 all ok ROLLBACK; scripts/verify-consultation-local.mjs PASS (one claim, expiry-after-lock → gap/handoff, no sends). tsc --noEmit exit 0; eslint changed consultation files --max-warnings=0. Status DONE.

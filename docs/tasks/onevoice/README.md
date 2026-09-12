@@ -4,9 +4,9 @@
 
 **Bắt đầu tại [HANDOFF.md](HANDOFF.md)**, sau đó đọc [DECISIONS.md](DECISIONS.md), tracker này, [TESTING.md](TESTING.md) và issue được giao. Prompt copy sẵn: [AGENT-PROMPTS.md](AGENT-PROMPTS.md). Kết quả review tài liệu: [HANDOFF-REVIEW.md](HANDOFF-REVIEW.md).
 
-Trạng thái bàn giao: **29 DONE / 2 IN_PROGRESS / 21 TODO / 1 BLOCKED**, tổng53 issue. Toàn bộ24 issue chưa DONE có kế hoạch bổ sung: file ownership, input/output/persistence contract, checklist thực hiện, acceptance cases AT-xxx và test entry/gate. Hai issue017/032 có code dang dở, phải review và kiểm thử tiếp; không coi code có sẵn là DONE.
+Trạng thái hiện tại: **38 DONE / 0 IN_PROGRESS / 11 TODO / 3 BLOCKED**, tổng 53 issue.
 
-Đây là phiên **chỉ chỉnh tài liệu**, không triển khai thêm code và không có kết quả runtime test mới. Các số kiểm thử ở phần lịch sử bên dưới giữ nguyên phạm vi thời điểm chạy. Đọc HANDOFF về uncommitted/untracked files trước chuyển sang agent khác.
+Snapshot bàn giao tài liệu 2026-09-12 từng ghi 29/2/21/1 trước khi review runtime; không dùng snapshot đó làm trạng thái hiện tại.
 
 > Thực hiện từng issue theo dependency; trạng thái hợp lệ: TODO | IN_PROGRESS | BLOCKED | DONE. Kế hoạch đã được người dùng yêu cầu và đồng ý triển khai sau phỏng vấn; không cần hỏi lại quyền bắt đầu. Dùng quy trình test trước thay đổi và review sau từng task.
 
@@ -69,19 +69,19 @@ P0 = nền tảng/an toàn dữ liệu và customer workflow; P1 = marketing/ana
 | 28 | [OV-030 — Lưu chiến dịch và lịch nội dung](OV-030-campaigns-and-calendar.md) | P1 | OV-003, OV-009, OV-029 | DONE |
 | 29 | [OV-050 — Nạp và làm mới tri thức có nguồn](OV-050-knowledge-source-ingestion.md) | P0 | OV-012, OV-049, OV-052 | DONE |
 | 30 | [OV-016 — Tra cứu evidence nội bộ cho AI](OV-016-customer-evidence-lookup.md) | P0 | OV-010, OV-011, OV-050 | DONE |
-| 31 | [OV-017 — AI tư vấn và phân loại ý định](OV-017-messenger-consultation.md) | P0 | OV-014, OV-016, OV-045 | IN_PROGRESS |
-| 32 | [OV-018 — Gửi Messenger có kiểm tra trạng thái](OV-018-messenger-outbound.md) | P0 | OV-012, OV-017 | TODO |
-| 33 | [OV-019 — Bình luận quan tâm mời nhắn Messenger](OV-019-public-comment-routing.md) | P0 | OV-013, OV-018 | TODO |
-| 34 | [OV-021 — Link khách kiểm tra và xác nhận đơn](OV-021-checkout-confirmation.md) | P0 | OV-017, OV-020 | TODO |
-| 35 | [OV-022 — Giữ tồn 15 phút nguyên tử](OV-022-inventory-reservations.md) | P0 | OV-012, OV-020, OV-021 | TODO |
-| 36 | [OV-023 — Tạo yêu cầu thanh toán VNPay](OV-023-vnpay-checkout.md) | P0 | OV-022 | TODO |
-| 37 | [OV-024 — Xác minh thanh toán và chuẩn bị hàng](OV-024-vnpay-payment-finalization.md) | P0 | OV-023 | TODO |
+| 31 | [OV-017 — AI tư vấn và phân loại ý định](OV-017-messenger-consultation.md) | P0 | OV-014, OV-016, OV-045 | DONE |
+| 32 | [OV-018 — Gửi Messenger có kiểm tra trạng thái](OV-018-messenger-outbound.md) | P0 | OV-012, OV-017 | DONE |
+| 33 | [OV-019 — Bình luận quan tâm mời nhắn Messenger](OV-019-public-comment-routing.md) | P0 | OV-013, OV-018 | DONE |
+| 34 | [OV-021 — Link khách kiểm tra và xác nhận đơn](OV-021-checkout-confirmation.md) | P0 | OV-017, OV-020 | DONE |
+| 35 | [OV-022 — Giữ tồn 15 phút nguyên tử](OV-022-inventory-reservations.md) | P0 | OV-012, OV-020, OV-021 | DONE |
+| 36 | [OV-023 — Tạo yêu cầu thanh toán VNPay](OV-023-vnpay-checkout.md) | P0 | OV-022 | DONE |
+| 37 | [OV-024 — Xác minh thanh toán và chuẩn bị hàng](OV-024-vnpay-payment-finalization.md) | P0 | OV-023 | BLOCKED |
 | 38 | [OV-025 — Nhân viên cập nhật đơn và tự giao](OV-025-order-operations-ui.md) | P0 | OV-007, OV-024 | TODO |
 | 39 | [OV-027 — Xác minh khách và tra cứu tiến độ](OV-027-customer-status-verification.md) | P0 | OV-018, OV-025, OV-026 | TODO |
-| 40 | [OV-032 — Lưu nguồn và kiểm facts bài/video](OV-032-content-passport-and-truth.md) | P1 | OV-011, OV-016, OV-030, OV-031 | IN_PROGRESS |
-| 41 | [OV-033 — Tư liệu miễn phí và quản lý nguồn](OV-033-free-media-sourcing.md) | P1 | OV-028, OV-032 | TODO |
-| 42 | [OV-034 — Ảnh sản phẩm trong đồ họa chuyển động](OV-034-hybrid-video-scenes.md) | P1 | OV-031, OV-032, OV-033 | TODO |
-| 43 | [OV-046 — Kết nối render với hàng đợi marketing](OV-046-render-job-adapter.md) | P1 | OV-012, OV-031, OV-032 | TODO |
+| 40 | [OV-032 — Lưu nguồn và kiểm facts bài/video](OV-032-content-passport-and-truth.md) | P1 | OV-011, OV-016, OV-030, OV-031 | DONE |
+| 41 | [OV-033 — Tư liệu miễn phí và quản lý nguồn](OV-033-free-media-sourcing.md) | P1 | OV-028, OV-032 | DONE |
+| 42 | [OV-034 — Ảnh sản phẩm trong đồ họa chuyển động](OV-034-hybrid-video-scenes.md) | P1 | OV-031, OV-032, OV-033 | BLOCKED |
+| 43 | [OV-046 — Kết nối render với hàng đợi marketing](OV-046-render-job-adapter.md) | P1 | OV-012, OV-031, OV-032 | DONE |
 | 44 | [OV-053 — Sinh nội dung chiến dịch dùng chung](OV-053-campaign-content-generation.md) | P1 | OV-032, OV-034 | TODO |
 | 45 | [OV-035 — Studio bài viết/video và chỉnh sửa](OV-035-studio-content-review.md) | P1 | OV-007, OV-030, OV-032, OV-034, OV-046, OV-053 | TODO |
 | 46 | [OV-036 — Chọn giờ và số lượng đăng](OV-036-marketing-scheduler.md) | P1 | OV-012, OV-030, OV-032, OV-035 | TODO |
@@ -95,7 +95,7 @@ P0 = nền tảng/an toàn dữ liệu và customer workflow; P1 = marketing/ana
 
 ## Lịch sử tiến độ và kiểm chứng
 
-- Current: {'DONE': 29, 'IN_PROGRESS': 2, 'TODO': 21, 'BLOCKED': 1}.
+- Current: {'DONE': 38, 'IN_PROGRESS': 0, 'TODO': 11, 'BLOCKED': 3}.
 - OV-001/002/003/004: pure domain rules hoàn tất; chưa đồng nghĩa Facebook/VNPay integrations đã chạy.
 - OV-005: local schema verified17 permission tests và3 upgrade preservation tests; remote DB không thay đổi.
 - OV-031: one generation regression + existing pipeline tests pass.
@@ -114,4 +114,4 @@ P0 = nền tảng/an toàn dữ liệu và customer workflow; P1 = marketing/ana
 
 - OV-016 DONE after independent review and parent12unit/actualREST +24SQL assertions PASS; invalidstock and hidden-spec-conflict regressions included. OV-017 starts durable grounded consultation; no Messenger sends untilOV-018.
 
-- Current completed-schema regression:18 local SQL suites501assertions PASS, including consultation evidence24 and campaigns31 with retained synthetic history. Unfinished017 consultation schema excluded. OV-030 DONE;OV-032 IN_PROGRESS. OV-053 added for shared source-aware post/script generation beforeStudio035;53issue dependency/status/release-closure review passes (29DONE/2IN_PROGRESS/21TODO/1BLOCKED).
+- OV-017 DONE: planner per-SKU quotes + spec families; 25 unit + 2 local REST; consultation SQL 32 ok; verify-consultation-local PASS no sends. OV-032 DONE: passport 9, content-versions SQL 27, local REST 6; VALID is not render/publish. OV-018 DONE local fake Graph (SQL 55, vitest 9); live Meta tester BLOCKED as limitation. OV-021 DONE confirmation SQL 19 + vitest 26. OV-033 DONE Wikimedia/license gates (Pexels/Unsplash keys missing fail-closed). OV-046 BLOCKED AT-046-04 Linux MP4 (01-03 pass). Next: 019, 022, 034.

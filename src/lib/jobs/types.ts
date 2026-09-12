@@ -1,7 +1,7 @@
 import { z } from "zod";
 export const postgresUuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 export const referencePayload = z.object({ entityId: postgresUuid }).strict();
-export const jobKinds = ["inbound_event", "outbound_message", "automation_tick", "knowledge_ingest"] as const;
+export const jobKinds = ["inbound_event", "outbound_message", "automation_tick", "knowledge_ingest", "render_content", "outbound_comment"] as const;
 export type JobKind = (typeof jobKinds)[number];
 export type JobError = "handler_failed" | "shutdown" | "unsupported_kind";
 // Deliberately ignores exception messages, provider responses and customer content.
